@@ -5,7 +5,7 @@
 向けの翻訳ファイルを、ESP/ESMを一切改変せずに生成します。
 
 配布版（コンパイル済み、ソースコード不要ですぐ使えます）は Nexus Mods で公開しています。
-〔要確認: NexusページURLをここに記載〕
+https://www.nexusmods.com/skyrimspecialedition/mods/189369
 
 このリポジトリは、[GPL-3.0](./LICENSE) でライセンスされている
 [Mutagen](https://github.com/Mutagen-Modding/Mutagen) を利用しているため、
