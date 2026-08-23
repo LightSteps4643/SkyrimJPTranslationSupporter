@@ -25,12 +25,13 @@
       publish出力に含まれない（dotnet publishはビルド成果物のみを出力するため）。
 
 .PARAMETER OutputDir
-    出力先フォルダ。省略時は ..\Releases\<このフォルダ名> （例:
-    SkyrimJPTranslationSupporter_v0.54.0 なら ..\Releases\SkyrimJPTranslationSupporter_v0.54.0）。
+    出力先フォルダ。省略時は ..\Releases\SkyrimJPTranslationSupporter-<バージョン>。
+    バージョンは `git describe --tags` から取得する（例: v0.54.0、タグ無しなら
+    コミットハッシュ等）。gitが使えない場合は "unversioned" になる。
 
 .EXAMPLE
     .\publish-release.ps1
-    既定の出力先（../Releases/<バージョンフォルダ名>）にリリースパッケージを作成する。
+    既定の出力先（現在のgit tagに基づく）にリリースパッケージを作成する。
 
 .EXAMPLE
     .\publish-release.ps1 -OutputDir "D:\Dist\MyRelease"
@@ -44,8 +45,11 @@ $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
 
 if ([string]::IsNullOrWhiteSpace($OutputDir)) {
-    $versionFolderName = Split-Path -Leaf $root
-    $OutputDir = Join-Path (Join-Path (Split-Path -Parent $root) "Releases") $versionFolderName
+    Push-Location $root
+    $gitVersion = (git describe --tags 2>$null)
+    Pop-Location
+    if ([string]::IsNullOrWhiteSpace($gitVersion)) { $gitVersion = "unversioned" }
+    $OutputDir = Join-Path (Join-Path (Split-Path -Parent $root) "Releases") "SkyrimJPTranslationSupporter-$gitVersion"
 }
 $guiOutputDir = Join-Path $OutputDir "SkyrimJPStringPatcherGui"
 
