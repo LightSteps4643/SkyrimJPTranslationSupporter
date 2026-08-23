@@ -1,0 +1,172 @@
+﻿# Reliquary of Myth.esp — glossary scoped to this mod only
+#
+# The words below are ones the tool could not resolve while trying to translate this mod's item
+# "names". Fill in the Japanese column and re-run translation to resolve every name containing it.
+# "Remaining" is how many candidates are STILL unresolved because of that word (most first).
+# After you fill it in and re-run, that word's "Remaining" becomes 0 — 0 is normal (it means done).
+#
+# * Write the translation as a NOUN. Words are automatically joined with the particle "の", so
+#   writing an adjectival/verb form (e.g. Japanese "〜した"/"〜れた"/"〜く") breaks the composition
+#   (produces something like "卓越したの体力", grammatically wrong).
+#   Example: 卓越した→卓越, 汚染された→汚染, 錆びた→錆, なびく→はためき
+#   A trailing "の" is also unnecessary ("魂の"→"魂" — keeping it produces the doubled "魂のの抱擁").
+#
+# - Leaving a row blank is fine — any name containing that word simply stays untranslated (in English).
+#   You can skip an entire mod's file too.
+# - For a word that's an internal tag and should be output as-is, untranslated (e.g. "SMP", "3BBB"), write "=" in the Japanese column.
+# - This glossary is used ONLY for this mod's candidates. Unlike the shared Data/name_glossary.tsv,
+#   it never affects any other mod, so it only needs to fit this mod's own item lineup (no need for strict generality).
+# - The Japanese column is preserved across regeneration (never overwritten), and rows are never dropped.
+#
+# English	Japanese	Remaining	Example
+Bloodfrenzy		0	
+<BaseName>		0	
+Warwyrd		0	
+Savior's	救世主	0	
+Magnus'		0	
+Absorption		0	
+Pariah's		0	
+Resolve		0	
+Conjure		0	
+Ward		0	
+Animless		0	
+Guardian		0	
+Speed		0	
+All		0	
+Creatures		0	
+Detect		0	
+Double		0	
+Honed		0	
+Triumph		0	
+Worn		0	
+Devouring		0	
+Fragment		0	
+Gift		0	
+Grip		0	
+Might		0	
+Mora's		0	
+Polymorph		0	
+Purifying		0	
+Rueful		0	
+Ruinous		0	
+Swing		0	
+Arch-Mage's		0	
+Blaze		0	
+Break		0	
+Conflagration		0	
+Critical		0	
+Dizzying		0	
+Embers		0	
+Enemy		0	
+Enlarge		0	
+Exterior		0	
+Firestrike		0	
+Flare		0	
+Friend		0	
+Intelligence		0	
+Jyrik's		0	
+Lady's		0	
+Mark		0	
+Radiating		0	
+Reduce		0	
+Reflective		0	
+Scorching		0	
+Sigdis'		0	
+Solar		0	
+Timer		0	
+Vampiric		0	
+Web		0	
+Well		0	
+Will		0	
+Arcana		0	
+Attributes		0	
+Banishing		0	
+Beast		0	
+Blast		0	
+Blessed		0	
+Bomb		0	
+Branch		0	
+Brigand		0	
+Cat		0	
+Cell		0	
+Chance		0	
+Chaotic		0	
+Charmed		0	
+Cheater's		0	
+Chokeberries		0	
+Clavicus		0	
+Cobra's		0	
+Cooldown		0	
+Cremate		0	
+Dance		0	
+Deceit		0	
+Disabler		0	
+Dream		0	
+Elude		0	
+Empowered		0	
+Empowering		0	
+Expose		0	
+Fate		0	
+Fingernail		0	
+Hellride		0	
+Hemorrhage		0	
+Immobilize		0	
+Inner		0	
+Invisibillity		0	
+Leaves		0	
+Malediction		0	
+Mandrake		0	
+Manifold		0	
+Masque		0	
+Nature		0	
+Necrotic		0	
+Nip		0	
+On-Hit		0	
+Ouroboros		0	
+Personality		0	
+Potency		0	
+Powered		0	
+Radiance		0	
+Rapid		0	
+Razor		0	
+Rebuke		0	
+ROM		0	
+Rourken's		0	
+Sabre		0	
+Scales		0	
+Shadow		0	
+Shot		0	
+Shroud		0	
+Sight		0	
+Smock		0	
+Sundering		0	
+Swarm		0	
+Thirst		0	
+Utility		0	
+Vertical		0	
+Void		0	
+Warbler		0	
+Warden		0	
+Warding		0	
+Weakness		0	
+Wisdom		0	
+Wood		0	
+Wormwood		0	
+Distribute	配布	0	
+Handler	管理	0	
+Increment	増分	0	
+Manager	管理	0	
+Corruption	腐敗	0	
+Corrupted	汚染	0	
+Chameleon	カメレオン	0	
+Clone	クローン	0	
+Eldritch	エルドリッチ	0	
+Corrupt	汚染	0	
+Cremation	火葬	0	
+Devourer	喰らう者	0	
+Haste	俊足	0	
+Khajiiti	カジート	0	
+Resurrection	復活	0	
+Reward	報酬	0	
+Woe	悲哀	0	
+Hide	皮	0	

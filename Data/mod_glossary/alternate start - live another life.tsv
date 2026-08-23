@@ -1,0 +1,102 @@
+﻿# alternate start - live another life.esp — glossary scoped to this mod only
+#
+# The words below are ones the tool could not resolve while trying to translate this mod's item
+# "names". Fill in the Japanese column and re-run translation to resolve every name containing it.
+# "Remaining" is how many candidates are STILL unresolved because of that word (most first).
+# After you fill it in and re-run, that word's "Remaining" becomes 0 — 0 is normal (it means done).
+#
+# * Write the translation as a NOUN. Words are automatically joined with the particle "の", so
+#   writing an adjectival/verb form (e.g. Japanese "〜した"/"〜れた"/"〜く") breaks the composition
+#   (produces something like "卓越したの体力", grammatically wrong).
+#   Example: 卓越した→卓越, 汚染された→汚染, 錆びた→錆, なびく→はためき
+#   A trailing "の" is also unnecessary ("魂の"→"魂" — keeping it produces the doubled "魂のの抱擁").
+#
+# - Leaving a row blank is fine — any name containing that word simply stays untranslated (in English).
+#   You can skip an entire mod's file too.
+# - For a word that's an internal tag and should be output as-is, untranslated (e.g. "SMP", "3BBB"), write "=" in the Japanese column.
+# - This glossary is used ONLY for this mod's candidates. Unlike the shared Data/name_glossary.tsv,
+#   it never affects any other mod, so it only needs to fit this mod's own item lineup (no need for strict generality).
+# - The Japanese column is preserved across regeneration (never overwritten), and rows are never dropped.
+#
+# English	Japanese	Remaining	Example
+Inn		0	
+Shoal's		0	
+Manor		0	
+My		0	
+Dead		0	
+[Falkreath]		0	
+[Markarth]		0	
+[Solitude]		0	
+[Whiterun]		0	
+Another		0	
+Bannered		0	
+Bridge]		0	
+Burned		0	
+Candlehearth		0	
+Chance		0	
+College		0	
+Companions		0	
+Court		0	
+Drink		0	
+End		0	
+Four		0	
+Frozen		0	
+Fruits		0	
+Goblin		0	
+Grave		0	
+Hearth		0	
+Heljarchen		0	
+Hill]		0	
+Hive		0	
+Hold]		0	
+Homestead		0	
+Horny		0	
+Labor		0	
+Lakeview		0	
+Live		0	
+Lord		0	
+Man's		0	
+Mare		0	
+Meade		0	
+Moorside		0	
+Moor]		0	
+Outdoor		0	
+Pale]		0	
+Profits		0	
+Ratway]		0	
+Rebellion		0	
+Rock]		0	
+Rorikstead]		0	
+Screaming		0	
+Second		0	
+Shady		0	
+Sleeping		0	
+Stone]		0	
+Storage		0	
+Store		0	
+Tapped		0	
+Trees		0	
+Vilemyr		0	
+Winking		0	
+Worthy		0	
+[Black		0	
+[Dawnstar]		0	
+[Dragon		0	
+[Granite		0	
+[Hjaalmarch]		0	
+[Ivarstead]		0	
+[Keld-Nar]		0	
+[Kynesgrove]		0	
+[Morthal]		0	
+[Near		0	
+[Oakwood]		0	
+[Raven		0	
+[Riften		0	
+[Riverwood]		0	
+[Rorikstead]		0	
+[Shor's		0	
+[Telengard]		0	
+[The		0	
+[Whiterun		0	
+[Windhelm]		0	
+[Winterhold]		0	

@@ -1,0 +1,172 @@
+﻿# Adamant.esp — glossary scoped to this mod only
+#
+# The words below are ones the tool could not resolve while trying to translate this mod's item
+# "names". Fill in the Japanese column and re-run translation to resolve every name containing it.
+# "Remaining" is how many candidates are STILL unresolved because of that word (most first).
+# After you fill it in and re-run, that word's "Remaining" becomes 0 — 0 is normal (it means done).
+#
+# * Write the translation as a NOUN. Words are automatically joined with the particle "の", so
+#   writing an adjectival/verb form (e.g. Japanese "〜した"/"〜れた"/"〜く") breaks the composition
+#   (produces something like "卓越したの体力", grammatically wrong).
+#   Example: 卓越した→卓越, 汚染された→汚染, 錆びた→錆, なびく→はためき
+#   A trailing "の" is also unnecessary ("魂の"→"魂" — keeping it produces the doubled "魂のの抱擁").
+#
+# - Leaving a row blank is fine — any name containing that word simply stays untranslated (in English).
+#   You can skip an entire mod's file too.
+# - For a word that's an internal tag and should be output as-is, untranslated (e.g. "SMP", "3BBB"), write "=" in the Japanese column.
+# - This glossary is used ONLY for this mod's candidates. Unlike the shared Data/name_glossary.tsv,
+#   it never affects any other mod, so it only needs to fit this mod's own item lineup (no need for strict generality).
+# - The Japanese column is preserved across regeneration (never overwritten), and rows are never dropped.
+#
+# English	Japanese	Remaining	Example
+Firebrand		0	
+Keyword		0	
+Living		0	
+Scaling		0	
+XP		0	
+(This		0	
+Autoperk		0	
+Cast		0	
+Crit		0	
+Heartstone		0	
+One)		0	
+Resistance		0	
+Zoom		0	
+False		0	
+Threat		0	
+Shadow		0	
+Dual		0	
+Rupture		0	
+Pilgrim		0	
+Fists		0	
+Combustion		0	
+Shell		0	
+Ritual		0	
+Sunlight		0	
+Wildfire		0	
+Pact		0	
+Ward		0	
+Authority		0	
+Dispel		0	
+Necropotence		0	
+Sunbeam		0	
+Binding		0	
+Breaker		0	
+Deathly		0	
+Deep		0	
+Dummy		0	
+Flare		0	
+Howl		0	
+Onslaught		0	
+Rampage		0	
+Reflective		0	
+Serenity		0	
+Solar		0	
+Surge		0	
+You		0	
+Adrenaline		0	
+Agility		0	
+Battering		0	
+Blow		0	
+Casting		0	
+Charged		0	
+Conduit		0	
+Craftsman		0	
+Current		0	
+Dawn		0	
+Dawn's		0	
+Daybreak		0	
+Dread		0	
+Dusk		0	
+Eclipse		0	
+Eight		0	
+Gauntlet		0	
+Gift		0	
+Grasp		0	
+Hidden		0	
+Indomitable		0	
+Intensity		0	
+Nova		0	
+Quick		0	
+Ram		0	
+Searing		0	
+Servant		0	
+Solvency		0	
+Unstable		0	
+Will		0	
+Armorer		0	
+Bathed		0	
+Beauty		0	
+Bell		0	
+Benevolence		0	
+Boethia		0	
+Brace		0	
+Brawler		0	
+Breath		0	
+Captivating		0	
+Channeler		0	
+Chemist		0	
+Cleave		0	
+Conjure		0	
+Cooldown		0	
+Cracker		0	
+Crusher		0	
+Cure		0	
+Cuts		0	
+Deadly		0	
+Deliverance		0	
+Detector		0	
+Disorienting		0	
+Dodge		0	
+Draw		0	
+Elemental		0	
+Empowered		0	
+Entrepreneur		0	
+Fighter's		0	
+Flourish		0	
+Font		0	
+Fortress		0	
+Gems		0	
+Guidance		0	
+in		0	
+Infiltrator		0	
+Intermediate		0	
+Kmockdown		0	
+Lethal		0	
+Lighting		0	
+Mark		0	
+Mercy		0	
+Monarch		0	
+Necrosis		0	
+North		0	
+of		0	
+Overcharge		0	
+Permafrost		0	
+Potency		0	
+Presence		0	
+Prismatic		0	
+Pugilist		0	
+Rare		0	
+Repose		0	
+Resilience		0	
+Resolve		0	
+Ringer		0	
+Rip		0	
+Roar		0	
+Roll		0	
+Scales		0	
+Scribe		0	
+Shot		0	
+Slash		0	
+Stormblast		0	
+Stunning		0	
+Tooltip		0	
+Tranquility		0	
+Unarmed		0	
+Unsuspecting		0	
+Way		0	
+Wisdom		0	
+Plague	疫病	0	
+Constitution	体質	0	
+Invincible	無敵	0	
+Meditation	瞑想	0	

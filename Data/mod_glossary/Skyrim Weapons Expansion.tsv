@@ -1,0 +1,89 @@
+﻿# Skyrim Weapons Expansion.esp — glossary scoped to this mod only
+#
+# The words below are ones the tool could not resolve while trying to translate this mod's item
+# "names". Fill in the Japanese column and re-run translation to resolve every name containing it.
+# "Remaining" is how many candidates are STILL unresolved because of that word (most first).
+# After you fill it in and re-run, that word's "Remaining" becomes 0 — 0 is normal (it means done).
+#
+# * Write the translation as a NOUN. Words are automatically joined with the particle "の", so
+#   writing an adjectival/verb form (e.g. Japanese "〜した"/"〜れた"/"〜く") breaks the composition
+#   (produces something like "卓越したの体力", grammatically wrong).
+#   Example: 卓越した→卓越, 汚染された→汚染, 錆びた→錆, なびく→はためき
+#   A trailing "の" is also unnecessary ("魂の"→"魂" — keeping it produces the doubled "魂のの抱擁").
+#
+# - Leaving a row blank is fine — any name containing that word simply stays untranslated (in English).
+#   You can skip an entire mod's file too.
+# - For a word that's an internal tag and should be output as-is, untranslated (e.g. "SMP", "3BBB"), write "=" in the Japanese column.
+# - This glossary is used ONLY for this mod's candidates. Unlike the shared Data/name_glossary.tsv,
+#   it never affects any other mod, so it only needs to fit this mod's own item lineup (no need for strict generality).
+# - The Japanese column is preserved across regeneration (never overwritten), and rows are never dropped.
+#
+# English	Japanese	Remaining	Example
+Baltimore		0	
+Atricor		0	
+Great		0	
+Stormcloud		0	
+Usdian		0	
+Arthurian		0	
+Bastard		0	
+Handed		0	
+Kindjal		0	
+Knightly		0	
+Longsword		0	
+Mars		0	
+Terra		0	
+Two		0	
+Falchion		0	
+Leaf		0	
+Dunmeri		0	
+Luna		0	
+Ritevice		0	
+Sarta		0	
+Scorpion		0	
+Sol		0	
+Sugaruya		0	
+Alacrity		0	
+Argent		0	
+Brand		0	
+Crecy		0	
+Duellist		0	
+Erlosung		0	
+Fiore		0	
+Flamberge		0	
+Galanterie		0	
+Galebrand		0	
+Kinzon		0	
+Legerity		0	
+Leviathan		0	
+Mordant		0	
+Niofroeia		0	
+Regent		0	
+Replica		0	
+Sik		0	
+Solaze		0	
+Torus		0	
+Venus		0	
+Viceroy		0	
+Visc		0	
+Voam		0	
+Yggdrasil		0	
+Zahkrii		0	
+Amsvartner		0	
+Broadsword		0	
+Clarion		0	
+Donia's		0	
+Dragontail		0	
+Eftermaele		0	
+Fetcher's		0	
+Krigers		0	
+Rhoda		0	
+Shortsword		0	
+Zweihander		0	
+Captain		0	
+Dark		0	
+Fenrir		0	
+Serenity		0	
+Sunbeam		0	
+Broad		0	
+Swordbreaker		0	
+Cataract	白濁	0	

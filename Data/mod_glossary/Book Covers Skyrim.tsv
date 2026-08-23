@@ -1,0 +1,77 @@
+﻿# Book Covers Skyrim.esp — glossary scoped to this mod only
+#
+# The words below are ones the tool could not resolve while trying to translate this mod's item
+# "names". Fill in the Japanese column and re-run translation to resolve every name containing it.
+# "Remaining" is how many candidates are STILL unresolved because of that word (most first).
+# After you fill it in and re-run, that word's "Remaining" becomes 0 — 0 is normal (it means done).
+#
+# * Write the translation as a NOUN. Words are automatically joined with the particle "の", so
+#   writing an adjectival/verb form (e.g. Japanese "〜した"/"〜れた"/"〜く") breaks the composition
+#   (produces something like "卓越したの体力", grammatically wrong).
+#   Example: 卓越した→卓越, 汚染された→汚染, 錆びた→錆, なびく→はためき
+#   A trailing "の" is also unnecessary ("魂の"→"魂" — keeping it produces the doubled "魂のの抱擁").
+#
+# - Leaving a row blank is fine — any name containing that word simply stays untranslated (in English).
+#   You can skip an entire mod's file too.
+# - For a word that's an internal tag and should be output as-is, untranslated (e.g. "SMP", "3BBB"), write "=" in the Japanese column.
+# - This glossary is used ONLY for this mod's candidates. Unlike the shared Data/name_glossary.tsv,
+#   it never affects any other mod, so it only needs to fit this mod's own item lineup (no need for strict generality).
+# - The Japanese column is preserved across regeneration (never overwritten), and rows are never dropped.
+#
+# English	Japanese	Remaining	Example
+Vol.		0	
+Summon		0	
+Song		0	
+Mysterious		0	
+Sedarys		0	
+Barenziah		0	
+Biography		0	
+Discovering		0	
+Incriminating		0	
+Part		0	
+Ruunvald		0	
+Decorating		0	
+Guide		0	
+Home		0	
+Manor		0	
+Random		0	
+Songs		0	
+Venarus		0	
+Vulpin's		0	
+<Alias=Home>		0	
+Accords		0	
+Angoth		0	
+Beast		0	
+Carry		0	
+Clue		0	
+Complaint		0	
+Cook's		0	
+Cure		0	
+Experiments		0	
+Faded		0	
+Fort		0	
+Furnishings		0	
+Gallus'		0	
+Habd's		0	
+Hargar's		0	
+Heddic's		0	
+Heljarchen		0	
+Lakeview		0	
+Maze		0	
+Mirtil		0	
+Mystery		0	
+Physicalities		0	
+Recluse		0	
+Research		0	
+Rising		0	
+Scripture		0	
+Shalidor's		0	
+Source		0	
+Spider		0	
+Steward		0	
+Sultry		0	
+Tattered		0	
+Threat		0	
+Treasure		0	
+Void		0	
+Waraxe		0	

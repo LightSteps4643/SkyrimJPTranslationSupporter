@@ -1,0 +1,50 @@
+# AutoTranslatorの①コーパス完全一致（_corpusExact）から手動で除外する英文字列。
+# 1行につき1語（または1フレーズ）。大文字小文字は区別しない。「#」で始まる行はコメント。
+#
+# ここに載せるのは、コーパス上は正しい実例（①完全一致の資格を満たす）だが、
+# 同綴異義語のせいで別の文脈に転用されると誤訳になるケース。
+# CorpusTransliterator用のData/transliteration_exclusions.txtと同じ考え方の、
+# こちらは①完全一致（AutoTranslator._corpusExact）専用の除外リスト。
+#
+# Fall -> 秋:
+#   vanilla Skyrim.esmのGMST（UI文字列）で"Fall"（季節名）が"秋"と正しく
+#   翻訳されている。しかし"Fall"は「陥落・崩壊」の意味でも使われる
+#   （実例: "The Fall of Winterhold"→誤って"...の秋"）。単語だけでは
+#   どちらの意味か判定できないため除外。
+Fall
+#
+# Hide -> 身隠し:
+#   Creation Club(ccBGSSSE001-Fish.esm)のMGEF/SPEL FULLで"Hide"（隠れる
+#   スペル名）が"身隠し"と正しく翻訳されている。しかし"Hide"は防具の素材
+#   「革」の意味でも頻出する（実例: "Stormcloak Hide Gauntlets"→誤って
+#   "...の身隠しの篭手"）。単語だけではどちらの意味か判定できないため除外。
+Hide
+#
+# Light -> 発光:
+#   vanilla Skyrim.esmのGMST/MGEF FULLで"Light"（発光効果）が"発光"と
+#   正しく翻訳されている。しかし"Light"は防具の重量区分「軽量」の意味でも
+#   頻出する（実例: "Whiterun Light Shield"→誤って"...の発光の盾"、
+#   "Ancient Nord Light Greatsword"等、実測40件）。単語だけではどちらの
+#   意味か判定できないため除外。
+Light
+#
+# Plate -> 皿:
+#   vanilla Skyrim.esm/dsdのMISC FULL（食器の「皿」）で"Plate"が"皿"と
+#   正しく翻訳されている。しかし"Plate"は板金鎧の意味でも使われる
+#   （実例: "Bosmer Plate Armor"→誤って"ボズマーの皿の防御"）。単語だけ
+#   ではどちらの意味か判定できないため除外。
+Plate
+#
+# Armor -> 防御:
+#   vanilla Dragonborn.esmのWOOP TNAM（ドラゴンシャウトの単語名）で
+#   "Armor"が能力値の意味で"防御"と翻訳されている。しかし"Armor"は防具
+#   そのものの意味でも使われる（実例: "Bosmer Plate Armor"→誤って
+#   "...の皿の防御"）。単語だけではどちらの意味か判定できないため除外。
+Armor
+#
+# Warm -> " 温かい(寒さLv0)":
+#   vanilla ccQDRSSE001-SurvivalMode.esl（サバイバルモードのUI状態表示、
+#   体温ステータスの文言）由来。先頭の余分な空白と、デバッグ的な括弧書き
+#   「(寒さLv0)」がそのまま含まれており、単語単体の訳として使うと壊れた
+#   出力になる（実例: "On Warm Sands"→"オンの 温かい(寒さLv0)の砂"）。除外。
+Warm

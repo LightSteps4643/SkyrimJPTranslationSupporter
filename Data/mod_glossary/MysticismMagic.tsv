@@ -1,0 +1,195 @@
+﻿# MysticismMagic.esp — glossary scoped to this mod only
+#
+# The words below are ones the tool could not resolve while trying to translate this mod's item
+# "names". Fill in the Japanese column and re-run translation to resolve every name containing it.
+# "Remaining" is how many candidates are STILL unresolved because of that word (most first).
+# After you fill it in and re-run, that word's "Remaining" becomes 0 — 0 is normal (it means done).
+#
+# * Write the translation as a NOUN. Words are automatically joined with the particle "の", so
+#   writing an adjectival/verb form (e.g. Japanese "〜した"/"〜れた"/"〜く") breaks the composition
+#   (produces something like "卓越したの体力", grammatically wrong).
+#   Example: 卓越した→卓越, 汚染された→汚染, 錆びた→錆, なびく→はためき
+#   A trailing "の" is also unnecessary ("魂の"→"魂" — keeping it produces the doubled "魂のの抱擁").
+#
+# - Leaving a row blank is fine — any name containing that word simply stays untranslated (in English).
+#   You can skip an entire mod's file too.
+# - For a word that's an internal tag and should be output as-is, untranslated (e.g. "SMP", "3BBB"), write "=" in the Japanese column.
+# - This glossary is used ONLY for this mod's candidates. Unlike the shared Data/name_glossary.tsv,
+#   it never affects any other mod, so it only needs to fit this mod's own item lineup (no need for strict generality).
+# - The Japanese column is preserved across regeneration (never overwritten), and rows are never dropped.
+#
+# English	Japanese	Remaining	Example
+DLC1AurielsBow		0	
+Exp01		0	
+Encumber		0	
+Feather		0	
+Conjure		0	
+Spectral		0	
+Vampiric		0	
+Ancestral		0	
+Sunlight		0	
+Burden		0	
+Grasp		0	
+Wisdom		0	
+Font		0	
+Warlock		0	
+Cloud		0	
+Hound		0	
+of		0	
+Shell		0	
+Deadly		0	
+Detect		0	
+Guardian		0	
+World		0	
+Cat		0	
+Cinder		0	
+Construct		0	
+Dire		0	
+Dispel		0	
+Finger		0	
+Husk		0	
+Lance		0	
+Manbeast		0	
+Marksman		0	
+Monarch		0	
+Sabre		0	
+Steed		0	
+All		0	
+Brute		0	
+Dwemerbane		0	
+Embrace		0	
+Entropic		0	
+Form		0	
+Mountain		0	
+Shroud		0	
+Armoreater		0	
+Attunement		0	
+Augur		0	
+Blast		0	
+Corrode		0	
+Cure		0	
+Daybreak		0	
+Destroy		0	
+Dummy		0	
+Friend		0	
+Slowfall		0	
+Sunbeam		0	
+Swift		0	
+Swim		0	
+Swordbreaker		0	
+Tooltip		0	
+Vanish		0	
+Ward		0	
+Anchor		0	
+Chilling		0	
+Disintegration		0	
+Draining		0	
+Exterior		0	
+Fiery		0	
+Flash		0	
+Ghostwalk		0	
+Guest		0	
+Icy		0	
+Leeching		0	
+Mark		0	
+Mule		0	
+Planar		0	
+Recall		0	
+Scion's		0	
+Scorch		0	
+Sea		0	
+Shalidor's		0	
+Shocking		0	
+Spelldrinker		0	
+Static		0	
+Stormblast		0	
+Stride		0	
+Throat		0	
+Thundering		0	
+Unwelcome		0	
+Windrunner		0	
+Windwalker		0	
+Charged		0	
+Dead		0	
+Dismiss		0	
+Electrocute		0	
+Enemy		0	
+Flaming		0	
+Flare		0	
+Hush		0	
+Nova		0	
+Panic		0	
+Poisonbolt		0	
+Reflective		0	
+Solar		0	
+Stoneskin		0	
+Symmetry		0	
+Translimination		0	
+Turning		0	
+Viper's		0	
+Viperbolt		0	
+World's		0	
+Ancestor		0	
+Barkskin		0	
+Binding		0	
+Blasts		0	
+Breaker		0	
+Breathing		0	
+Bridge		0	
+Corrosion		0	
+Deal		0	
+Debilitation		0	
+Deconstruction		0	
+Domination		0	
+Dread		0	
+Eater		0	
+Ebonheart		0	
+Eclipse		0	
+Electrocution		0	
+Encumbrance		0	
+Fading		0	
+Frozen		0	
+Hushing		0	
+Hypnotize		0	
+Immobilization		0	
+Immobilize		0	
+Incineration		0	
+Ironskin		0	
+Liminal		0	
+Lord		0	
+Lv		0	
+Marsh		0	
+Mercy		0	
+Mountain's		0	
+Mutagen		0	
+Mute		0	
+Muting		0	
+Pacification		0	
+Poisonbolts		0	
+Poisonous		0	
+Quietude		0	
+Rapid		0	
+Repulsion		0	
+Ritual		0	
+Scaleskin		0	
+Searing		0	
+Simonium		0	
+Skin		0	
+Soothe		0	
+Soothing		0	
+Spider		0	
+Steelskin		0	
+Sting		0	
+Summon		0	
+Surge		0	
+Venomfang		0	
+Venomous		0	
+Vitality		0	
+Water		0	
+Windrunning		0	
+Windwalking		0	
+Chameleon	カメレオン	0	
+Extra	追加	0	
+Half	半分	0	
+Quarter	四分の一	0	
+Rating	評価	0	

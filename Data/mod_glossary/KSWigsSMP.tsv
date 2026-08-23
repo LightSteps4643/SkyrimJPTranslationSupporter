@@ -1,0 +1,109 @@
+﻿# KSWigsSMP.esp — glossary scoped to this mod only
+#
+# The words below are ones the tool could not resolve while trying to translate this mod's item
+# "names". Fill in the Japanese column and re-run translation to resolve every name containing it.
+# "Remaining" is how many candidates are STILL unresolved because of that word (most first).
+# After you fill it in and re-run, that word's "Remaining" becomes 0 — 0 is normal (it means done).
+#
+# * Write the translation as a NOUN. Words are automatically joined with the particle "の", so
+#   writing an adjectival/verb form (e.g. Japanese "〜した"/"〜れた"/"〜く") breaks the composition
+#   (produces something like "卓越したの体力", grammatically wrong).
+#   Example: 卓越した→卓越, 汚染された→汚染, 錆びた→錆, なびく→はためき
+#   A trailing "の" is also unnecessary ("魂の"→"魂" — keeping it produces the doubled "魂のの抱擁").
+#
+# - Leaving a row blank is fine — any name containing that word simply stays untranslated (in English).
+#   You can skip an entire mod's file too.
+# - For a word that's an internal tag and should be output as-is, untranslated (e.g. "SMP", "3BBB"), write "=" in the Japanese column.
+# - This glossary is used ONLY for this mod's candidates. Unlike the shared Data/name_glossary.tsv,
+#   it never affects any other mod, so it only needs to fit this mod's own item lineup (no need for strict generality).
+# - The Japanese column is preserved across regeneration (never overwritten), and rows are never dropped.
+#
+# English	Japanese	Remaining	Example
+Cloud		0	
+(Lace)	(レース)	0	
+(No	=	0	
+Lace)	=	0	
+KSSMP	=	0	
+Sweet	スイート	0	
+Babydoll	ベビードール	0	
+Metropolis	メトロポリス	0	
+Ominous	オミナス	0	
+Only	オンリー	0	
+Rosette	ロゼット	0	
+Scar	スカー	0	
+You	ユー	0	
+Amor	アモール	0	
+Anchor	アンカー	0	
+Angelic	エンジェリック	0	
+Angels	エンジェルズ	0	
+Anna	アンナ	0	
+Anto92	=	0	
+Aroma	アロマ	0	
+Awake	アウェイク	0	
+Bluebird	ブルーバード	0	
+Cambrian	カンブリアン	0	
+Caress	カレス	0	
+Cassy	キャシー	0	
+Cerigo	セリゴ	0	
+City	シティ	0	
+Cliche	クリシェ	0	
+Cola	コーラ	0	
+Crazy	クレイジー	0	
+Crescent	クレセント	0	
+Desirae	デジレ	0	
+Desperate	デスパレート	0	
+Di	ディ	0	
+Didar	ディダール	0	
+Dollmaker	ドールメーカー	0	
+Erena	エレナ	0	
+Escape	エスケープ	0	
+Foam	フォーム	0	
+Fontana	フォンターナ	0	
+Freesia	フリージア	0	
+Galaxy	ギャラクシー	0	
+Gecko	ゲッコー	0	
+Gorgeous	ゴージャス	0	
+Haze	ヘイズ	0	
+Himiko	ヒミコ	0	
+Honeyed	ハニード	0	
+Icarus	イカロス	0	
+Jackdaw	ジャックドー	0	
+Kaysa	ケイサ	0	
+Kerli	ケルリ	0	
+Kikyo	キキョウ	0	
+Koala	コアラ	0	
+Lime	ライム	0	
+Lips	リップス	0	
+Lotus	ロータス	0	
+Love	ラブ	0	
+Me	ミー	0	
+Mellow	メロウ	0	
+Milliet	ミリエット	0	
+Moonrise	ムーンライズ	0	
+Paraguay	パラグアイ	0	
+Princess	プリンセス	0	
+Rosi	ロージー	0	
+Runaway	ランナウェイ	0	
+Scarlet	スカーレット	0	
+Searching	サーチング	0	
+Silent	サイレント	0	
+Sky6063	=	0	
+Slowly	スローリー	0	
+Sparklers	スパークラー	0	
+Starlet	スターレット	0	
+Stay	ステイ	0	
+Steammist	スチームミスト	0	
+Studio	スタジオ	0	
+Tell	テル	0	
+Tonight	トゥナイト	0	
+Top	トップ	0	
+Trevi	トレヴィ	0	
+Vapor	ヴェイパー	0	
+Veneris	ヴェネリス	0	
+Vice	ヴァイス	0	
+Villain	ヴィラン	0	
+Vivacity	ヴィヴァシティ	0	
+XOXO	=	0	
+Youth	ユース	0	
+Zoella	ゾエラ	0	
+(Band)	(バンド)	0	

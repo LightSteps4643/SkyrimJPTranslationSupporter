@@ -1,0 +1,54 @@
+﻿# Cloaks_SMP_Patch.esp — glossary scoped to this mod only
+#
+# The words below are ones the tool could not resolve while trying to translate this mod's item
+# "names". Fill in the Japanese column and re-run translation to resolve every name containing it.
+# "Remaining" is how many candidates are STILL unresolved because of that word (most first).
+# After you fill it in and re-run, that word's "Remaining" becomes 0 — 0 is normal (it means done).
+#
+# * Write the translation as a NOUN. Words are automatically joined with the particle "の", so
+#   writing an adjectival/verb form (e.g. Japanese "〜した"/"〜れた"/"〜く") breaks the composition
+#   (produces something like "卓越したの体力", grammatically wrong).
+#   Example: 卓越した→卓越, 汚染された→汚染, 錆びた→錆, なびく→はためき
+#   A trailing "の" is also unnecessary ("魂の"→"魂" — keeping it produces the doubled "魂のの抱擁").
+#
+# - Leaving a row blank is fine — any name containing that word simply stays untranslated (in English).
+#   You can skip an entire mod's file too.
+# - For a word that's an internal tag and should be output as-is, untranslated (e.g. "SMP", "3BBB"), write "=" in the Japanese column.
+# - This glossary is used ONLY for this mod's candidates. Unlike the shared Data/name_glossary.tsv,
+#   it never affects any other mod, so it only needs to fit this mod's own item lineup (no need for strict generality).
+# - The Japanese column is preserved across regeneration (never overwritten), and rows are never dropped.
+#
+# English	Japanese	Remaining	Example
+Cape		0	
+Companions		0	
+Ashlander's	アッシュランダー	0	
+Fall		0	
+Himir's	ヒミル	0	
+Hjarvo's	ハルヴォ	0	
+Nyartuk's	ニャルトゥク	0	
+Warm		0	
+Linen		0	
+Paladin		0	
+Shroud		0	
+On	オン	0	
+Burlap	麻布	0	
+Crimson	深紅	0	
+Wrap	巻き布	0	
+Eminent	卓越	0	
+Mantle	マント	0	
+Suppression	抑制	0	
+Blanket	毛布	0	
+Burned	焼却	0	
+College	学院	0	
+Crow	カラス	0	
+Devotion	献身	0	
+Eagle	鷲	0	
+Greybeard	グレイビアード	0	
+Mossy	苔	0	
+Northern	北方	0	
+Scale	鱗	0	
+Tattered	ぼろぼろ	0	
+Urshilaku	ウルシラク	0	
+Wild	ワイルド	0	
+Zanaib	ザナイブ	0	
+Hide	革	0	

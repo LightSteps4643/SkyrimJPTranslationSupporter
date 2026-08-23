@@ -1,0 +1,130 @@
+﻿# PathOfSorcery.esp — glossary scoped to this mod only
+#
+# The words below are ones the tool could not resolve while trying to translate this mod's item
+# "names". Fill in the Japanese column and re-run translation to resolve every name containing it.
+# "Remaining" is how many candidates are STILL unresolved because of that word (most first).
+# After you fill it in and re-run, that word's "Remaining" becomes 0 — 0 is normal (it means done).
+#
+# * Write the translation as a NOUN. Words are automatically joined with the particle "の", so
+#   writing an adjectival/verb form (e.g. Japanese "〜した"/"〜れた"/"〜く") breaks the composition
+#   (produces something like "卓越したの体力", grammatically wrong).
+#   Example: 卓越した→卓越, 汚染された→汚染, 錆びた→錆, なびく→はためき
+#   A trailing "の" is also unnecessary ("魂の"→"魂" — keeping it produces the doubled "魂のの抱擁").
+#
+# - Leaving a row blank is fine — any name containing that word simply stays untranslated (in English).
+#   You can skip an entire mod's file too.
+# - For a word that's an internal tag and should be output as-is, untranslated (e.g. "SMP", "3BBB"), write "=" in the Japanese column.
+# - This glossary is used ONLY for this mod's candidates. Unlike the shared Data/name_glossary.tsv,
+#   it never affects any other mod, so it only needs to fit this mod's own item lineup (no need for strict generality).
+# - The Japanese column is preserved across regeneration (never overwritten), and rows are never dropped.
+#
+# English	Japanese	Remaining	Example
+Disciple		0	
+Bone		0	
+Conjure		0	
+(Dummy)		0	
+Summon		0	
+Test		0	
+Careful		0	
+Goliath		0	
+Potent		0	
+Preparation		0	
+Breath		0	
+Of		0	
+QA		0	
+Skele		0	
+Walker		0	
+Blaze		0	
+Crown		0	
+Divine		0	
+Inspiration		0	
+Lord		0	
+Manager		0	
+Secondary		0	
+Ab		0	
+AOE		0	
+Application		0	
+Assemble		0	
+Brittle		0	
+Call		0	
+Dawn		0	
+Dust		0	
+Holy		0	
+Immortality		0	
+IMP		0	
+Invigorate		0	
+Lithomancy		0	
+Mastered		0	
+Meteor		0	
+Pain		0	
+Paladin		0	
+Reduce		0	
+Rime		0	
+Scribe		0	
+Seizure		0	
+Shower		0	
+Speed		0	
+Superconductive		0	
+Telepathy		0	
+Wielder		0	
+Advanced		0	
+Ambush		0	
+Arise		0	
+Arm		0	
+Arms		0	
+Artificer		0	
+Attach		0	
+Aurora		0	
+Bloody		0	
+Bones		0	
+Boosted		0	
+Carrier		0	
+Cheating		0	
+Conductivity		0	
+Dance		0	
+Decoy		0	
+Delicate		0	
+Doom		0	
+Elemental		0	
+Feel		0	
+Flash		0	
+Foot		0	
+Fratricide		0	
+Frigid		0	
+Guardian		0	
+Here!		0	
+Holding		0	
+Hound		0	
+Incoming		0	
+Magnetic		0	
+Mastery		0	
+Miracle		0	
+Molten		0	
+Nightmare		0	
+on		0	
+Piercing		0	
+Plague		0	
+Point		0	
+Polymath		0	
+Presence		0	
+Reduced		0	
+Ribcage		0	
+Ritual		0	
+Searing		0	
+Servant		0	
+Shadow		0	
+Shell		0	
+Spawn		0	
+Spreading		0	
+Study		0	
+Subtle		0	
+Thirsty		0	
+Veil		0	
+Wait		0	
+Weave		0	
+Whispers		0	
+Wildfire		0	
+Worms		0	
+Exemplar	模範	0	
+Fusion	融合	0	
+Urgency	緊迫	0	

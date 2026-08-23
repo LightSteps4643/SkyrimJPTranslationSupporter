@@ -1,0 +1,44 @@
+# NameFallbackTranslator（Translationステージ）が「色を表す語」として認識する
+# 固定リスト。1行につき1語。大文字小文字は区別しない。「#」で始まる行はコメント。
+#
+# 用途: この単語チェーン内の1語が単独でここに一致した場合、他の語と「の」で
+# 連結せず、「（訳語）」という注記として出力する（v0.40.0）。理由: 色語は
+# 英語では名前の末尾や"-"区切りの後ろに置かれることが多いが（例: "Xmas Tinsel
+# White"）、日本語で単純に「の」で繋ぐと「モールのホワイト」のような所有格
+# めいた不自然な訳になる。位置を動かさず、括弧注記に切り替えることで対応する。
+#
+# 翻訳そのものはこのファイルではなく、既存のコーパス/参照対訳表/MOD用語集の
+# 解決チェーンからそのまま得る——ここは「この語が色である」という判定にしか
+# 使わない（翻訳の出典を二重管理しないため）。
+Red
+Black
+White
+Blue
+Green
+Yellow
+Purple
+Orange
+Pink
+Brown
+Grey
+Gray
+Silver
+Gold
+Golden
+Bronze
+Ivory
+Ebony
+# v0.40.2: 実データ（末尾に単独で出現するケース）で確認した追加分。
+# Obsidian/Umber/Redwortのように、狭義の色名ではないが染料・宝石・鉱物由来で
+# バリエーション名として色と同じ使われ方をする語も対象に含む。
+Amber
+Crimson
+Emerald
+Maroon
+Navy
+Obsidian
+Redwort
+Ruby
+Sapphire
+Scarlet
+Umber

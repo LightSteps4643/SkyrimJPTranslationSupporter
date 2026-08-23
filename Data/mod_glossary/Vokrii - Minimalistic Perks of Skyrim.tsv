@@ -1,0 +1,185 @@
+﻿# Vokrii - Minimalistic Perks of Skyrim.esp — glossary scoped to this mod only
+#
+# The words below are ones the tool could not resolve while trying to translate this mod's item
+# "names". Fill in the Japanese column and re-run translation to resolve every name containing it.
+# "Remaining" is how many candidates are STILL unresolved because of that word (most first).
+# After you fill it in and re-run, that word's "Remaining" becomes 0 — 0 is normal (it means done).
+#
+# * Write the translation as a NOUN. Words are automatically joined with the particle "の", so
+#   writing an adjectival/verb form (e.g. Japanese "〜した"/"〜れた"/"〜く") breaks the composition
+#   (produces something like "卓越したの体力", grammatically wrong).
+#   Example: 卓越した→卓越, 汚染された→汚染, 錆びた→錆, なびく→はためき
+#   A trailing "の" is also unnecessary ("魂の"→"魂" — keeping it produces the doubled "魂のの抱擁").
+#
+# - Leaving a row blank is fine — any name containing that word simply stays untranslated (in English).
+#   You can skip an entire mod's file too.
+# - For a word that's an internal tag and should be output as-is, untranslated (e.g. "SMP", "3BBB"), write "=" in the Japanese column.
+# - This glossary is used ONLY for this mod's candidates. Unlike the shared Data/name_glossary.tsv,
+#   it never affects any other mod, so it only needs to fit this mod's own item lineup (no need for strict generality).
+# - The Japanese column is preserved across regeneration (never overwritten), and rows are never dropped.
+#
+# English	Japanese	Remaining	Example
+Druid		0	
+CONTAINER		0	
+Disadvantage		0	
+Minions		0	
+Shared		0	
+TEST		0	
+Various		0	
+VOKRII		0	
+Blows		0	
+Crushing		0	
+Denting		0	
+Grievous		0	
+Overbearing		0	
+Overpowering		0	
+Elemental		0	
+Alter		0	
+Minor		0	
+Conflux		0	
+Padding		0	
+Cobra		0	
+Escape		0	
+Ki		0	
+Spitting		0	
+Disjunction		0	
+Hethoth's		0	
+Charge		0	
+Emperor		0	
+Fist		0	
+Paralyzing		0	
+Speed		0	
+Ward		0	
+Detection		0	
+Doctor		0	
+Lion's		0	
+Plague		0	
+Rebuke		0	
+Scorched		0	
+<Alias=VKR_Player>'s		0	
+Automaton		0	
+Blur		0	
+Companion		0	
+Crowd		0	
+Fangs		0	
+Getaway		0	
+Hotwired		0	
+Linen		0	
+Lockdown		0	
+Nullifier		0	
+Pleaser		0	
+Poke		0	
+Raw		0	
+Refund		0	
+Rush		0	
+Sage		0	
+Sense		0	
+Shot		0	
+Spellscribe		0	
+Tap		0	
+Victory		0	
+Wardancer		0	
+Wild		0	
+Words		0	
+Adrenaline		0	
+Agility		0	
+Artist		0	
+Battlemage		0	
+Blow		0	
+Destruct		0	
+Drunk		0	
+Evasive		0	
+Experience		0	
+Field		0	
+Gain		0	
+Ghoul		0	
+Hotwire		0	
+Impaling		0	
+Leap		0	
+Mocking		0	
+Mountain		0	
+Ramming		0	
+Roll		0	
+Rolling		0	
+Spot		0	
+Steam		0	
+Stimulants		0	
+Subjugation		0	
+Unavailable		0	
+Windrunner		0	
+Archaeologist		0	
+Astral		0	
+Binding		0	
+Blessed		0	
+Brand		0	
+Caster		0	
+Chilling		0	
+Clothesmaker		0	
+Crackling		0	
+Crater		0	
+Critical		0	
+Crossover		0	
+Deafening		0	
+Decorative		0	
+Devouring		0	
+Disarming		0	
+Dodge		0	
+Doom		0	
+Double		0	
+Dovahzulaan		0	
+Engine		0	
+Evasion		0	
+Flight		0	
+Form		0	
+Gore		0	
+Grasp		0	
+Grip		0	
+Harm		0	
+Hellstorm		0	
+Hollow		0	
+Initiate		0	
+Ironclad		0	
+Keen		0	
+Kneel		0	
+Knockback		0	
+Lifting		0	
+Lunge		0	
+Maiden		0	
+Maker		0	
+Mana		0	
+Meteor		0	
+Necromaster		0	
+Neverworld		0	
+On-Hit		0	
+Overdrive		0	
+Perfect		0	
+Pinning		0	
+Proc		0	
+Procs		0	
+Pugilist		0	
+Randomizer		0	
+Reap		0	
+Reapplicator		0	
+Recovering		0	
+Reset		0	
+Ritual		0	
+Senses		0	
+Shadowcaster		0	
+Slash		0	
+Sphere		0	
+Stunted		0	
+Summoning		0	
+Sure		0	
+Thunderstruck		0	
+Toil		0	
+Tonal		0	
+Trade		0	
+Trouble		0	
+Untouchable		0	
+Vanish		0	
+Void		0	
+Will		0	
+Windswept		0	
+With		0	
+Wounded		0	
+Intervention	介入	0	

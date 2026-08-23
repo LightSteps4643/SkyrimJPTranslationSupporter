@@ -1,0 +1,79 @@
+﻿# Nodachi.esp — glossary scoped to this mod only
+#
+# The words below are ones the tool could not resolve while trying to translate this mod's item
+# "names". Fill in the Japanese column and re-run translation to resolve every name containing it.
+# "Remaining" is how many candidates are STILL unresolved because of that word (most first).
+# After you fill it in and re-run, that word's "Remaining" becomes 0 — 0 is normal (it means done).
+#
+# * Write the translation as a NOUN. Words are automatically joined with the particle "の", so
+#   writing an adjectival/verb form (e.g. Japanese "〜した"/"〜れた"/"〜く") breaks the composition
+#   (produces something like "卓越したの体力", grammatically wrong).
+#   Example: 卓越した→卓越, 汚染された→汚染, 錆びた→錆, なびく→はためき
+#   A trailing "の" is also unnecessary ("魂の"→"魂" — keeping it produces the doubled "魂のの抱擁").
+#
+# - Leaving a row blank is fine — any name containing that word simply stays untranslated (in English).
+#   You can skip an entire mod's file too.
+# - For a word that's an internal tag and should be output as-is, untranslated (e.g. "SMP", "3BBB"), write "=" in the Japanese column.
+# - This glossary is used ONLY for this mod's candidates. Unlike the shared Data/name_glossary.tsv,
+#   it never affects any other mod, so it only needs to fit this mod's own item lineup (no need for strict generality).
+# - The Japanese column is preserved across regeneration (never overwritten), and rows are never dropped.
+#
+# English	Japanese	Remaining	Example
+Nodachi		0	
+Slash		0	
+Disperse		0	
+Rejection		0	
+Thorn		0	
+Cursed		0	
+Doom		0	
+Embrace		0	
+Justice		0	
+Lunatic		0	
+Meltdown		0	
+Serpent's		0	
+WAH		0	
+Banishing		0	
+Binding		0	
+Destroyer		0	
+Elemental		0	
+Forever		0	
+Human		0	
+Obsidian		0	
+Painless		0	
+Wyvern		0	
+Bloody		0	
+Chikage		0	
+Cragblade		0	
+Crown		0	
+Edge		0	
+Executioner		0	
+Extermination		0	
+Fever		0	
+Forbidden		0	
+Frostforged		0	
+Gravedigger		0	
+Great		0	
+Greed		0	
+HAKOS		0	
+HARI		0	
+Khaos		0	
+KOSEKI		0	
+Loot		0	
+Moonfang		0	
+Nordhero		0	
+Obsidianbrand		0	
+Overkill		0	
+Platina		0	
+Pole		0	
+Raiden		0	
+Revealing		0	
+Revenge		0	
+Rosenfader		0	
+Scourge		0	
+Serpent		0	
+Thermal		0	
+Thu'um		0	
+Washing		0	
+[Legacy]		0	
+[Scarlet]		0	
+Downfall	没落	0	
