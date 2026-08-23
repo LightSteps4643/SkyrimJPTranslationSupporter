@@ -1,0 +1,26 @@
+# ビルド成果物
+bin/
+obj/
+*.csproj.user
+
+# 各ステージの実行時派生物（実行のたびに作り直される）
+PickUpTarget/out_temp/
+Translation/out_temp/
+Translation/bak/
+debug_out_temp/
+out/
+
+# xTranslatorインポート用フォルダ（ユーザーが自分の翻訳ファイルを置く場所）
+Translation/import/*
+!Translation/import/.gitkeep
+
+# 実行ログ
+*.log
+
+# GUIのユーザー設定・APIキー（DPAPI暗号化されるが、そもそも個人環境依存のため追跡しない）
+gui_settings.json
+
+# 開発時の検討ログ（社内向け、リポジトリには含めない）
+DESIGN_NOTES.md
+DESIGN_HISTORY.md
+NEXUS_DESCRIPTION_DRAFT.md
