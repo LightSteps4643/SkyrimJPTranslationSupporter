@@ -39,6 +39,17 @@ Bethesda公式ローカライズ文字列を集約した英日対訳表です。
 - 公開者: 半透明様
 - URL: https://ss1.xrea.com/croatoan.s323.xrea.com/Skyrim/taiyaku_.html
 
+## 開発ツール
+
+本ツールは、[Claude Code](https://www.anthropic.com/claude-code)（Anthropic社のAIコーディングエージェント）、
+および houseCARL（Skyrimロードオーダーのデータ層を扱うMCPツール）を活用した
+「バイブコーディング」によって開発されました。
+
+### houseCARL
+
+- 作者: Aaronavich様
+- Nexus: https://www.nexusmods.com/skyrimspecialedition/mods/181738
+
 ## ライセンスについて
 
 上記各プロジェクトのライセンス条件は、それぞれのリポジトリ・配布ページをご確認ください。本ツール自体のライセンスについては別途定めます。
