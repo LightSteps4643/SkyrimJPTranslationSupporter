@@ -297,6 +297,7 @@ public sealed class MainForm : Form
         optionsRow2.Controls.Add(_chkLlm);
         options.Controls.Add(optionsRow2, 0, 1);
         _chkLlm.CheckedChanged += ChkLlm_CheckedChanged;
+        _chkCloudAi.CheckedChanged += ChkCloudAi_CheckedChanged;
 
         // v0.52.1a: 生成AI翻訳オプションのすぐ下に配置——⑤⑥どちらにも効く設定
         // なので、片方だけの行に混ぜず独立した行にしてある。
@@ -769,11 +770,22 @@ public sealed class MainForm : Form
         }
     }
 
-    // v0.52.1a: 「生成AI翻訳（クラウド）」にはローカルLLMのようなHTTPプリフライト
+    // v0.54.0: 「生成AI翻訳（クラウド）」にはローカルLLMのようなHTTPプリフライト
     // チェックを設けていない——Claude Code CLI選択時はサブプロセス起動なので
     // "軽い接続テスト"に相当する手段が無く、OpenAI互換API選択時もクラウドAPIへの
     // 毎回の疎通確認はレイテンシ・コストの点で気軽に行うものではないと判断した。
-    // 失敗すれば実行時のエラーとしてログ・ダイアログに出る。
+    // 失敗すれば実行時のエラーとしてログ・ダイアログに出る。代わりに、チェックを
+    // 入れた瞬間にBeta機能・課金・規模に関する注意喚起を一度出す（Nexus公開後、
+    // 初見のユーザーがいきなり大規模実行して想定外のコストを被らないように）。
+    private void ChkCloudAi_CheckedChanged(object? sender, EventArgs e)
+    {
+        if (!_chkCloudAi.Checked) return;
+        MessageBox.Show(this,
+            "本機能はベータ版です。\n" +
+            "また、生成AI翻訳にはトークンを消費します。翻訳文字数や対象が増えるほど大規模になります。\n" +
+            "最初は小規模なプラグインを対象に動作を確認し、負荷をチェックすることを推奨します。",
+            "Beta機能: 生成AI翻訳（クラウド）", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+    }
 
     /// <summary>v0.52.1a: 読み取り専用——Translation/out_temp配下の
     /// translations.tsvを直接再スキャンするだけで、CLIは一切呼ばない。既存の
