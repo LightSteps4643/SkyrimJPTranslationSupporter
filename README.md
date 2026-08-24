@@ -7,6 +7,10 @@
 配布版（コンパイル済み、ソースコード不要ですぐ使えます）は Nexus Mods で公開しています。
 https://www.nexusmods.com/skyrimspecialedition/mods/189369
 
+Nexus側のファイルが検疫等で一時的にダウンロードできない場合の代替配布先として、
+[GitHub Releases](https://github.com/LightSteps4643/SkyrimJPTranslationSupporter/releases)
+でも同じパッケージを公開しています。
+
 このリポジトリは、[GPL-3.0](./LICENSE) でライセンスされている
 [Mutagen](https://github.com/Mutagen-Modding/Mutagen) を利用しているため、
 本ツール自体のソースコードもGPL-3.0で公開しています。
