@@ -80,20 +80,21 @@ New-Item -ItemType Directory -Force -Path $importDir | Out-Null
 Copy-Item -Path (Join-Path $root "CREDITS.md") -Destination $OutputDir -Force
 
 # v0.54.0: GUIはサブフォルダの中にあるため、フォルダ直下からすぐ起動できるように
-# ショートカットを1つ置いておく——毎回サブフォルダへ潜る必要をなくすため。
-Write-Host "--- ショートカットを作成 ---"
-$guiExe = Join-Path $guiOutputDir "SkyrimJPStringPatcherGui.exe"
-$shortcutPath = Join-Path $OutputDir "Skyrim JP Translation Supporter.lnk"
-$shell = New-Object -ComObject WScript.Shell
-$shortcut = $shell.CreateShortcut($shortcutPath)
-$shortcut.TargetPath = $guiExe
-$shortcut.WorkingDirectory = $guiOutputDir
-$shortcut.Description = "Skyrim JP Translation Supporter"
-$shortcut.Save()
-[System.Runtime.Interopservices.Marshal]::ReleaseComObject($shell) | Out-Null
+# ランチャーを1つ置いておく——毎回サブフォルダへ潜る必要をなくすため。
+# v0.54.0a: 当初は.lnkショートカット（WScript.Shellで作成）だったが、.lnkは
+# ビルド時点の絶対パス（この開発機のフォルダ構成）をファイル自体に埋め込んで
+# しまい、ユーザーが解凍先を変えても中身を覗けばビルド環境の絶対パスが見える
+# 状態だった（Windowsの「壊れたショートカットの自動修復」機能により、実行自体は
+# 解凍先でも問題なく動くが、プロパティを見れば古い絶対パスが一時的に見えてしまう
+# ——実行後は自動的に書き換わる）。.batなら`%~dp0`（バッチファイル自身の
+# フォルダ）だけで完結し、絶対パスが一切ファイルに含まれない。
+Write-Host "--- ランチャー(.bat)を作成 ---"
+$launcherPath = Join-Path $OutputDir "Skyrim JP Translation Supporter.bat"
+$launcherContent = "@echo off`r`nstart `"`" `"%~dp0SkyrimJPStringPatcherGui\SkyrimJPStringPatcherGui.exe`"`r`n"
+[System.IO.File]::WriteAllText($launcherPath, $launcherContent, (New-Object System.Text.UTF8Encoding($false)))
 
 Write-Host ""
 Write-Host "完了: $OutputDir"
 Write-Host "  SkyrimJPStringPatcher.exe（直下） / SkyrimJPStringPatcherGui\SkyrimJPStringPatcherGui.exe（サブフォルダ） / Data/ / Translation/import/ を含む"
 Write-Host "  ソースコード・開発用ドキュメント（DESIGN_NOTES.md等）は含まれない"
-Write-Host "  起動は直下の「Skyrim JP Translation Supporter.lnk」から（CLIは通常直接使わない）"
+Write-Host "  起動は直下の「Skyrim JP Translation Supporter.bat」から（CLIは通常直接使わない）"
