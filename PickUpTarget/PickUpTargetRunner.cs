@@ -1,3 +1,5 @@
+using System;
+using DynamicData;
 using Mutagen.Bethesda;
 using Mutagen.Bethesda.Plugins;
 using Mutagen.Bethesda.Plugins.Aspects;
@@ -133,23 +135,24 @@ public static class PickUpTargetRunner
         }
     }
 
-    private static List<ISkyrimModGetter> OpenMods(Mo2Instance instance, BinaryReadParameters readParams, RunLog log, TraceLog? trace = null)
+    private static List<string> OpenMods(Mo2Instance instance, BinaryReadParameters readParams, RunLog log, TraceLog? trace = null)
     {
         trace?.Info($"OpenMods start: opening {instance.LoadOrder.Count} plugins");
-        var mods = new List<ISkyrimModGetter>();
+        var mods = new List<string>();
         foreach (var plugin in instance.LoadOrder)
         {
             try
             {
-                trace?.Trace($"Opening: {plugin.FileName} ({plugin.AbsolutePath})");
-                var modKey = ModKey.FromFileName(plugin.FileName);
-                var modPath = new ModPath(modKey, plugin.AbsolutePath);
-                mods.Add(SkyrimMod.CreateFromBinaryOverlay(modPath, SkyrimRelease.SkyrimSE, readParams));
+                if (plugin.AbsolutePath.EndsWith(".esp") || plugin.AbsolutePath.EndsWith(".esm") || plugin.AbsolutePath.EndsWith(".esl"))
+                {
+                    trace?.Trace($"Opening: {plugin.FileName} ({plugin.AbsolutePath})");
+                    mods.Add(plugin.AbsolutePath);
+                }
             }
             catch (Exception ex)
             {
                 Console.Error.WriteLine($"[warn] failed to open '{plugin.FileName}': {ex.Message}");
-                log.Detail("除外: プラグインを開けなかった", "Excluded: failed to open plugin", $"{plugin.FileName} — {ex.Message}");
+                //log.Detail("除外: プラグインを開けなかった", "Excluded: failed to open plugin", $"{plugin.FileName} — {ex.Message}");
                 trace?.Warning($"Failed to open plugin: {plugin.FileName} — {ex.Message}");
             }
         }
@@ -163,26 +166,27 @@ public static class PickUpTargetRunner
         List<CorpusEntry> Corpus,
         HashSet<FormKey> NotPlayerFacing);
 
+
     /// <summary>Walks every record in every mod (in load order) and records, per
     /// (FormKey, DSD type, index), each mod's own contribution — the LAST entry
     /// in each chain is therefore the load-order WINNER, same VFS-override
     /// resolution FULL always used. Also opportunistically builds the vanilla
     /// half of the corpus (English/Japanese pairs found on the same field).</summary>
-    private static ScanResult ScanTranslatableFields(List<ISkyrimModGetter> mods, TraceLog? trace = null)
+    private static ScanResult ScanTranslatableFields(List<string> mods, TraceLog? trace = null)
     {
         var chains = new Dictionary<ChainKey, ChainValue>();
         var corpus = new List<CorpusEntry>();
 
         // Records the player never reads, identified from the record itself rather
         // than from its text. Collected here, applied in BuildCandidates.
-        var notPlayerFacing = new HashSet<FormKey>();
+        //var notPlayerFacing = new HashSet<FormKey>();
 
         // MGEF's "never show this effect in the UI" flag. Resolved in a typed
         // pre-pass because SPEL's rule below needs to consult it for effects that
         // may not have been enumerated yet.
-        var hiddenEffects = CollectHiddenMagicEffects(mods);
-        notPlayerFacing.UnionWith(hiddenEffects);
-        trace?.Debug($"CollectHiddenMagicEffects done: {hiddenEffects.Count} entries (MGEF HideInUI)");
+        //var hiddenEffects = CollectHiddenMagicEffects(mods);
+        //notPlayerFacing.UnionWith(hiddenEffects);
+        //trace?.Debug($"CollectHiddenMagicEffects done: {hiddenEffects.Count} entries (MGEF HideInUI)");
 
         // v0.29.9: ARMO/WEAP's "Non-Playable" flag — the engine's own declaration
         // that a record can never be equipped or shown to the player, used by
@@ -195,9 +199,12 @@ public static class PickUpTargetRunner
         // text, and (unlike the v0.29.8 name-pattern check it replaces) it
         // generalizes to ANY mod's internal dummy armor/weapon, not just this
         // one plugin's specific naming convention.
-        var nonPlayableGear = CollectNonPlayableGear(mods);
-        notPlayerFacing.UnionWith(nonPlayableGear);
-        trace?.Debug($"CollectNonPlayableGear done: {nonPlayableGear.Count} entries (ARMO/WEAP NonPlayable)");
+        //var nonPlayableGear = CollectNonPlayableGear(mods);
+        //notPlayerFacing.UnionWith(nonPlayableGear);
+        //trace?.Debug($"CollectNonPlayableGear done: {nonPlayableGear.Count} entries (ARMO/WEAP NonPlayable)");
+
+        HashSet<FormKey> notPlayerFacing = new HashSet<FormKey>();//You do not need to fill in this field; simply leave it blank. Since certain elements are controlled by scripts, relying on this alone does not guarantee effectiveness.
+
 
         void Consider(FormKey formKey, string dsdType, int index, ModKey source, ITranslatedStringGetter? field, string editorId = "", string context = "")
         {
@@ -245,57 +252,109 @@ public static class PickUpTargetRunner
             list.Add((source, winnerText!, editorId, context));
         }
 
-        var raceNames = CollectRaceNames(mods);
-        trace?.Debug($"CollectRaceNames done: {raceNames.Count} entries");
+        //CollectHiddenMagicEffects();
 
-        foreach (var mod in mods)
+        foreach (var modPath in mods)
         {
-            foreach (var record in mod.EnumerateMajorRecords())
+            
+            //foreach (var record in mod.EnumerateMajorRecords())
+            //{
+            //    var context = RecordContextExtractor.For(record, raceNames);
+
+            //    // A perk flagged Hidden, or one that isn't Playable, never appears in
+            //    // the skill tree — so neither its name nor its description is read.
+            //    if (record is IPerkGetter perk && (perk.Hidden || !perk.Playable))
+            //        notPlayerFacing.Add(record.FormKey);
+
+            //    // An Ability is a spell the player cannot cast and which the magic
+            //    // menu does not list; it surfaces only as its effects in the Active
+            //    // Effects list. So when EVERY one of those effects is itself flagged
+            //    // HideInUI, nothing about the spell is ever displayed. Deliberately
+            //    // limited to Ability — a castable Spell's name IS shown in the magic
+            //    // menu regardless of what its effects do, and Powers/LesserPowers
+            //    // appear under Powers. Confirmed against real records: the effects of
+            //    // Flourish / Quick Draw / Agility / Eagle Eye 25 are all HideInUI.
+            //    if (record is ISpellGetter spell
+            //        && spell.Type == SpellType.Ability
+            //        && spell.Effects.Count > 0
+            //        && spell.Effects.All(e => !e.BaseEffect.IsNull && hiddenEffects.Contains(e.BaseEffect.FormKey)))
+            //    {
+            //        notPlayerFacing.Add(record.FormKey);
+            //    }
+
+               
+            //}
+
+            EspReader NEspReader = new EspReader();
+            NEspReader.ReadMod(modPath);
+
+            var Records = SkyrimDataLoader.LoadAll(NEspReader);
+
+            foreach (var record in Records)
             {
-                var context = RecordContextExtractor.For(record, raceNames);
+                ModKey modKey = null;
 
-                // A perk flagged Hidden, or one that isn't Playable, never appears in
-                // the skill tree — so neither its name nor its description is read.
-                if (record is IPerkGetter perk && (perk.Hidden || !perk.Playable))
-                    notPlayerFacing.Add(record.FormKey);
-
-                // An Ability is a spell the player cannot cast and which the magic
-                // menu does not list; it surfaces only as its effects in the Active
-                // Effects list. So when EVERY one of those effects is itself flagged
-                // HideInUI, nothing about the spell is ever displayed. Deliberately
-                // limited to Ability — a castable Spell's name IS shown in the magic
-                // menu regardless of what its effects do, and Powers/LesserPowers
-                // appear under Powers. Confirmed against real records: the effects of
-                // Flourish / Quick Draw / Agility / Eagle Eye 25 are all HideInUI.
-                if (record is ISpellGetter spell
-                    && spell.Type == SpellType.Ability
-                    && spell.Effects.Count > 0
-                    && spell.Effects.All(e => !e.BaseEffect.IsNull && hiddenEffects.Contains(e.BaseEffect.FormKey)))
+                if (NEspReader != null && NEspReader.CurrentMod != null && NEspReader.CurrentMod.ModKey != null)
                 {
-                    notPlayerFacing.Add(record.FormKey);
+                    modKey = NEspReader.CurrentMod.ModKey;
                 }
 
-                // FULL (generic across every INamedGetter/ITranslatedNamedGetter record type).
-                if (record is INamedGetter named)
-                {
-                    var name = named.Name;
-                    if (!string.IsNullOrWhiteSpace(name) && record is ITranslatedNamedGetter translatedNamed && translatedNamed.Name != null)
-                    {
-                        var signature = RecordSignatureMap.Resolve(record.GetType().Name);
-                        if (RecordSignatureMap.DsdFullNameSupported.Contains(signature))
-                            Consider(record.FormKey, $"{signature} FULL", 0, mod.ModKey, translatedNamed.Name, context: context);
-                    }
-                }
-
-                // Flat, FormID-only-matched DSD-supported fields beyond FULL.
-                foreach (var (dsdType, field) in ExtraTranslatableFields.For(record))
-                    Consider(record.FormKey, dsdType, 0, mod.ModKey, field, context: context);
-
-                // Nested list structures and the EditorID-matched GMST exception.
-                foreach (var fieldRef in NestedTranslatableFields.For(record))
-                    Consider(record.FormKey, fieldRef.DsdType, fieldRef.Index, mod.ModKey, fieldRef.Field, fieldRef.EditorId, context);
+                Consider(record.FormKey, record.Sig, 0, modKey, record.String, record.EditID, record?.String?.ToString());
             }
         }
+       
+
+        //var raceNames = CollectRaceNames(mods);
+        //trace?.Debug($"CollectRaceNames done: {raceNames.Count} entries");
+
+        //foreach (var mod in mods)
+        //{
+        //    foreach (var record in mod.EnumerateMajorRecords())
+        //    {
+        //        var context = RecordContextExtractor.For(record, raceNames);
+
+        //        // A perk flagged Hidden, or one that isn't Playable, never appears in
+        //        // the skill tree — so neither its name nor its description is read.
+        //        if (record is IPerkGetter perk && (perk.Hidden || !perk.Playable))
+        //            notPlayerFacing.Add(record.FormKey);
+
+        //        // An Ability is a spell the player cannot cast and which the magic
+        //        // menu does not list; it surfaces only as its effects in the Active
+        //        // Effects list. So when EVERY one of those effects is itself flagged
+        //        // HideInUI, nothing about the spell is ever displayed. Deliberately
+        //        // limited to Ability — a castable Spell's name IS shown in the magic
+        //        // menu regardless of what its effects do, and Powers/LesserPowers
+        //        // appear under Powers. Confirmed against real records: the effects of
+        //        // Flourish / Quick Draw / Agility / Eagle Eye 25 are all HideInUI.
+        //        if (record is ISpellGetter spell
+        //            && spell.Type == SpellType.Ability
+        //            && spell.Effects.Count > 0
+        //            && spell.Effects.All(e => !e.BaseEffect.IsNull && hiddenEffects.Contains(e.BaseEffect.FormKey)))
+        //        {
+        //            notPlayerFacing.Add(record.FormKey);
+        //        }
+
+        //        // FULL (generic across every INamedGetter/ITranslatedNamedGetter record type).
+        //        if (record is INamedGetter named)
+        //        {
+        //            var name = named.Name;
+        //            if (!string.IsNullOrWhiteSpace(name) && record is ITranslatedNamedGetter translatedNamed && translatedNamed.Name != null)
+        //            {
+        //                var signature = RecordSignatureMap.Resolve(record.GetType().Name);
+        //                if (RecordSignatureMap.DsdFullNameSupported.Contains(signature))
+        //                    Consider(record.FormKey, $"{signature} FULL", 0, mod.ModKey, translatedNamed.Name, context: context);
+        //            }
+        //        }
+
+        //        // Flat, FormID-only-matched DSD-supported fields beyond FULL.
+        //        foreach (var (dsdType, field) in ExtraTranslatableFields.For(record))
+        //            Consider(record.FormKey, dsdType, 0, mod.ModKey, field, context: context);
+
+        //        // Nested list structures and the EditorID-matched GMST exception.
+        //        foreach (var fieldRef in NestedTranslatableFields.For(record))
+        //            Consider(record.FormKey, fieldRef.DsdType, fieldRef.Index, mod.ModKey, fieldRef.Field, fieldRef.EditorId, context);
+        //    }
+        //}
 
         return new ScanResult(chains, corpus, notPlayerFacing);
     }

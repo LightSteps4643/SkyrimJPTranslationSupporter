@@ -45,7 +45,11 @@ public sealed class TraceLog : IDisposable
     /// <c>&lt;stage&gt;.log</c>, named <c>&lt;stage&gt;.trace.log</c>.</summary>
     public static TraceLog Open(string stageFolder, string stageName, TraceLevel? minLevel = null)
     {
-        Directory.CreateDirectory(stageFolder);
+        if (!Directory.Exists(stageFolder))
+        {
+            Directory.CreateDirectory(stageFolder);
+        }
+       
         var path = Path.Combine(stageFolder, $"{stageName.ToLowerInvariant()}.trace.log");
         var writer = new StreamWriter(path, append: false, new UTF8Encoding(false)) { AutoFlush = true };
         var log = new TraceLog(writer, minLevel ?? ResolveMinLevel());

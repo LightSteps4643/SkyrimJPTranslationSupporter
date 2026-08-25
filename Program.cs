@@ -2,6 +2,9 @@ using SkyrimJPStringPatcher.Core;
 using SkyrimJPStringPatcher.PickUpTarget;
 using SkyrimJPStringPatcher.Translation;
 using SkyrimJPStringPatcher.GenerateDsdFile;
+using Mutagen.Bethesda.Skyrim;
+
+
 
 // v0.50.1a (GUI): without this, Console.Out/Error default to the OS console
 // codepage (cp932/Shift-JIS on Japanese Windows) when running interactively in
@@ -29,6 +32,8 @@ const string DefaultPickUpTargetOutDir = "PickUpTarget/out_temp";
 const string DefaultTranslationOutDir = "Translation/out_temp";
 const string DefaultImportDir = "Translation/import";
 const string DefaultFinalOutDir = "out";
+
+const SkyrimRelease GameType = SkyrimRelease.SkyrimSE;
 
 if (args.Length < 1)
 {
