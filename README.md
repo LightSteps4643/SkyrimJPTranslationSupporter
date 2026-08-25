@@ -15,6 +15,11 @@ Nexus側のファイルが検疫等で一時的にダウンロードできない
 [Mutagen](https://github.com/Mutagen-Modding/Mutagen) を利用しているため、
 本ツール自体のソースコードもGPL-3.0で公開しています。
 
+本ツールは、[Claude Code](https://www.anthropic.com/claude-code)（Anthropic社のAIコーディング
+エージェント）、および[houseCARL](https://www.nexusmods.com/skyrimspecialedition/mods/181738)
+（Skyrimロードオーダーのデータ層を扱うMCPツール）を活用した「バイブコーディング」で
+開発しています。AIの支援を受けつつも、実データでの動作検証を重ねながら開発を進めています。
+
 ## 構成
 
 - `Core/` `PickUpTarget/` `Translation/` `GenerateDsdFile/` `Program.cs` — CLI本体
