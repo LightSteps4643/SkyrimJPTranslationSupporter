@@ -299,7 +299,7 @@ public static class PickUpTargetRunner
                     modKey = NEspReader.CurrentMod.ModKey;
                 }
 
-                Consider(record.FormKey, record.Sig, 0, modKey, record.String, record.EditID, record?.String?.ToString());
+                Consider(record.FormKey, record.Sig, record.Index, modKey, record.String, record.EditID, record?.String?.ToString());
             }
         }
        

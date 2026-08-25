@@ -18,12 +18,19 @@ namespace SkyrimJPStringPatcher.PickUpTarget
             public string Sig = "";
             public string EditID = null;
 
-            public RecordItem(FormKey FormKey, string Key,ITranslatedStringGetter? String,string Sig,string EditID)
+            public int Index = 0;
+
+            public RecordItem(FormKey FormKey, string Key,ITranslatedStringGetter? String,string Sig,string EditID,int DSDIndex = -1)
             {
                 this.FormKey = FormKey;
                 this.UniqueKey = Key;
                 this.String = String;
                 this.Sig = Sig;
+
+                if(DSDIndex>=0)
+                {
+                    this.Index = DSDIndex;
+                }
             }
 
             public CorpusEntry ToCorpusEntry()
@@ -664,8 +671,8 @@ namespace SkyrimJPStringPatcher.PickUpTarget
                                         {
                                             string SetType = string.Format("DisplayText[{0}]", CountObjective);
                                             string GetUniqueKey = GenUniqueKey(AutoKey, SetType);
-
-                                            Records.Add(new RecordItem(GetQuestItem.FormKey,GetUniqueKey, GetDisplayText,"QOBJ NNAM", GetQuestItem.EditorID));
+                                                                                                                                                          //Obj Index
+                                            Records.Add(new RecordItem(GetQuestItem.FormKey,GetUniqueKey, GetDisplayText,"QOBJ NNAM", GetQuestItem.EditorID,ir));
                                         }
                                     }
                                     catch (Exception ex)
@@ -697,7 +704,8 @@ namespace SkyrimJPStringPatcher.PickUpTarget
                                                     string SetType = string.Format("Entry[{0}]", CountStage);
                                                     string GetUniqueKey = GenUniqueKey(AutoKey, SetType);
 
-                                                    Records.Add(new RecordItem(GetQuestItem.FormKey,GetUniqueKey, GetEntry,"QSDT CNAM", GetQuestItem.EditorID));
+                                                                                                                                                            //Stages Index
+                                                    Records.Add(new RecordItem(GetQuestItem.FormKey,GetUniqueKey, GetEntry,"QSDT CNAM", GetQuestItem.EditorID, ii));
                                                 }
                                             }
                                             catch (Exception ex)
@@ -1211,8 +1219,8 @@ namespace SkyrimJPStringPatcher.PickUpTarget
                                         {
                                             string SetType = string.Format("Button[{0}]", ir);
                                             string GetUniqueKey = GenUniqueKey(AutoKey, SetType);
-
-                                            Records.Add(new RecordItem(GetMessageItem.FormKey, GetUniqueKey, GetButton, "MESG ITXT", GetMessageItem.EditorID));
+                                                                                                                                                          //Button ID
+                                            Records.Add(new RecordItem(GetMessageItem.FormKey, GetUniqueKey, GetButton, "MESG ITXT", GetMessageItem.EditorID,ir));
                                         }
                                     }
                                     catch (Exception ex)
@@ -1272,6 +1280,7 @@ namespace SkyrimJPStringPatcher.PickUpTarget
                                         Records.Add(new RecordItem(GetChild.FormKey, GetUniqueKey, GetPrompt, "INFO RNAM", GetChild.EditorID));
                                     }
 
+                                    int CurrentOccurrence = 0;
                                     if (GetChild.Responses != null)
                                         foreach (var GetChildA in GetChild.Responses)
                                         {
@@ -1284,8 +1293,8 @@ namespace SkyrimJPStringPatcher.PickUpTarget
                                                 {
                                                     string SetType = string.Format("Response[{0}]", ForCount);
                                                     string GetUniqueKey = GenUniqueKey(AutoKey, SetType);
-
-                                                    Records.Add(new RecordItem(GetChild.FormKey, GetUniqueKey, GetValue, "INFO NAM1", GetChild.EditorID));
+                                                                                                                                                             //Response ID
+                                                    Records.Add(new RecordItem(GetChild.FormKey, GetUniqueKey, GetValue, "INFO NAM1", GetChild.EditorID, CurrentOccurrence++));
                                                 }
                                             }
                                             catch (Exception ex)
