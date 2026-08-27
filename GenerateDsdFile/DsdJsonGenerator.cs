@@ -94,7 +94,12 @@ public static class DsdJsonGenerator
 
             if (!LanguageDetector.ContainsJapanese(row.Japanese) && row.Notes == "ModifiedByUser")
             {
+                // v0.55.2: promoted to a console [warn] too (previously log-file-
+                // only) — a user who ran generatedsdfile and never opened
+                // generatedsdfile.log had no way to notice this at all.
                 modifiedByUserNonJapaneseNotices++;
+                if (modifiedByUserNonJapaneseNotices <= 20)
+                    Console.Error.WriteLine($"[warn] '{row.FormId}' manually-edited translation doesn't look like Japanese — keeping as-is (not excluded): \"{row.Japanese}\"");
                 log.Detail("情報: 手動編集の訳文に日本語が含まれていないが、そのまま出力する（意図的な可能性があるため除外しない）",
                     "Note: a manually-edited translation doesn't contain Japanese — included as-is (not excluded, since this may be intentional)",
                     $"{row.FormId} [{row.RecordType}] \"{row.EnglishText}\" → \"{row.Japanese}\"");
@@ -134,6 +139,7 @@ public static class DsdJsonGenerator
 
         if (notJapaneseWarnings > 20) Console.Error.WriteLine($"[warn] ...and {notJapaneseWarnings - 20} more non-Japanese rows skipped");
         if (badFormIdWarnings > 20) Console.Error.WriteLine($"[warn] ...and {badFormIdWarnings - 20} more unparseable FormId rows skipped");
+        if (modifiedByUserNonJapaneseNotices > 20) Console.Error.WriteLine($"[warn] ...and {modifiedByUserNonJapaneseNotices - 20} more manually-edited non-Japanese rows kept as-is");
         trace?.Debug($"Conversion done: {entriesByPlugin.Values.Sum(l => l.Count)} entries / excluded: non-Japanese {notJapaneseWarnings} bad-FormId {badFormIdWarnings}");
 
         trace?.Info($"Write start: {outputDir} ({entriesByPlugin.Count} plugin(s))");
