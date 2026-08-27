@@ -351,8 +351,8 @@ public sealed class MainForm : Form
         _btnOpenOutFolder.Anchor = AnchorStyles.Right;
         actions.Controls.Add(_btnResetSelected, 1, 0);
         actions.Controls.Add(_btnRescan, 1, 1);
+        actions.Controls.Add(_btnOpenImportFolder, 0, 2);
         actions.Controls.Add(_btnReloadMo2, 1, 2);
-        actions.Controls.Add(_btnOpenImportFolder, 0, 3);
         actions.Controls.Add(_btnTranslate, 1, 3);
         actions.Controls.Add(_btnOpenOutFolder, 0, 4);
         actions.Controls.Add(_btnGenerateDsd, 1, 4);
