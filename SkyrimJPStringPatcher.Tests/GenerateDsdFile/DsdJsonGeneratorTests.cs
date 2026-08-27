@@ -77,7 +77,12 @@ public class DsdJsonGeneratorTests
     /// as-is (already covered by the golden-file check above) AND get a logged
     /// NOTE — distinct from the [warn]+exclude path used for untrusted rows —
     /// so a person can spot-check it later without the tool silently dropping
-    /// or silently accepting it without any trace.</summary>
+    /// or silently accepting it without any trace.
+    ///
+    /// v0.55.2: found via real usage — a user who ran generatedsdfile.exe
+    /// directly never opens generatedsdfile.log, so a log-file-only note went
+    /// completely unnoticed. Promoted to a console [warn] line too, so it's
+    /// visible without opening the log.</summary>
     [Fact]
     public void Run_ModifiedByUserNonJapanese_LogsANoteInsteadOfExcluding()
     {
@@ -87,11 +92,23 @@ public class DsdJsonGeneratorTests
         {
             using var log = OpenTestLog(root);
 
-            DsdJsonGenerator.Run(FixturePath("translations_basic.tsv"), Path.Combine(root, "out"), log);
+            var originalError = Console.Error;
+            var capturedError = new StringWriter();
+            Console.SetError(capturedError);
+            try
+            {
+                DsdJsonGenerator.Run(FixturePath("translations_basic.tsv"), Path.Combine(root, "out"), log);
+            }
+            finally
+            {
+                Console.SetError(originalError);
+            }
 
             Assert.Equal(1, log.DetailCount(
                 "情報: 手動編集の訳文に日本語が含まれていないが、そのまま出力する（意図的な可能性があるため除外しない）",
                 "Note: a manually-edited translation doesn't contain Japanese — included as-is (not excluded, since this may be intentional)"));
+            Assert.Contains("[warn] '00099999:TestMod.esp' manually-edited translation doesn't look like Japanese — keeping as-is (not excluded): \"Bob\"",
+                capturedError.ToString());
 
             // The untrusted (no-tag) non-Japanese row must still go through the
             // real exclusion path, not get swept into this same note category.
