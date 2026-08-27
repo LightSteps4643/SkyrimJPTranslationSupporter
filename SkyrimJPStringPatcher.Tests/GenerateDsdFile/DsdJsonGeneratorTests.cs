@@ -72,6 +72,39 @@ public class DsdJsonGeneratorTests
         }
     }
 
+    /// <summary>v0.56.0: a ModifiedByUser row whose translation doesn't contain
+    /// Japanese (Fixtures/translations_basic.tsv's "Bob" row) must be INCLUDED
+    /// as-is (already covered by the golden-file check above) AND get a logged
+    /// NOTE — distinct from the [warn]+exclude path used for untrusted rows —
+    /// so a person can spot-check it later without the tool silently dropping
+    /// or silently accepting it without any trace.</summary>
+    [Fact]
+    public void Run_ModifiedByUserNonJapanese_LogsANoteInsteadOfExcluding()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_dsd_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var log = OpenTestLog(root);
+
+            DsdJsonGenerator.Run(FixturePath("translations_basic.tsv"), Path.Combine(root, "out"), log);
+
+            Assert.Equal(1, log.DetailCount(
+                "情報: 手動編集の訳文に日本語が含まれていないが、そのまま出力する（意図的な可能性があるため除外しない）",
+                "Note: a manually-edited translation doesn't contain Japanese — included as-is (not excluded, since this may be intentional)"));
+
+            // The untrusted (no-tag) non-Japanese row must still go through the
+            // real exclusion path, not get swept into this same note category.
+            Assert.Equal(1, log.DetailCount(
+                "除外: Japanese列に日本語が含まれていない（訳し忘れ・貼り付けミスの可能性）",
+                "Excluded: the Japanese column doesn't contain Japanese (possibly a missed translation or a paste mistake)"));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
     /// <summary>ResolveInputFiles accepts a DIRECTORY too, recursively finding
     /// every "translations.tsv" — the shape Translation/out_temp/&lt;plugin&gt;/
     /// actually has, as opposed to a single merged file.</summary>
