@@ -1010,14 +1010,33 @@ public sealed class MainForm : Form
         SetStatus($"実行中: {argsDisplay}");
         AppendLog($"> {Path.GetFileName(cliExePath)} {argsDisplay}");
         _currentRunCts = new CancellationTokenSource();
+        // v0.54.2 (既知の課題21.): pickuptargetが不正なプラグイン/レコードを
+        // スキップした場合、機械可読な専用プレフィックス("##SJPTS_ISSUES##")の
+        // 1行をstdoutへ出す。LogWindowの大量の情報に埋もれさせないよう、この行を
+        // 検知したら実行成功時でも明示的なMessageBoxで知らせる（レアケースのため）。
+        const string IssuesMarkerPrefix = "##SJPTS_ISSUES##";
+        string? issuesLine = null;
+        void OnOutputLine(string line)
+        {
+            AppendLog(line);
+            if (line.StartsWith(IssuesMarkerPrefix, StringComparison.Ordinal))
+                issuesLine = line;
+        }
         try
         {
-            var result = await CliRunner.RunAsync(cliExePath, arguments, _productRoot, AppendLog, _currentRunCts.Token,
+            var result = await CliRunner.RunAsync(cliExePath, arguments, _productRoot, OnOutputLine, _currentRunCts.Token,
                 LlmApiKey.Length > 0 ? LlmApiKey : null, CloudAiApiKey.Length > 0 ? CloudAiApiKey : null);
             if (!result.Succeeded)
             {
                 AppendLog($"[終了コード {result.ExitCode}]");
                 MessageBox.Show(this, $"処理が失敗しました（終了コード {result.ExitCode}）。ログを確認してください。", "実行エラー", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            else if (issuesLine != null)
+            {
+                MessageBox.Show(this,
+                    "一部のプラグイン、またはレコードを正常に処理できなかったためスキップしました。\n" +
+                    "処理自体は完了していますが、詳細はログを確認してください。\n\n" + FormatIssuesSummary(issuesLine),
+                    "一部のデータをスキップしました", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             return result.Succeeded;
         }
@@ -1041,5 +1060,32 @@ public sealed class MainForm : Form
             SetBusy(false);
             SetStatus("準備完了");
         }
+    }
+
+    /// <summary>"##SJPTS_ISSUES## plugins=0 fields=1 fail_open=0 context_only=0"
+    /// という機械可読な行を、MessageBoxにそのまま出すのではなく、0件の項目を除いた
+    /// 日本語の箇条書きに変換する。</summary>
+    private static string FormatIssuesSummary(string issuesLine)
+    {
+        var labels = new Dictionary<string, string>
+        {
+            ["plugins"] = "スキップされたプラグイン",
+            ["fields"] = "スキップされたレコード/フィールド",
+            ["fail_open"] = "除外判定に失敗し、安全側に倒して含めた候補",
+            ["context_only"] = "文脈情報のみ抽出できなかった候補（翻訳への影響なし）",
+        };
+
+        var lines = new List<string>();
+        foreach (var token in issuesLine.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var eq = token.IndexOf('=');
+            if (eq < 0) continue;
+            var key = token[..eq];
+            if (!labels.TryGetValue(key, out var label)) continue;
+            if (!int.TryParse(token[(eq + 1)..], out var count) || count <= 0) continue;
+            lines.Add($"・{label}: {count}件");
+        }
+
+        return lines.Count > 0 ? string.Join('\n', lines) : "";
     }
 }
