@@ -1,0 +1,20 @@
+[
+  {
+    "editor_id": "",
+    "form_id": "00067890|TestMod.esp",
+    "index": 0,
+    "type": "WEAP FULL",
+    "original": "Iron Sword",
+    "string": "鉄の剣",
+    "status": "CorpusExact"
+  },
+  {
+    "editor_id": "sSomeSetting",
+    "form_id": "000FEDCB|TestMod.esp",
+    "index": 0,
+    "type": "GMST DATA",
+    "original": "pts",
+    "string": "pts",
+    "status": "AutoCorpusOverride"
+  }
+]
