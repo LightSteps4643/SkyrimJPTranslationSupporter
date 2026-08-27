@@ -66,6 +66,14 @@ public class CandidateIoTests
     }
 
     [Fact]
+    public void ReadTsv_NonexistentPath_ThrowsFileNotFoundException()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"sjpts_tests_nonexistent_{Guid.NewGuid():N}.tsv");
+
+        Assert.Throws<FileNotFoundException>(() => CandidateIo.ReadTsv(path));
+    }
+
+    [Fact]
     public void ReadTsv_SkipsBlankLines()
     {
         var path = Path.GetTempFileName();
