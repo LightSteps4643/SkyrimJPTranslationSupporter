@@ -22,4 +22,11 @@
     <ProjectReference Include="..\SkyrimJPStringPatcher.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- 固定のテスト用データファイル（golden files）。生成コードに頼らず、
+         リポジトリにチェックインした状態で内容を直接確認・diffできるように
+         する。テスト実行時に見えるよう出力フォルダへコピーする。 -->
+    <None Include="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
