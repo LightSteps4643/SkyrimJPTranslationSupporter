@@ -13,6 +13,8 @@
          folder). Without this, the default recursive **/*.cs glob pulls the GUI's
          WinForms-only source into this console project's compile and breaks the build. -->
     <Compile Remove="SkyrimJPStringPatcherGui\**\*.cs" />
+    <!-- v0.55.0a: same reason, for the new SkyrimJPStringPatcher.Tests/ sibling project. -->
+    <Compile Remove="SkyrimJPStringPatcher.Tests\**\*.cs" />
   </ItemGroup>
 
   <ItemGroup>

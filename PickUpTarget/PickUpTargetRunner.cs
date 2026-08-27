@@ -5,6 +5,7 @@ using Mutagen.Bethesda.Plugins.Binary.Parameters;
 using Mutagen.Bethesda.Skyrim;
 using Mutagen.Bethesda.Strings;
 using SkyrimJPStringPatcher.Core;
+using static SkyrimJPStringPatcher.Core.SafeEnumeration;
 
 // Keyed by (FormKey, DSD "type" string, index) — a single record can carry
 // MULTIPLE independently-translatable fields (e.g. a WEAP has both "WEAP
@@ -226,36 +227,6 @@ public static class PickUpTargetRunner
         List<CorpusEntry> Corpus,
         HashSet<FormKey> NotPlayerFacing,
         HashSet<FormKey> ClassificationFailed);
-
-    /// <summary>Iterates <paramref name="source"/>, invoking <paramref name="onItem"/>
-    /// per element. If the ENUMERATOR ITSELF throws (a corrupt record/subrecord
-    /// breaking Mutagen's lazy binary parse mid-iteration — confirmed real case:
-    /// DESIGN_NOTES.md known issue 21, a malformed PERK entry-point effect), this
-    /// stops iterating and reports via <paramref name="onError"/> instead of
-    /// propagating. C#'s `foreach` cannot recover from a MoveNext() exception (the
-    /// enumerator's internal state is no longer trustworthy), so on error this
-    /// abandons whatever remains of THIS particular sequence — the caller decides
-    /// what that means at its own granularity (skip the rest of a plugin, or just
-    /// the rest of one record's nested/extra fields).</summary>
-    private static void SafeForEach<T>(IEnumerable<T> source, Action<T> onItem, Action<Exception> onError)
-    {
-        using var enumerator = source.GetEnumerator();
-        while (true)
-        {
-            T current;
-            try
-            {
-                if (!enumerator.MoveNext()) return;
-                current = enumerator.Current;
-            }
-            catch (Exception ex)
-            {
-                onError(ex);
-                return;
-            }
-            onItem(current);
-        }
-    }
 
     /// <summary>Walks every record in every mod (in load order) and records, per
     /// (FormKey, DSD type, index), each mod's own contribution — the LAST entry
