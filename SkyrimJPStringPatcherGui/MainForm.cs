@@ -155,6 +155,11 @@ public sealed class MainForm : Form
     private readonly Button _btnReloadMo2 = new() { Text = "MO2再読込＆初期化", AutoSize = true };
     private readonly Button _btnTranslate = new() { Text = "翻訳実行", AutoSize = true };
     private readonly Button _btnGenerateDsd = new() { Text = "DSDファイル生成", AutoSize = true };
+    // v0.54.2（既知の課題22.）: 設定画面には既にimport/outフォルダを開く導線が
+    // あるが、ベース画面からも直接開けるようにする——2つとも主要アクション
+    // ボタンではないため、UnifyWidthsの幅統一対象には含めない。
+    private readonly Button _btnOpenImportFolder = new() { Text = "xTranslator翻訳XMLインポートフォルダを開く", AutoSize = true };
+    private readonly Button _btnOpenOutFolder = new() { Text = "DSD出力フォルダを開く", AutoSize = true };
 
     /// <summary>True once "翻訳実行" has completed successfully at least once in
     /// this window — drives the warning if "DSDファイル生成" is pressed first
@@ -170,8 +175,8 @@ public sealed class MainForm : Form
     public MainForm()
     {
         Text = "Skyrim JP Translation Supporter";
-        Width = 1000;
-        Height = 760;
+        Width = 1150;
+        Height = 850;
         StartPosition = FormStartPosition.CenterScreen;
 
         BuildLayout();
@@ -316,23 +321,41 @@ public sealed class MainForm : Form
         bottom.Controls.Add(options, 0, 0);
 
         // Stacked top-to-bottom: 選択プラグインを一括初期化 → 再スキャン（読み取りのみ）
-        // → MO2再読込＆初期化 → 翻訳実行 → DSDファイル生成.
-        var actions = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.TopDown, WrapContents = false };
+        // → MO2再読込＆初期化 → 翻訳実行 → DSDファイル生成. v0.54.2（既知の課題22.）:
+        // 「左隣に開くボタン」を、入れ子のFlowLayoutPanelではなく5行×2列の
+        // TableLayoutPanelで実現する——FlowLayoutPanelを入れ子にすると、各行の
+        // 幅がまちまちになり左端が揃わず見た目が崩れた（実機で確認済み）。
+        // グリッドなら列0（開くボタン、3・4行目のみ）と列1（主要アクション、
+        // 全5行）が自然に整列する。
+        var actions = new TableLayoutPanel { AutoSize = true, ColumnCount = 2, RowCount = 5 };
+        actions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        actions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        for (var i = 0; i < 5; i++) actions.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         _btnResetSelected.Click += BtnResetSelected_Click;
         _btnTranslate.Click += BtnTranslate_Click;
         _btnRescan.Click += BtnRescan_Click;
         _btnReloadMo2.Click += BtnReloadMo2_Click;
         _btnGenerateDsd.Click += BtnGenerateDsd_Click;
+        _btnOpenImportFolder.Click += (_, _) => FolderOpener.OpenOrWarn(this, Path.Combine(ProductRoot, "Translation", "import"));
+        _btnOpenOutFolder.Click += (_, _) => FolderOpener.OpenOrWarn(this, Path.Combine(ProductRoot, "out"));
         _btnResetSelected.Margin = new Padding(3, 3, 3, 3);
         _btnRescan.Margin = new Padding(3, 3, 3, 3);
         _btnReloadMo2.Margin = new Padding(3, 3, 3, 3);
         _btnTranslate.Margin = new Padding(3, 3, 3, 3);
         _btnGenerateDsd.Margin = new Padding(3, 3, 3, 3);
-        actions.Controls.Add(_btnResetSelected);
-        actions.Controls.Add(_btnRescan);
-        actions.Controls.Add(_btnReloadMo2);
-        actions.Controls.Add(_btnTranslate);
-        actions.Controls.Add(_btnGenerateDsd);
+        _btnOpenImportFolder.Margin = new Padding(3, 3, 3, 3);
+        _btnOpenOutFolder.Margin = new Padding(3, 3, 3, 3);
+        // 列0はAutoSizeで content 幅ぴったりになるはずだが、念のため右揃えに
+        // ピン留めして列1（既存ボタン列）にぴったり隣接させる。
+        _btnOpenImportFolder.Anchor = AnchorStyles.Right;
+        _btnOpenOutFolder.Anchor = AnchorStyles.Right;
+        actions.Controls.Add(_btnResetSelected, 1, 0);
+        actions.Controls.Add(_btnRescan, 1, 1);
+        actions.Controls.Add(_btnReloadMo2, 1, 2);
+        actions.Controls.Add(_btnOpenImportFolder, 0, 3);
+        actions.Controls.Add(_btnTranslate, 1, 3);
+        actions.Controls.Add(_btnOpenOutFolder, 0, 4);
+        actions.Controls.Add(_btnGenerateDsd, 1, 4);
         ButtonLayout.UnifyWidths(new[] { _btnResetSelected, _btnRescan, _btnReloadMo2, _btnTranslate, _btnGenerateDsd });
         bottom.Controls.Add(actions, 1, 0);
 
@@ -735,6 +758,12 @@ public sealed class MainForm : Form
         return flags;
     }
 
+    /// <summary>v0.54.2（既知の課題22.）: SettingsFormがローカルLLMのエンドポイント・
+    /// モデル名を実際に変更した場合にだけ呼ぶ。古い接続先のままチェックが
+    /// 入りっぱなしになる事故を防ぐ——ChkLlm_CheckedChangedのその場での
+    /// 疎通確認とは独立に、単純にオフへ戻すだけ。</summary>
+    internal void ResetLocalLlmCheckbox() => _chkLlm.Checked = false;
+
     private bool _llmCheckInProgress;
 
     /// <summary>Pre-flight check when the user turns on "ローカルLLM翻訳": probe
@@ -1015,11 +1044,18 @@ public sealed class MainForm : Form
         // 1行をstdoutへ出す。LogWindowの大量の情報に埋もれさせないよう、この行を
         // 検知したら実行成功時でも明示的なMessageBoxで知らせる（レアケースのため）。
         const string IssuesMarkerPrefix = "##SJPTS_ISSUES##";
+        const string IssuesPluginsMarkerPrefix = "##SJPTS_ISSUES_PLUGINS##";
         string? issuesLine = null;
+        string? issuesPluginsLine = null;
         void OnOutputLine(string line)
         {
             AppendLog(line);
-            if (line.StartsWith(IssuesMarkerPrefix, StringComparison.Ordinal))
+            // より長い方のプレフィックスを先にチェックする——
+            // "##SJPTS_ISSUES_PLUGINS##"は"##SJPTS_ISSUES##"では始まらないため
+            // 実際は衝突しないが、念のため意図を明確にする順序にしてある。
+            if (line.StartsWith(IssuesPluginsMarkerPrefix, StringComparison.Ordinal))
+                issuesPluginsLine = line[IssuesPluginsMarkerPrefix.Length..].Trim();
+            else if (line.StartsWith(IssuesMarkerPrefix, StringComparison.Ordinal))
                 issuesLine = line;
         }
         try
@@ -1033,10 +1069,11 @@ public sealed class MainForm : Form
             }
             else if (issuesLine != null)
             {
-                MessageBox.Show(this,
-                    "一部のプラグイン、またはレコードを正常に処理できなかったためスキップしました。\n" +
-                    "処理自体は完了していますが、詳細はログを確認してください。\n\n" + FormatIssuesSummary(issuesLine),
-                    "一部のデータをスキップしました", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                var message = "一部のプラグイン、またはレコードを正常に処理できなかったためスキップしました。\n" +
+                    "処理自体は完了していますが、詳細はログを確認してください。\n\n" + FormatIssuesSummary(issuesLine);
+                if (!string.IsNullOrWhiteSpace(issuesPluginsLine))
+                    message += "\n\n対象プラグイン:\n" + string.Join('\n', issuesPluginsLine.Split('|', StringSplitOptions.RemoveEmptyEntries).Select(p => $"・{p}"));
+                MessageBox.Show(this, message, "一部のデータをスキップしました", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             return result.Succeeded;
         }
