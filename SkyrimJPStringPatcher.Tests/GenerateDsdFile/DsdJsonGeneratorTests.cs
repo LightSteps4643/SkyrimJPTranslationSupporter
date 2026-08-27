@@ -20,10 +20,14 @@ public class DsdJsonGeneratorTests
     /// translated row (正常系); a still-blank row, which is the normal
     /// work-in-progress state, not an error (準正常系); the AutoCorpusOverride
     /// exemption that deliberately keeps a non-Japanese value like "pts"
-    /// (準正常系, a real historical special case); a translated row whose
-    /// Japanese column isn't actually Japanese (異常系, a likely xTranslator
-    /// paste mistake); and an unparseable FormId (異常系, a corrupted row).
-    /// Two different winning plugins split the output across two files.</summary>
+    /// (準正常系, a real historical special case); the same exemption for
+    /// ModifiedByUser (準正常系 — a human's own deliberate edit via
+    /// TranslationDetailForm, e.g. keeping a proper noun like "Bob" as-is,
+    /// deserves the same trust as a curated override, not a second-guess); a
+    /// translated row whose Japanese column isn't actually Japanese (異常系, a
+    /// likely xTranslator paste mistake); and an unparseable FormId (異常系, a
+    /// corrupted row). Two different winning plugins split the output across
+    /// two files.</summary>
     [Fact]
     public void Run_BasicFixture_WritesExpectedEntriesPerPlugin_SkipsBlankAndInvalidRows()
     {
