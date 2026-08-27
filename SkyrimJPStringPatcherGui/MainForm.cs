@@ -327,10 +327,13 @@ public sealed class MainForm : Form
         // 幅がまちまちになり左端が揃わず見た目が崩れた（実機で確認済み）。
         // グリッドなら列0（開くボタン、3・4行目のみ）と列1（主要アクション、
         // 全5行）が自然に整列する。
-        var actions = new TableLayoutPanel { AutoSize = true, ColumnCount = 2, RowCount = 5 };
+        // v0.55.0a: 「MO2再読込＆初期化」と「翻訳実行」の間に、ボタン1つ分程度の
+        // 空き行を挟む——押し間違い防止と、破壊的な再初期化ステージと非破壊の
+        // 翻訳ステージが別物であることを視覚的に示す狙い（ユーザー要望）。
+        var actions = new TableLayoutPanel { AutoSize = true, ColumnCount = 2, RowCount = 6 };
         actions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         actions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        for (var i = 0; i < 5; i++) actions.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        for (var i = 0; i < 6; i++) actions.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         _btnResetSelected.Click += BtnResetSelected_Click;
         _btnTranslate.Click += BtnTranslate_Click;
         _btnRescan.Click += BtnRescan_Click;
@@ -353,9 +356,11 @@ public sealed class MainForm : Form
         actions.Controls.Add(_btnRescan, 1, 1);
         actions.Controls.Add(_btnOpenImportFolder, 0, 2);
         actions.Controls.Add(_btnReloadMo2, 1, 2);
-        actions.Controls.Add(_btnTranslate, 1, 3);
-        actions.Controls.Add(_btnOpenOutFolder, 0, 4);
-        actions.Controls.Add(_btnGenerateDsd, 1, 4);
+        var stageSpacer = new Panel { AutoSize = false, Height = _btnReloadMo2.PreferredSize.Height, Width = 1 };
+        actions.Controls.Add(stageSpacer, 1, 3);
+        actions.Controls.Add(_btnTranslate, 1, 4);
+        actions.Controls.Add(_btnOpenOutFolder, 0, 5);
+        actions.Controls.Add(_btnGenerateDsd, 1, 5);
         ButtonLayout.UnifyWidths(new[] { _btnResetSelected, _btnRescan, _btnReloadMo2, _btnTranslate, _btnGenerateDsd });
         bottom.Controls.Add(actions, 1, 0);
 
