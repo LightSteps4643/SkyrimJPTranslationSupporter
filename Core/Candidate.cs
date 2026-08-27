@@ -23,7 +23,15 @@ namespace SkyrimJPStringPatcher.Core;
 /// authored against a DIFFERENT original text than the record now carries.
 /// Carrying both forward lets the prompt show the translator what the previous
 /// translation said and what it was translating, so an out-of-date entry can be
-/// updated rather than re-translated from nothing.</summary>
+/// updated rather than re-translated from nothing.
+///
+/// <paramref name="Warning"/> (v0.54.2, DESIGN_NOTES.md known issue 21): set
+/// when PickUpTarget's ① exclusion check for this record's FormKey failed to
+/// read and the record was fail-open included anyway. Translation writes this
+/// into translations.tsv's Notes column, but ONLY while the row stays
+/// unresolved (see PromptGenerator.WriteTranslationTemplate) — once any method
+/// resolves it, the resolution tag takes over and this warning is dropped, on
+/// the reasoning that a successfully-translated string no longer needs review.</summary>
 public sealed record Candidate(
     string WinningPlugin,
     string FormId,
@@ -33,4 +41,5 @@ public sealed record Candidate(
     string EditorId = "",
     string Context = "",
     string StaleOriginal = "",
-    string StaleTranslation = "");
+    string StaleTranslation = "",
+    string Warning = "");

@@ -12,10 +12,10 @@ public static class CandidateIo
     public static void WriteTsv(string path, IEnumerable<Candidate> candidates)
     {
         using var w = new StreamWriter(path, false, System.Text.Encoding.UTF8);
-        w.WriteLine(string.Join(Sep, "FormId", "WinningPlugin", "RecordType", "EnglishText", "Index", "EditorId", "Context", "StaleOriginal", "StaleTranslation"));
+        w.WriteLine(string.Join(Sep, "FormId", "WinningPlugin", "RecordType", "EnglishText", "Index", "EditorId", "Context", "StaleOriginal", "StaleTranslation", "Warning"));
         foreach (var c in candidates)
             w.WriteLine(string.Join(Sep, c.FormId, c.WinningPlugin, c.RecordType, Escape(c.CurrentText), c.Index, Escape(c.EditorId), Escape(c.Context),
-                Escape(c.StaleOriginal), Escape(c.StaleTranslation)));
+                Escape(c.StaleOriginal), Escape(c.StaleTranslation), Escape(c.Warning)));
     }
 
     public static List<Candidate> ReadTsv(string path)
@@ -32,7 +32,8 @@ public static class CandidateIo
             var context = parts.Length > 6 ? Unescape(parts[6]) : "";
             var staleOriginal = parts.Length > 7 ? Unescape(parts[7]) : "";
             var staleTranslation = parts.Length > 8 ? Unescape(parts[8]) : "";
-            result.Add(new Candidate(parts[1], parts[0], parts[2], Unescape(parts[3]), index, editorId, context, staleOriginal, staleTranslation));
+            var warning = parts.Length > 9 ? Unescape(parts[9]) : "";
+            result.Add(new Candidate(parts[1], parts[0], parts[2], Unescape(parts[3]), index, editorId, context, staleOriginal, staleTranslation, warning));
         }
         return result;
     }
