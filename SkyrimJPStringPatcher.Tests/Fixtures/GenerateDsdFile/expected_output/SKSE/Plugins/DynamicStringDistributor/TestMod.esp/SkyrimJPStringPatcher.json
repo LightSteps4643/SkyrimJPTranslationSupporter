@@ -25,5 +25,14 @@
     "original": "Bob",
     "string": "Bob",
     "status": "ModifiedByUser"
+  },
+  {
+    "editor_id": "",
+    "form_id": "000C0001|TestMod.esp",
+    "index": 2,
+    "type": "QUST QOBJ",
+    "original": "Find the sword",
+    "string": "剣を見つける",
+    "status": "CorpusExact"
   }
 ]
