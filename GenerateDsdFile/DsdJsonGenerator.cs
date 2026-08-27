@@ -66,7 +66,14 @@ public static class DsdJsonGenerator
             // override — without this exemption, e.g. "pts"->"pt" was silently
             // dropped from the DSD output, leaving the untranslated "pts" on screen
             // despite phrase_overrides.tsv having the correct answer all along.
-            if (row.Notes != "AutoCorpusOverride" && !LanguageDetector.ContainsJapanese(row.Japanese))
+            //
+            // v0.56.0: ModifiedByUser (a human's own edit via TranslationDetailForm)
+            // gets the same exemption, for the same reason — a person who typed
+            // this value in and saved it decided it belongs there as-is, even if it
+            // doesn't look like Japanese (e.g. a proper noun, a number, "OK"). This
+            // check exists to catch machine mistakes, not to second-guess a
+            // deliberate human decision.
+            if (row.Notes is not ("AutoCorpusOverride" or "ModifiedByUser") && !LanguageDetector.ContainsJapanese(row.Japanese))
             {
                 notJapaneseWarnings++;
                 if (notJapaneseWarnings <= 20)
