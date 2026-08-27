@@ -1,3 +1,5 @@
+using System.IO.Compression;
+
 namespace SkyrimJPStringPatcherGui.Services;
 
 /// <summary>
@@ -5,28 +7,31 @@ namespace SkyrimJPStringPatcherGui.Services;
 /// 「MO2再読込＆初期化」はいずれも対象プラグインのTranslation/out_temp配下を
 /// 破壊的に書き戻す（--discard-user-edits）——⑤⑥の生成AI・ローカルLLM翻訳結果や
 /// 詳細確認ウィンドウでの手動編集も道連れに消える。この破壊の直前に、対象
-/// プラグインのout_tempサブフォルダを丸ごと Translation/bak/ へコピーしておく
-/// ことで、誤操作・想定外の初期化から復旧できるようにする。
+/// プラグインのout_tempサブフォルダを丸ごと Translation/bak/&lt;タイムスタンプ&gt;.zip
+/// へまとめておくことで、誤操作・想定外の初期化から復旧できるようにする。
 ///
 /// 3つの操作（1件/選択複数件/全件）で「対象プラグインの数」が違うだけで、
-/// バックアップの構造自体は常に同じにする——1件だけの操作でもフォルダを作る
-/// （ファイル単体コピーと丸ごとコピーで参照の仕方が変わると使いにくいため）。
-/// コピー対象を絞る特別なロジックは持たず、プラグインフォルダの中身
-/// （translations.tsv・prompt.txt等）を丸ごとコピーする——除外する積極的な
-/// 理由がなく、個別のファイル名を列挙するより単純なため。
+/// バックアップの構造自体は常に同じにする——1件だけの操作でもZIPを作る
+/// （参照の仕方が操作によって変わると使いにくいため）。コピー対象を絞る
+/// 特別なロジックは持たず、プラグインフォルダの中身（translations.tsv・
+/// prompt.txt等）を丸ごと格納する——除外する積極的な理由がなく、個別の
+/// ファイル名を列挙するより単純なため。
+///
+/// 圧縮するのは、全件対象（MO2再読込＆初期化）だとテキストファイルとはいえ
+/// 累積サイズがそこそこ大きくなる（実測で176プラグイン分・11MB）ため。
+/// 世代数の上限は設けない——対象はテキストファイル中心で圧縮後は更に小さく、
+/// 自動削除はむしろ「うっかり消さないための機能」という目的と矛盾しかねない。
 ///
 /// 保存先は既存の.gitignoreでderivativeフォルダとして予約済みのTranslation/bak/
-/// を再利用する（現状コード上は未使用）。世代数の上限は設けない——対象は
-/// テキストファイル中心でサイズが小さく、自動削除はむしろ「うっかり消さない
-/// ための機能」という目的と矛盾しかねないため。
+/// を再利用する（現状コード上は未使用）。
 /// </summary>
 public static class TranslationBackup
 {
-    /// <summary>Copies each named plugin's Translation/out_temp/&lt;name&gt;/ folder
-    /// (whole contents) into a new timestamped Translation/bak/&lt;timestamp&gt;/&lt;name&gt;/
-    /// folder, before the caller performs a destructive re-init on it. Plugins with
-    /// no existing out_temp folder yet (never scanned/translated) are silently
-    /// skipped — there is nothing to lose for them. No-op if nothing exists to back up.</summary>
+    /// <summary>Zips each named plugin's Translation/out_temp/&lt;name&gt;/ folder
+    /// (whole contents) into a new Translation/bak/&lt;timestamp&gt;.zip, before the
+    /// caller performs a destructive re-init on it. Plugins with no existing
+    /// out_temp folder yet (never scanned/translated) are silently skipped —
+    /// there is nothing to lose for them. No-op if nothing exists to back up.</summary>
     public static void Backup(string productRoot, IEnumerable<string> pluginFolderNames)
     {
         var outTempDir = Path.Combine(productRoot, "Translation", "out_temp");
@@ -52,13 +57,17 @@ public static class TranslationBackup
         }
         var timestamp = (latest ?? DateTime.Now).ToString("yyyyMMdd_HHmmss");
 
-        var destRoot = Path.Combine(productRoot, "Translation", "bak", timestamp);
+        var bakDir = Path.Combine(productRoot, "Translation", "bak");
+        Directory.CreateDirectory(bakDir);
+        var zipPath = Path.Combine(bakDir, $"{timestamp}.zip");
+
+        using var zipStream = new FileStream(zipPath, FileMode.Create);
+        using var archive = new ZipArchive(zipStream, ZipArchiveMode.Create);
         foreach (var dir in sourceDirs)
         {
-            var destDir = Path.Combine(destRoot, Path.GetFileName(dir));
-            Directory.CreateDirectory(destDir);
+            var pluginName = Path.GetFileName(dir);
             foreach (var file in Directory.GetFiles(dir))
-                File.Copy(file, Path.Combine(destDir, Path.GetFileName(file)), overwrite: true);
+                archive.CreateEntryFromFile(file, $"{pluginName}/{Path.GetFileName(file)}", CompressionLevel.Optimal);
         }
     }
 }
