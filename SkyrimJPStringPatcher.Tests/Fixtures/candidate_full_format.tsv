@@ -1,0 +1,2 @@
+FormId	WinningPlugin	RecordType	EnglishText	Index	EditorId	Context	StaleOriginal	StaleTranslation	Warning
+00012345	Skyrim.esm	PERK FULL	Some\tText\nWith Escapes	2	SomeEditorId	Some Context	Old Text	古いテキスト	PickUpTargetClassificationFailed
