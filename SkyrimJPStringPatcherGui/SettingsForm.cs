@@ -145,15 +145,12 @@ public sealed class SettingsForm : Form
         PseudoModal.Show(form, this);
     }
 
-    private void OpenFolder(string path)
-    {
-        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
-        {
-            MessageBox.Show(this, $"フォルダがまだありません:\n{path}", "フォルダが見つかりません", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
-        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = path, UseShellExecute = true });
-    }
+    private void OpenFolder(string path) => FolderOpener.OpenOrWarn(this, path);
+
+    // v0.54.2: remembered at load time so SaveToSettings can tell whether the
+    // local LLM endpoint/model actually changed — see the remark there.
+    private string _initialLlmEndpoint = "";
+    private string _initialLlmModel = "";
 
     private void LoadFromSettings()
     {
@@ -161,6 +158,8 @@ public sealed class SettingsForm : Form
         _txtMo2Dir.Text = settings.Mo2InstanceDir;
         _txtLlmEndpoint.Text = settings.LlmEndpoint;
         _txtLlmModel.Text = settings.LlmModel;
+        _initialLlmEndpoint = settings.LlmEndpoint;
+        _initialLlmModel = settings.LlmModel;
         _txtImportDir.Text = Path.Combine("Translation", "import");
         _txtOutputDir.Text = "out";
     }
@@ -172,6 +171,17 @@ public sealed class SettingsForm : Form
         settings.LlmEndpoint = _txtLlmEndpoint.Text.Trim();
         settings.LlmModel = _txtLlmModel.Text.Trim();
         settings.Save();
+
+        // v0.54.2 (既知の課題22.): ローカルLLM設定を実際に変更した場合のみ、
+        // ベース画面の「Beta機能: ローカルLLM翻訳」チェックを外す——古い接続先の
+        // ままチェックが入りっぱなしになる事故を防ぐ。単にウィンドウを開いて
+        // 何も変えずに閉じただけでは発火しない。
+        if (settings.LlmEndpoint != _initialLlmEndpoint || settings.LlmModel != _initialLlmModel)
+        {
+            _owner.ResetLocalLlmCheckbox();
+            _initialLlmEndpoint = settings.LlmEndpoint;
+            _initialLlmModel = settings.LlmModel;
+        }
     }
 
     private void BrowseMo2Folder()

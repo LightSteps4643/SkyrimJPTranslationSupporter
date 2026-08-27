@@ -58,6 +58,15 @@ public static class PickUpTargetRunner
         public int SkippedFields;
         public int FailOpenClassifications;
         public int ContextExtractionFailures;
+
+        /// <summary>Plugin filenames actually being read when a skip happened —
+        /// deliberately the CURRENTLY-SCANNED plugin (e.g. `mod.ModKey.FileName`),
+        /// not a record's defining plugin (`record.FormKey`'s ModKey component):
+        /// when one plugin overrides a record another plugin originally defined,
+        /// those can differ, and it's the override's own binary data that actually
+        /// failed to parse.</summary>
+        public readonly HashSet<string> AffectedPlugins = new(StringComparer.OrdinalIgnoreCase);
+
         public bool Any => SkippedPlugins > 0 || SkippedFields > 0 || FailOpenClassifications > 0 || ContextExtractionFailures > 0;
     }
 
@@ -156,6 +165,11 @@ public static class PickUpTargetRunner
             if (issues.Any)
             {
                 Console.WriteLine($"##SJPTS_ISSUES## plugins={issues.SkippedPlugins} fields={issues.SkippedFields} fail_open={issues.FailOpenClassifications} context_only={issues.ContextExtractionFailures}");
+                // v0.54.2: どのプラグインで発生したかを、GUI側のMessageBoxにも
+                // 出せるよう別行で機械可読に出力する（"|"区切り。プラグイン名に
+                // スペースは普通に含まれるがパイプ文字は実質使われないため区切り
+                // 文字に選んだ）。
+                Console.WriteLine($"##SJPTS_ISSUES_PLUGINS## {string.Join('|', issues.AffectedPlugins.OrderBy(p => p, StringComparer.OrdinalIgnoreCase))}");
                 log.Section("読み込みできなかったデータ", "Data that could not be read");
                 log.Line($"プラグイン単位でスキップ: {issues.SkippedPlugins}件（開けなかった、またはレコード列挙が途中で壊れた）",
                     $"Skipped whole plugins: {issues.SkippedPlugins} (failed to open, or record enumeration broke mid-scan)");
@@ -165,6 +179,8 @@ public static class PickUpTargetRunner
                     $"Classification check failed, included the candidate anyway (fail-open): {issues.FailOpenClassifications}");
                 log.Line($"文脈情報の抽出のみ失敗（候補・翻訳への影響なし）: {issues.ContextExtractionFailures}件",
                     $"Context extraction only failed (no effect on the candidate or its translation): {issues.ContextExtractionFailures}");
+                log.Line($"影響を受けたプラグイン: {string.Join(", ", issues.AffectedPlugins.OrderBy(p => p, StringComparer.OrdinalIgnoreCase))}",
+                    $"Affected plugins: {string.Join(", ", issues.AffectedPlugins.OrderBy(p => p, StringComparer.OrdinalIgnoreCase))}");
                 log.Line("※個々の詳細は本ログの他セクション、および pickuptarget.trace.log を参照",
                     "* See the other sections of this log, and pickuptarget.trace.log, for individual details");
             }
@@ -194,6 +210,7 @@ public static class PickUpTargetRunner
             catch (Exception ex)
             {
                 issues.SkippedPlugins++;
+                issues.AffectedPlugins.Add(plugin.FileName);
                 Console.Error.WriteLine($"[warn] failed to open '{plugin.FileName}': {ex.Message}");
                 log.Detail("除外: プラグインを開けなかった", "Excluded: failed to open plugin", $"{plugin.FileName} — {ex.Message}");
                 trace?.Warning($"Failed to open plugin: {plugin.FileName} — {ex.Message}");
@@ -351,10 +368,11 @@ public static class PickUpTargetRunner
                 catch (Exception ex)
                 {
                     issues.ContextExtractionFailures++;
+                    issues.AffectedPlugins.Add(mod.ModKey.FileName);
                     context = "";
                     log.Detail("文脈抽出のみ失敗（候補・翻訳への影響なし）", "Context extraction only failed (no effect on the candidate or its translation)",
-                        $"{record.FormKey} [{RecordSignatureMap.Resolve(record.GetType().Name)}] — {ex.Message}");
-                    trace?.Warning($"Context extraction failed for {record.FormKey}: {ex.Message}");
+                        $"[{mod.ModKey.FileName}] {record.FormKey} [{RecordSignatureMap.Resolve(record.GetType().Name)}] — {ex.Message}");
+                    trace?.Warning($"Context extraction failed for {record.FormKey} in '{mod.ModKey.FileName}': {ex.Message}");
                 }
 
                 // ① Exclusion ("not player-facing") checks. Failure here is
@@ -387,10 +405,11 @@ public static class PickUpTargetRunner
                 catch (Exception ex)
                 {
                     issues.FailOpenClassifications++;
+                    issues.AffectedPlugins.Add(mod.ModKey.FileName);
                     classificationFailed.Add(record.FormKey);
                     log.Detail("除外判定に失敗し、安全側に倒して候補に含めた（fail-open）", "Classification check failed, included the candidate anyway (fail-open)",
-                        $"{record.FormKey} [{RecordSignatureMap.Resolve(record.GetType().Name)}] — {ex.Message}");
-                    trace?.Warning($"Classification check failed for {record.FormKey}, fail-open (included): {ex.Message}");
+                        $"[{mod.ModKey.FileName}] {record.FormKey} [{RecordSignatureMap.Resolve(record.GetType().Name)}] — {ex.Message}");
+                    trace?.Warning($"Classification check failed for {record.FormKey} in '{mod.ModKey.FileName}', fail-open (included): {ex.Message}");
                 }
 
                 // ② FULL (generic across every INamedGetter/ITranslatedNamedGetter record type).
@@ -410,9 +429,10 @@ public static class PickUpTargetRunner
                 catch (Exception ex)
                 {
                     issues.SkippedFields++;
+                    issues.AffectedPlugins.Add(mod.ModKey.FileName);
                     log.Detail("除外: Name/FULLフィールドが読めなかった", "Excluded: could not read the Name/FULL field",
-                        $"{record.FormKey} [{RecordSignatureMap.Resolve(record.GetType().Name)}] — {ex.Message}");
-                    trace?.Warning($"Failed to read Name/FULL for {record.FormKey}: {ex.Message}");
+                        $"[{mod.ModKey.FileName}] {record.FormKey} [{RecordSignatureMap.Resolve(record.GetType().Name)}] — {ex.Message}");
+                    trace?.Warning($"Failed to read Name/FULL for {record.FormKey} in '{mod.ModKey.FileName}': {ex.Message}");
                 }
 
                 // ③ Flat, FormID-only-matched DSD-supported fields beyond FULL.
@@ -421,9 +441,10 @@ public static class PickUpTargetRunner
                     ex =>
                     {
                         issues.SkippedFields++;
+                        issues.AffectedPlugins.Add(mod.ModKey.FileName);
                         log.Detail("除外: 追加フィールド（ExtraTranslatableFields）が読めなかった", "Excluded: could not read an extra translatable field",
-                            $"{record.FormKey} [{RecordSignatureMap.Resolve(record.GetType().Name)}] — {ex.Message}");
-                        trace?.Warning($"Failed to read ExtraTranslatableFields for {record.FormKey}: {ex.Message}");
+                            $"[{mod.ModKey.FileName}] {record.FormKey} [{RecordSignatureMap.Resolve(record.GetType().Name)}] — {ex.Message}");
+                        trace?.Warning($"Failed to read ExtraTranslatableFields for {record.FormKey} in '{mod.ModKey.FileName}': {ex.Message}");
                     });
 
                 // ④ Nested list structures and the EditorID-matched GMST exception.
@@ -432,9 +453,10 @@ public static class PickUpTargetRunner
                     ex =>
                     {
                         issues.SkippedFields++;
+                        issues.AffectedPlugins.Add(mod.ModKey.FileName);
                         log.Detail("除外: 入れ子フィールド（NestedTranslatableFields）が読めなかった", "Excluded: could not read a nested translatable field",
-                            $"{record.FormKey} [{RecordSignatureMap.Resolve(record.GetType().Name)}] — {ex.Message}");
-                        trace?.Warning($"Failed to read NestedTranslatableFields for {record.FormKey}: {ex.Message}");
+                            $"[{mod.ModKey.FileName}] {record.FormKey} [{RecordSignatureMap.Resolve(record.GetType().Name)}] — {ex.Message}");
+                        trace?.Warning($"Failed to read NestedTranslatableFields for {record.FormKey} in '{mod.ModKey.FileName}': {ex.Message}");
                     });
             },
             ex =>
@@ -442,6 +464,7 @@ public static class PickUpTargetRunner
                 // Record enumeration itself broke (foreach's MoveNext() threw) —
                 // this plugin's remaining records cannot be safely reached.
                 issues.SkippedPlugins++;
+                issues.AffectedPlugins.Add(mod.ModKey.FileName);
                 Console.Error.WriteLine($"[warn] record enumeration failed partway through '{mod.ModKey.FileName}', remaining records in this plugin were skipped: {ex.Message}");
                 log.Detail("除外: プラグインのレコード列挙が途中で壊れた（以降のレコードはスキップ）", "Excluded: record enumeration broke partway through this plugin (remaining records skipped)",
                     $"{mod.ModKey.FileName} — {ex.Message}");
@@ -470,6 +493,7 @@ public static class PickUpTargetRunner
                 ex =>
                 {
                     issues.SkippedPlugins++;
+                    issues.AffectedPlugins.Add(mod.ModKey.FileName);
                     log.Detail("除外: MGEFのHideInUI判定の列挙が途中で壊れた（この先はプラグインを問わず継続）", "Excluded: MGEF HideInUI scan broke partway through this plugin (continuing with the next plugin)",
                         $"{mod.ModKey.FileName} — {ex.Message}");
                     trace?.Warning($"CollectHiddenMagicEffects enumeration failed for '{mod.ModKey.FileName}': {ex.Message}");
@@ -495,6 +519,7 @@ public static class PickUpTargetRunner
                 ex =>
                 {
                     issues.SkippedPlugins++;
+                    issues.AffectedPlugins.Add(mod.ModKey.FileName);
                     log.Detail("除外: ARMOのNonPlayable判定の列挙が途中で壊れた（この先はプラグインを問わず継続）", "Excluded: ARMO NonPlayable scan broke partway through this plugin (continuing with the next plugin)",
                         $"{mod.ModKey.FileName} — {ex.Message}");
                     trace?.Warning($"CollectNonPlayableGear (ARMO) enumeration failed for '{mod.ModKey.FileName}': {ex.Message}");
@@ -504,6 +529,7 @@ public static class PickUpTargetRunner
                 ex =>
                 {
                     issues.SkippedPlugins++;
+                    issues.AffectedPlugins.Add(mod.ModKey.FileName);
                     log.Detail("除外: WEAPのNonPlayable判定の列挙が途中で壊れた（この先はプラグインを問わず継続）", "Excluded: WEAP NonPlayable scan broke partway through this plugin (continuing with the next plugin)",
                         $"{mod.ModKey.FileName} — {ex.Message}");
                     trace?.Warning($"CollectNonPlayableGear (WEAP) enumeration failed for '{mod.ModKey.FileName}': {ex.Message}");
@@ -537,6 +563,7 @@ public static class PickUpTargetRunner
                 ex =>
                 {
                     issues.ContextExtractionFailures++;
+                    issues.AffectedPlugins.Add(mod.ModKey.FileName);
                     log.Detail("文脈抽出のみ失敗: RACE名の列挙が途中で壊れた（候補・翻訳への影響なし）", "Context extraction only failed: RACE name scan broke partway through this plugin (no effect on candidates or translation)",
                         $"{mod.ModKey.FileName} — {ex.Message}");
                     trace?.Warning($"CollectRaceNames enumeration failed for '{mod.ModKey.FileName}': {ex.Message}");

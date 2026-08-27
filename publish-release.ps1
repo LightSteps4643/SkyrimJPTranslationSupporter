@@ -9,6 +9,13 @@
     - CLI（SkyrimJPStringPatcher.csproj）とGUI（SkyrimJPStringPatcherGui.csproj）を、
       どちらも自己完結型（--self-contained true、win-x64。.NETランタイムの事前
       インストール不要）で publish する。
+    - v0.54.2: 単一ファイル発行（-p:PublishSingleFile=true）も併用する。Nexus Modsの
+      検疫（quarantine）対策——自己完結型配布は大量のランタイムDLL（実測485個の
+      Portable Executable）を同梱するため、これ自体がウイルススキャンのヒューリス
+      ティック検知（「実行ファイルを大量に含むバンドル」というシグナル）を誘発しやすい
+      と判明した。単一ファイル化でZIP内のPEファイル数を大幅に削減し、この要因を
+      弱める狙い。トリミング（-p:PublishTrimmed=true）は、Mutagenがリフレクションを
+      使用しているため安全性が不明であり、あえて含めていない。
     - CLIは出力先フォルダ直下、GUIはその中の `SkyrimJPStringPatcherGui` サブフォルダに
       分けて publish する（開発版のフォルダ名規約と同じ形——CliLocator.
       TryGetProductRoot が「SkyrimJPStringPatcherGui」という名前の祖先フォルダを
@@ -64,12 +71,14 @@ New-Item -ItemType Directory -Force -Path $guiOutputDir | Out-Null
 Write-Host "--- CLI (SkyrimJPStringPatcher) を publish ---"
 dotnet publish (Join-Path $root "SkyrimJPStringPatcher.csproj") `
     -c Release -r win-x64 --self-contained true `
+    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
     -o $OutputDir
 if ($LASTEXITCODE -ne 0) { throw "CLIのpublishに失敗しました（exit code $LASTEXITCODE）" }
 
 Write-Host "--- GUI (SkyrimJPStringPatcherGui) を publish ---"
 dotnet publish (Join-Path $root "SkyrimJPStringPatcherGui\SkyrimJPStringPatcherGui.csproj") `
     -c Release -r win-x64 --self-contained true `
+    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
     -o $guiOutputDir
 if ($LASTEXITCODE -ne 0) { throw "GUIのpublishに失敗しました（exit code $LASTEXITCODE）" }
 
