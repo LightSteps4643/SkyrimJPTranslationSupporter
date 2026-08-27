@@ -1158,14 +1158,23 @@ public static class PromptGenerator
     /// Fields are escaped the same way as CandidateIo/CorpusIo — some source
     /// text contains literal tab/newline characters (seen in real ESP data,
     /// e.g. a name with an embedded newline), which would otherwise corrupt
-    /// the row structure.</summary>
+    /// the row structure.
+    ///
+    /// v0.54.2 (DESIGN_NOTES.md known issue 21): an UNRESOLVED row whose
+    /// Candidate carries a PickUpTarget-side Warning (fail-open classification)
+    /// gets that warning written into Notes instead of leaving it blank — this
+    /// never collides with a resolution-method tag, since those only ever
+    /// appear on resolved (auto != null) rows.</summary>
     private static void WriteTranslationTemplate(string path, List<(Candidate Candidate, AutoTranslationResult? Auto)> rows)
     {
         using var w = new StreamWriter(path, false, System.Text.Encoding.UTF8);
         w.WriteLine(string.Join('\t', "FormId", "WinningPlugin", "RecordType", "EnglishText", "Japanese", "Notes", "Index", "EditorId"));
         foreach (var (c, auto) in rows)
+        {
+            var notes = auto?.Method ?? c.Warning;
             w.WriteLine(string.Join('\t', c.FormId, c.WinningPlugin, c.RecordType, Escape(c.CurrentText),
-                Escape(auto?.Japanese ?? ""), Escape(auto?.Method ?? ""), c.Index, Escape(c.EditorId)));
+                Escape(auto?.Japanese ?? ""), Escape(notes), c.Index, Escape(c.EditorId)));
+        }
     }
 
     /// <summary>v0.52.1a: reads an existing translations.tsv (if any) and returns
