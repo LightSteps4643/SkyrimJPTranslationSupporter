@@ -6,3 +6,4 @@ FormId	WinningPlugin	RecordType	EnglishText	Japanese	Notes	Index	EditorId
 00011111:TestMod.esp	TestMod.esp	BOOK DESC	Some text	NotJapaneseOops		0
 BADFORMID	TestMod.esp	QUST FULL	Bad	てすと		0
 00099999:TestMod.esp	TestMod.esp	NPC_ FULL	Bob	Bob	ModifiedByUser	0
+000C0001:TestMod.esp	TestMod.esp	QUST QOBJ	Find the sword	剣を見つける	CorpusExact	2

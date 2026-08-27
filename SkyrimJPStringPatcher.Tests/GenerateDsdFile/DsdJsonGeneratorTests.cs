@@ -32,6 +32,8 @@ public class DsdJsonGeneratorTests
     /// Japanese text implies the .tsv was hand-edited outside the tool
     /// entirely; that's exactly the untrusted case this check is a safety net
     /// for. An unparseable FormId (異常系, a corrupted row) is also covered.
+    /// A non-zero Index (正常系 — DSD's indexed types, e.g. a quest objective)
+    /// confirms it passes through untouched, not silently reset to 0.
     /// Two different winning plugins split the output across two files.</summary>
     [Fact]
     public void Run_BasicFixture_WritesExpectedEntriesPerPlugin_SkipsBlankAndInvalidRows()
@@ -140,6 +142,39 @@ public class DsdJsonGeneratorTests
             var dsdRoot = Path.Combine(outDir, "SKSE", "Plugins", "DynamicStringDistributor");
             Assert.True(File.Exists(Path.Combine(dsdRoot, "PluginA.esp", "SkyrimJPStringPatcher.json")));
             Assert.True(File.Exists(Path.Combine(dsdRoot, "PluginB.esp", "SkyrimJPStringPatcher.json")));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>DsdJsonGenerator has no dedup logic — if the SAME (FormId,
+    /// RecordType) shows up in two different translations.tsv files under a
+    /// directory input (Fixtures/duplicate_input/FolderA and FolderB both
+    /// translate 00000005:DupPlugin.esp's WEAP FULL, differently), both rows
+    /// are written to the plugin's output JSON as separate entries. This
+    /// documents that current (permissive) behavior rather than asserting it's
+    /// the "correct" one — there is no real-world path that produces two
+    /// translations.tsv files for the same plugin under Translation/out_temp,
+    /// so this is a characterization test for an edge case, not a guard
+    /// against a known bug.</summary>
+    [Fact]
+    public void Run_DuplicateFormIdAcrossFiles_WritesBothEntries()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_dsd_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outDir = Path.Combine(root, "out");
+            using var log = OpenTestLog(root);
+
+            DsdJsonGenerator.Run(FixturePath("duplicate_input"), outDir, log);
+
+            var jsonPath = Path.Combine(outDir, "SKSE", "Plugins", "DynamicStringDistributor", "DupPlugin.esp", "SkyrimJPStringPatcher.json");
+            var json = File.ReadAllText(jsonPath);
+            Assert.Contains("重複剣（旧）", json);
+            Assert.Contains("重複剣（新）", json);
         }
         finally
         {
