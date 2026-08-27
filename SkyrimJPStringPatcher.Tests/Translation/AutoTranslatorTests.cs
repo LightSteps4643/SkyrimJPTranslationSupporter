@@ -17,11 +17,14 @@ namespace SkyrimJPStringPatcher.Tests.Translation;
 /// "is this the officially correct translation," just using realistic
 /// content), constructed via CorpusIo.ReadTsv exactly like the real
 /// PickUpTarget -> Translation handoff. Two tests (exclusion list, phrase
-/// override) depend on the REAL Data/corpus_exact_exclusions.txt and
+/// override) exercise the REAL Data/corpus_exact_exclusions.txt and
 /// Data/phrase_overrides.tsv shipped with the tool (AutoTranslator loads
 /// these unconditionally, static, from a fixed path — there's no way to
-/// substitute a test-only list) — each says so explicitly, so a future edit
-/// to those curated files that breaks the test is diagnosable at a glance.
+/// substitute a test-only list) — but deliberately do NOT hardcode which
+/// specific word/phrase those files currently contain. Each reads the file's
+/// actual first usable entry at test time and builds its assertions around
+/// THAT, so the test tracks the real curated data instead of a frozen
+/// snapshot of it that a future edit could silently invalidate.
 /// </summary>
 public class AutoTranslatorTests
 {
@@ -90,42 +93,62 @@ public class AutoTranslatorTests
         Assert.Null(npcResult);
     }
 
-    /// <summary>Depends on Data/corpus_exact_exclusions.txt actually containing
-    /// "Fall" today (verified: line 14, as of this writing) — a human-curated
-    /// exclusion for the "Fall"→"秋" (calendar season) vs. "The Fall of
-    /// Winterhold" (downfall) homograph. If this test starts failing, check
-    /// whether "Fall" was removed from that file before assuming a code
-    /// regression.</summary>
+    /// <summary>Depends on Data/corpus_exact_exclusions.txt existing and
+    /// containing at least one word — but NOT on which specific word that is.
+    /// Rather than hardcode a word that could silently go stale if someone
+    /// edits the curated file later, this reads the file's actual first entry
+    /// at test time and builds a matching corpus hit for exactly that word, so
+    /// the test tracks the real file's content instead of a frozen
+    /// assumption about it.</summary>
     [Fact]
     public void TryTranslate_WordInRealExclusionList_ReturnsNullDespiteCorpusHit()
     {
-        var result = BuildFromFixture().TryTranslate("Fall", "GMST DATA");
+        var excludedWord = ReadFirstNonEmptyLine(Path.Combine(AppContext.BaseDirectory, "Data", "corpus_exact_exclusions.txt"));
+        var corpus = new List<CorpusEntry> { new(excludedWord, "テスト用の訳文", "test", "vanilla", "") };
+
+        var result = new AutoTranslator(corpus).TryTranslate(excludedWord);
 
         Assert.Null(result);
     }
 
-    /// <summary>Depends on Data/phrase_overrides.tsv actually containing
-    /// "pts"→"pt" today (verified: line 27, as of this writing). Deliberately
-    /// NOT added to corpus_basic.tsv — PhraseOverrides load unconditionally
-    /// into _corpusExact regardless of what the corpus itself contains, so
-    /// this proves the override applies even with zero corpus support. Also
-    /// confirms it bypasses the NPC_ FULL homograph guard (SeenAsNpcName=true
-    /// unconditionally for a human-curated override) — a curated correction
-    /// should never be second-guessed the way an accidental corpus collision
-    /// is.</summary>
+    /// <summary>Same real-data-but-not-a-specific-value approach as the
+    /// exclusion-list test above: reads Data/phrase_overrides.tsv's actual
+    /// first entry at test time, rather than hardcoding "pts"→"pt". Uses an
+    /// EMPTY corpus (no fixture support at all) to prove PhraseOverrides load
+    /// into _corpusExact unconditionally, and confirms it bypasses the NPC_
+    /// FULL homograph guard (SeenAsNpcName=true unconditionally for a
+    /// human-curated override) — a curated correction should never be
+    /// second-guessed the way an accidental corpus collision is.</summary>
     [Fact]
     public void TryTranslate_RealPhraseOverride_AlwaysWinsAndBypassesNpcGuard()
     {
-        var translator = BuildFromFixture();
+        var (english, japanese) = ReadFirstPhraseOverride(Path.Combine(AppContext.BaseDirectory, "Data", "phrase_overrides.tsv"));
+        var translator = new AutoTranslator(Array.Empty<CorpusEntry>());
 
-        var result = translator.TryTranslate("pts", "GMST DATA");
+        var result = translator.TryTranslate(english);
         Assert.NotNull(result);
-        Assert.Equal("pt", result!.Japanese);
+        Assert.Equal(japanese, result!.Japanese);
         Assert.Equal("AutoCorpusOverride", result.Method);
 
-        var npcResult = translator.TryTranslate("pts", "NPC_ FULL");
+        var npcResult = translator.TryTranslate(english, "NPC_ FULL");
         Assert.NotNull(npcResult);
         Assert.Equal("AutoCorpusOverride", npcResult!.Method);
+    }
+
+    private static string ReadFirstNonEmptyLine(string path) =>
+        File.ReadLines(path).Select(l => l.Trim()).First(l => l.Length > 0 && !l.StartsWith('#'));
+
+    private static (string English, string Japanese) ReadFirstPhraseOverride(string path)
+    {
+        foreach (var line in File.ReadLines(path).Skip(1)) // header row
+        {
+            var parts = line.Split('\t');
+            if (parts.Length < 2) continue;
+            var english = parts[0].Trim();
+            var japanese = parts[1].Trim();
+            if (english.Length > 0 && japanese.Length > 0) return (english, japanese);
+        }
+        throw new InvalidOperationException($"No usable override row found in {path}");
     }
 
     /// <summary>The real v0.43.0 incident: a single-WORD imported/dsd entry
