@@ -443,6 +443,8 @@ public sealed class MainForm : Form
             "翻訳状況を初期化", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
         if (confirm != DialogResult.OK) return;
 
+        TranslationBackup.Backup(ProductRoot, new[] { PluginFolderName.From(plugin) });
+
         SetBusy(true);
         try
         {
@@ -476,6 +478,8 @@ public sealed class MainForm : Form
             "元に戻せません。よろしいですか？",
             "選択プラグインを一括初期化", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
         if (confirm != DialogResult.OK) return;
+
+        TranslationBackup.Backup(ProductRoot, selectedPlugins.Select(PluginFolderName.From));
 
         SetBusy(true);
         var pluginsFilePath = Path.Combine(Path.GetTempPath(), $"sjpts_reset_{Guid.NewGuid():N}.txt");
@@ -844,6 +848,15 @@ public sealed class MainForm : Form
             "（既存の翻訳結果を消さずに現在の状況を見るだけなら「再スキャン（読み取りのみ）」を使ってください）",
             "MO2再読込＆初期化", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
         if (confirm != DialogResult.OK) return;
+
+        // v0.55.0: バックアップ対象は「これから破壊される全プラグイン」——
+        // pickuptargetの再実行前、現在のTranslation/out_temp配下に実在する
+        // プラグインフォルダをそのまま列挙する（画面の選択状態とは無関係）。
+        var existingOutTempDir = Path.Combine(ProductRoot, "Translation", "out_temp");
+        var allPluginFolderNames = Directory.Exists(existingOutTempDir)
+            ? Directory.GetDirectories(existingOutTempDir).Select(Path.GetFileName).OfType<string>()
+            : Enumerable.Empty<string>();
+        TranslationBackup.Backup(ProductRoot, allPluginFolderNames);
 
         // Remember the current selection before the table gets rebuilt.
         _deselectedPlugins.Clear();
