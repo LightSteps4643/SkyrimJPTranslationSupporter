@@ -59,6 +59,7 @@ public class NonTranslatableTextTests
     [Theory]
     [InlineData("Retroactive fixes for 4.2.1", true)] // real: USSEP QUST FULL
     [InlineData("UDGP Retroactive Fixed for 1.1.2", true)]
+    [InlineData("Compatibility patch for 2.0", true)] // 2-part x.y pattern (the regex's optional 3rd group) — not covered by either real 3-part example above
     [InlineData("Steel Sword", false)] // no version-number pattern at all
     [InlineData("Version tracking for the UDGP", false)] // no digits — despite being from the same USSEP family, this specific string carries no version number
     public void LooksLikeVersionTrackingQuestName(string text, bool expected)
