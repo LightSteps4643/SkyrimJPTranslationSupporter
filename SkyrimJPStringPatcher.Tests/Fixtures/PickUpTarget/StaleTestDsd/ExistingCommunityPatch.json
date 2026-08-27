@@ -1,0 +1,20 @@
+[
+  {
+    "editor_id": "",
+    "form_id": "000800|StaleTest.esp",
+    "index": 0,
+    "type": "WEAP FULL",
+    "original": "Iron Blade Updated",
+    "string": "更新された鉄の剣",
+    "status": "TranslationProposed"
+  },
+  {
+    "editor_id": "",
+    "form_id": "000801|StaleTest.esp",
+    "index": 0,
+    "type": "WEAP FULL",
+    "original": "Steel Blade Old",
+    "string": "古い鋼の剣",
+    "status": "TranslationProposed"
+  }
+]
