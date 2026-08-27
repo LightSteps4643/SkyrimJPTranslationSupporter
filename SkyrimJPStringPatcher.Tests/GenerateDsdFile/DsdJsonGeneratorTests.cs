@@ -24,10 +24,15 @@ public class DsdJsonGeneratorTests
     /// ModifiedByUser (準正常系 — a human's own deliberate edit via
     /// TranslationDetailForm, e.g. keeping a proper noun like "Bob" as-is,
     /// deserves the same trust as a curated override, not a second-guess); a
-    /// translated row whose Japanese column isn't actually Japanese (異常系, a
-    /// likely xTranslator paste mistake); and an unparseable FormId (異常系, a
-    /// corrupted row). Two different winning plugins split the output across
-    /// two files.</summary>
+    /// translated row whose Japanese column isn't actually Japanese AND carries
+    /// no resolution-method/ModifiedByUser tag at all (異常系). Note this last
+    /// case can't actually arise through this tool's own pipeline — WriteTranslationTemplate
+    /// only ever fills the Japanese column together with a Notes tag (the
+    /// resolution method, or ModifiedByUser) — so a blank-Notes row with
+    /// Japanese text implies the .tsv was hand-edited outside the tool
+    /// entirely; that's exactly the untrusted case this check is a safety net
+    /// for. An unparseable FormId (異常系, a corrupted row) is also covered.
+    /// Two different winning plugins split the output across two files.</summary>
     [Fact]
     public void Run_BasicFixture_WritesExpectedEntriesPerPlugin_SkipsBlankAndInvalidRows()
     {
