@@ -1,0 +1,7 @@
+FormId	WinningPlugin	RecordType	EnglishText	Japanese	Notes	Index	EditorId
+00012345:Skyrim.esm	Skyrim.esm	PERK FULL	Test Perk	テストパーク		0
+00067890:TestMod.esp	TestMod.esp	WEAP FULL	Iron Sword	鉄の剣	CorpusExact	0
+000ABCDE:TestMod.esp	TestMod.esp	MESG FULL	Continue			0
+000FEDCB:TestMod.esp	TestMod.esp	GMST DATA	pts	pts	AutoCorpusOverride	0	sSomeSetting
+00011111:TestMod.esp	TestMod.esp	BOOK DESC	Some text	NotJapaneseOops		0
+BADFORMID	TestMod.esp	QUST FULL	Bad	てすと		0
