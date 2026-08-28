@@ -1,0 +1,345 @@
+using SkyrimJPStringPatcher.Core;
+using SkyrimJPStringPatcher.PickUpTarget;
+using SkyrimJPStringPatcher.Translation;
+
+namespace SkyrimJPStringPatcher.Tests.Integration;
+
+/// <summary>
+/// Desired-behavior scenarios for the real PickUpTarget -> Translation handoff
+/// (2026-08-28, agreed with the user as Given/前提条件・When/操作・Then/期待する
+/// 結果 — see DESIGN_NOTES.md for the full list). Unlike the rest of this test
+/// suite, these are NOT organized around one class's own logic — each test
+/// models one realistic MO2 scenario end-to-end (PickUpTargetRunner.Run ->
+/// candidates.tsv/corpus.tsv -> PromptGenerator.RunOne, exactly like Program.cs's
+/// own pickuptarget/translation subcommands wire them together) and checks the
+/// resulting translations.tsv, which is the one shared checkpoint every
+/// scenario naturally converges on.
+///
+/// Scenarios ①④⑤ (this file) all reuse the existing
+/// Fixtures/PickUpTarget/StaleTest.esp + StaleTestDsd/ExistingCommunityPatch.json
+/// fixture (already established by DsdCoverageAndStaleTests, which verifies the
+/// PickUpTarget-only half of this same behavior) — 3 WEAP records:
+/// - "Iron Blade Updated" (000800): existing DSD's "original" matches exactly
+///   -> fully covered, never a candidate at all (④).
+/// - "Steel Blade New" (000801): existing DSD's "original" is "Steel Blade Old"
+///   -> stale (⑤).
+/// - "Bronze Blade" (000802): no DSD entry -> an ordinary new candidate (①).
+/// </summary>
+public class PickUpTargetToTranslationScenarioTests
+{
+    private static string BuildFakeMo2Instance(string root)
+    {
+        var mo2Dir = Path.Combine(root, "mo2");
+        var modDir = Path.Combine(mo2Dir, "mods", "TestMod");
+        var dsdDir = Path.Combine(modDir, "SKSE", "Plugins", "DynamicStringDistributor", "StaleTest.esp");
+        var profileDir = Path.Combine(mo2Dir, "profiles", "Default");
+        Directory.CreateDirectory(dsdDir);
+        Directory.CreateDirectory(profileDir);
+
+        var fixturesDir = Path.Combine(AppContext.BaseDirectory, "Fixtures", "PickUpTarget");
+        File.Copy(Path.Combine(fixturesDir, "StaleTest.esp"), Path.Combine(modDir, "StaleTest.esp"));
+        File.Copy(
+            Path.Combine(fixturesDir, "StaleTestDsd", "ExistingCommunityPatch.json"),
+            Path.Combine(dsdDir, "ExistingCommunityPatch.json"));
+
+        File.WriteAllText(Path.Combine(mo2Dir, "ModOrganizer.ini"),
+            "[General]\r\n" +
+            $"gamePath=@ByteArray({Path.Combine(root, "nonexistent_game")})\r\n" +
+            "selected_profile=@ByteArray(Default)\r\n");
+        File.WriteAllText(Path.Combine(profileDir, "modlist.txt"), "+TestMod\r\n");
+        File.WriteAllText(Path.Combine(profileDir, "plugins.txt"), "*StaleTest.esp\r\n");
+
+        return mo2Dir;
+    }
+
+    /// <summary>Runs the real PickUpTarget -> Translation handoff exactly like
+    /// Program.cs's own "pickuptarget" then "translation" subcommands do:
+    /// PickUpTargetRunner.Run's result is written to candidates.tsv/corpus.tsv
+    /// via the same CandidateIo/CorpusIo this tool's CLI itself uses, then fed
+    /// into PromptGenerator.RunOne exactly as-is — no shortcuts that would let
+    /// a real serialization-boundary bug slip past.</summary>
+    private static (PickUpTargetResult PickUpTargetResult, Dictionary<string, (string Japanese, string Notes)> Translations, string PromptText) RunPickUpTargetThenTranslation(
+        string mo2Dir, string root, string targetPlugin, bool includeStale = false, bool discardUserEdits = false, TranslationStageOptions? stageOptions = null)
+    {
+        var pickUpTargetOutDir = Path.Combine(root, "PickUpTarget", "out_temp");
+        Directory.CreateDirectory(pickUpTargetOutDir);
+        PickUpTargetResult pickUpTargetResult;
+        using (var pickUpTargetLog = RunLog.Open(Path.Combine(root, "PickUpTarget"), "PickUpTarget"))
+        {
+            pickUpTargetResult = PickUpTargetRunner.Run(mo2Dir, pickUpTargetLog, includeStale);
+        }
+        var candidatesTsvPath = Path.Combine(pickUpTargetOutDir, "candidates.tsv");
+        var corpusTsvPath = Path.Combine(pickUpTargetOutDir, "corpus.tsv");
+        CandidateIo.WriteTsv(candidatesTsvPath, pickUpTargetResult.Candidates);
+        CorpusIo.WriteTsv(corpusTsvPath, pickUpTargetResult.Corpus);
+
+        var translationOutDir = Path.Combine(root, "Translation", "out_temp");
+        var importDir = Path.Combine(root, "Translation", "import"); // deliberately not created -> "no import" (XTranslatorImporter tolerates this)
+        using (var translationLog = RunLog.Open(Path.Combine(root, "Translation"), "Translation"))
+        {
+            PromptGenerator.RunOne(candidatesTsvPath, corpusTsvPath, importDir, targetPlugin, translationOutDir, translationLog,
+                discardUserEdits: discardUserEdits, stageOptions: stageOptions);
+        }
+
+        var pluginDir = Path.Combine(translationOutDir, PluginFolderName(targetPlugin));
+        var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
+        var promptPath = Path.Combine(pluginDir, "prompt.txt");
+        var promptText = File.Exists(promptPath) ? File.ReadAllText(promptPath) : "";
+        return (pickUpTargetResult, translations, promptText);
+    }
+
+    // Mirrors PromptGenerator.MakeSafeFolderName (internal, not visible to this
+    // test project) -- for a plain ".esp" filename with no invalid filename
+    // characters, this is just the extension stripped.
+    private static string PluginFolderName(string plugin) => Path.GetFileNameWithoutExtension(plugin);
+
+    private static Dictionary<string, (string Japanese, string Notes)> ReadTranslationsTemplate(string path)
+    {
+        var result = new Dictionary<string, (string, string)>(StringComparer.Ordinal);
+        if (!File.Exists(path)) return result;
+        foreach (var line in File.ReadAllLines(path).Skip(1))
+        {
+            if (line.Length == 0) continue;
+            var parts = line.Split('\t');
+            if (parts.Length < 6) continue;
+            result[TsvEscaping.Unescape(parts[3])] = (TsvEscaping.Unescape(parts[4]), TsvEscaping.Unescape(parts[5]));
+        }
+        return result;
+    }
+
+    /// <summary>① 原文英語のレコードが翻訳対象として出力される。
+    /// 実施イメージ: 新しく導入した武器MODの剣が英語名のまま、他のMODやDSDには
+    /// 一切関与されていない、最も単純なケース（"Bronze Blade"、DSDカバーなし）。</summary>
+    [Fact]
+    public void PlainEnglishRecord_WithNoDsdCoverage_BecomesATranslationCandidate()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_scenario_plain_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var mo2Dir = BuildFakeMo2Instance(root);
+            var (_, translations, _) = RunPickUpTargetThenTranslation(mo2Dir, root, "StaleTest.esp");
+
+            Assert.True(translations.ContainsKey("Bronze Blade"));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>④ 既存DSDカバー済みのレコードは翻訳対象にならない。
+    /// 実施イメージ: 有名な武器MOD向けに有志配布のDSD翻訳パッチを導入済みで、
+    /// 再スキャンしてもカバー済みの武器名は翻訳対象に出てこない
+    /// （"Iron Blade Updated"、DSDのoriginalが現在の原文と完全一致）。</summary>
+    [Fact]
+    public void RecordAlreadyCoveredByExistingDsd_NeverBecomesATranslationCandidate()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_scenario_covered_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var mo2Dir = BuildFakeMo2Instance(root);
+            var (_, translations, _) = RunPickUpTargetThenTranslation(mo2Dir, root, "StaleTest.esp");
+
+            Assert.False(translations.ContainsKey("Iron Blade Updated"));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>⑤ staleな既存DSD訳（既定、--include-stale無し）は翻訳対象にならない。
+    /// `--include-stale`ありのケース（既存の旧原文/旧訳がprompt.txtに引き継がれる
+    /// 挙動）は、現状GUIから一切到達できない（CLI直接利用者のみの機能、
+    /// SkyrimJPStringPatcherGui配下を検索して該当ゼロを確認済み）ため、
+    /// Integration観点では対象外とした（ユーザー判断、2026-08-28）。その挙動自体
+    /// は既存のPickUpTarget単体テスト（DsdCoverageAndStaleTests）で検証済み。
+    /// 実施イメージ: 翻訳パッチが古いバージョンのMOD向けで、MOD側の更新で武器名の
+    /// 英語表記が変わった（"Steel Blade Old"→"Steel Blade New"）。DSD自体はFormID
+    /// 一致で適用され続けるが、既定ではこのツールは静かに見過ごす。</summary>
+    [Fact]
+    public void StaleExistingDsdTranslation_WithoutIncludeStale_DoesNotBecomeACandidate()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_scenario_stale_off_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var mo2Dir = BuildFakeMo2Instance(root);
+            var (_, translations, _) = RunPickUpTargetThenTranslation(mo2Dir, root, "StaleTest.esp", includeStale: false);
+
+            Assert.False(translations.ContainsKey("Steel Blade New"));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    private static string BuildPriorityOverrideMo2Instance(string root, bool withDsdCoverageForWinner = false)
+    {
+        var mo2Dir = Path.Combine(root, "mo2");
+        var baseDir = Path.Combine(mo2Dir, "mods", "PriorityModBaseFolder");
+        var patchDir = Path.Combine(mo2Dir, "mods", "PriorityModPatchFolder");
+        var profileDir = Path.Combine(mo2Dir, "profiles", "Default");
+        Directory.CreateDirectory(baseDir);
+        Directory.CreateDirectory(patchDir);
+        Directory.CreateDirectory(profileDir);
+
+        var fixturesDir = Path.Combine(AppContext.BaseDirectory, "Fixtures", "Integration");
+        File.Copy(Path.Combine(fixturesDir, "PriorityModBase.esp"), Path.Combine(baseDir, "PriorityModBase.esp"));
+        File.Copy(Path.Combine(fixturesDir, "PriorityModPatch.esp"), Path.Combine(patchDir, "PriorityModPatch.esp"));
+
+        if (withDsdCoverageForWinner)
+        {
+            // A real DSD json's FormID always names the DEFINING plugin (the
+            // record's own master, PriorityModBase.esp) regardless of which
+            // plugin's own DSD folder it's placed under -- matches how DSD
+            // itself resolves FormIDs. Placed under the WINNING plugin's own
+            // folder (PriorityModPatch.esp), modeling a patch author who ships
+            // a translation specifically for their own patched value.
+            var dsdDir = Path.Combine(patchDir, "SKSE", "Plugins", "DynamicStringDistributor", "PriorityModPatch.esp");
+            Directory.CreateDirectory(dsdDir);
+            File.Copy(
+                Path.Combine(fixturesDir, "PriorityModPatchDsd", "ExistingCommunityPatch.json"),
+                Path.Combine(dsdDir, "ExistingCommunityPatch.json"));
+        }
+
+        File.WriteAllText(Path.Combine(mo2Dir, "ModOrganizer.ini"),
+            "[General]\r\n" +
+            $"gamePath=@ByteArray({Path.Combine(root, "nonexistent_game")})\r\n" +
+            "selected_profile=@ByteArray(Default)\r\n");
+        File.WriteAllText(Path.Combine(profileDir, "modlist.txt"), "+PriorityModPatchFolder\r\n+PriorityModBaseFolder\r\n");
+        // Base loads first, patch loads last (wins) -- plugins.txt order is what
+        // actually decides the winner, not modlist.txt's priority order (which
+        // only matters for loose-file VFS merging, unused by this scenario).
+        File.WriteAllText(Path.Combine(profileDir, "plugins.txt"), "*PriorityModBase.esp\r\n*PriorityModPatch.esp\r\n");
+
+        return mo2Dir;
+    }
+
+    /// <summary>② 複数MODが同じレコードを上書きしている場合、ロードオーダー上の
+    /// 勝者MODの英文だけが翻訳対象になる。
+    /// 実施イメージ: ベースの防具MOD「ArmorPack.esp」が「Iron Guard」という名前を
+    /// 定義し、それを上書きする互換パッチMOD「ArmorPack Patch.esp」が同じ防具の
+    /// 名前を「Iron Guardian」に変更。パッチが後に読まれるため、翻訳対象になるのは
+    /// 「Iron Guardian」の方だけ。</summary>
+    [Fact]
+    public void MultipleModsOverrideTheSameRecord_OnlyTheLoadOrderWinnersTextBecomesACandidate()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_scenario_priority_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var mo2Dir = BuildPriorityOverrideMo2Instance(root);
+            var (pickUpTargetResult, translations, _) = RunPickUpTargetThenTranslation(mo2Dir, root, "PriorityModPatch.esp");
+
+            // The winner's text is the only one that ever becomes a candidate at
+            // all -- the loser's text ("Iron Guard") never even reaches
+            // candidates.tsv, since PickUpTarget only ever considers each
+            // (FormKey, type, index) chain's WINNING entry.
+            var candidate = Assert.Single(pickUpTargetResult.Candidates, c => c.RecordType == "WEAP FULL");
+            Assert.Equal("Iron Guardian", candidate.CurrentText);
+            Assert.Equal("PriorityModPatch.esp", candidate.WinningPlugin);
+
+            Assert.True(translations.ContainsKey("Iron Guardian"));
+            Assert.False(translations.ContainsKey("Iron Guard"));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>②＋④の組み合わせ: 上書きされた勝者テキストが既存DSDでカバーされて
+    /// いる場合も、翻訳対象にならない。現行仕様では「上書きの有無」はDSDカバー
+    /// 判定に影響しない（判定は常に勝者テキストに対して行われる）はずだが、将来
+    /// 何らかの変更で崩れる可能性があるため、②単体・④単体とは別に明示的に
+    /// 固定しておく。
+    /// 実施イメージ: 互換パッチMODが上書きした後の防具名に対して、有志が
+    /// DSD翻訳パッチを配布している（パッチMOD自体を対象にした翻訳）。</summary>
+    [Fact]
+    public void OverriddenWinnerAlreadyCoveredByExistingDsd_NeverBecomesATranslationCandidate()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_scenario_priority_covered_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var mo2Dir = BuildPriorityOverrideMo2Instance(root, withDsdCoverageForWinner: true);
+            var (pickUpTargetResult, translations, _) = RunPickUpTargetThenTranslation(mo2Dir, root, "PriorityModPatch.esp");
+
+            Assert.DoesNotContain(pickUpTargetResult.Candidates, c => c.RecordType == "WEAP FULL");
+            Assert.False(translations.ContainsKey("Iron Guardian"));
+            Assert.False(translations.ContainsKey("Iron Guard"));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    private static string BuildVanillaHarvestMo2Instance(string root)
+    {
+        var mo2Dir = Path.Combine(root, "mo2");
+        var sourceDir = Path.Combine(mo2Dir, "mods", "SourceFolder");
+        var sourceStringsDir = Path.Combine(sourceDir, "Strings");
+        var targetDir = Path.Combine(mo2Dir, "mods", "TargetFolder");
+        var profileDir = Path.Combine(mo2Dir, "profiles", "Default");
+        Directory.CreateDirectory(sourceStringsDir);
+        Directory.CreateDirectory(targetDir);
+        Directory.CreateDirectory(profileDir);
+
+        var fixturesDir = Path.Combine(AppContext.BaseDirectory, "Fixtures", "Integration");
+        File.Copy(Path.Combine(fixturesDir, "SjptsVanillaLikeSource", "SjptsVanillaLikeSource.esp"), Path.Combine(sourceDir, "SjptsVanillaLikeSource.esp"));
+        foreach (var file in Directory.EnumerateFiles(Path.Combine(fixturesDir, "SjptsVanillaLikeSource", "Strings")))
+            File.Copy(file, Path.Combine(sourceStringsDir, Path.GetFileName(file)));
+        File.Copy(Path.Combine(fixturesDir, "SjptsUnrelatedMod", "SjptsUnrelatedMod.esp"), Path.Combine(targetDir, "SjptsUnrelatedMod.esp"));
+
+        File.WriteAllText(Path.Combine(mo2Dir, "ModOrganizer.ini"),
+            "[General]\r\n" +
+            $"gamePath=@ByteArray({Path.Combine(root, "nonexistent_game")})\r\n" +
+            "selected_profile=@ByteArray(Default)\r\n");
+        File.WriteAllText(Path.Combine(profileDir, "modlist.txt"), "+TargetFolder\r\n+SourceFolder\r\n");
+        File.WriteAllText(Path.Combine(profileDir, "plugins.txt"), "*SjptsVanillaLikeSource.esp\r\n*SjptsUnrelatedMod.esp\r\n");
+
+        return mo2Dir;
+    }
+
+    /// <summary>③ バニラ相当のローカライズ済みMODの訳文が、無関係な別MODの同名
+    /// アイテムに使われる（このツールが解決したい主要ケースそのもの）。
+    /// 実施イメージ: バニラ本体の翻訳済みアイテム名（例: 鉄の剣）が、全く無関係な
+    /// 別MODで偶然同じ英語名のアイテムとして再利用され、それがそのまま自動解決に
+    /// 使われる。
+    /// Fixtures/Integration/SjptsVanillaLikeSource.esp: ローカライズ済み
+    /// （UsingLocalization=true）、"Sjpts Ornate Blade"→"装飾の刃" を内蔵。
+    /// Fixtures/Integration/SjptsUnrelatedMod.esp: 非ローカライズ、全く同じ英語名
+    /// "Sjpts Ornate Blade" を持つ別アイテム（命名の衝突）。</summary>
+    [Fact]
+    public void VanillaLikeLocalizedTranslation_ResolvesAnUnrelatedModsIdenticallyNamedItem()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_scenario_vanillaharvest_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var mo2Dir = BuildVanillaHarvestMo2Instance(root);
+            var (pickUpTargetResult, translations, _) = RunPickUpTargetThenTranslation(mo2Dir, root, "SjptsUnrelatedMod.esp");
+
+            // The source's own item is already Japanese -- never a candidate.
+            Assert.DoesNotContain(pickUpTargetResult.Candidates, c => c.CurrentText == "装飾の刃" || c.WinningPlugin == "SjptsVanillaLikeSource.esp");
+
+            // The harvested pair reached the corpus.
+            Assert.Contains(pickUpTargetResult.Corpus, e => e.English == "Sjpts Ornate Blade" && e.Japanese == "装飾の刃");
+
+            // The unrelated mod's identically-named item got auto-resolved from it.
+            Assert.True(translations.ContainsKey("Sjpts Ornate Blade"));
+            var (japanese, notes) = translations["Sjpts Ornate Blade"];
+            Assert.Equal("装飾の刃", japanese);
+            Assert.StartsWith("AutoCorpus", notes);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+}
