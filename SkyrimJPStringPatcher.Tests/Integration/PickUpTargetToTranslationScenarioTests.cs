@@ -1,3 +1,6 @@
+using Mutagen.Bethesda;
+using Mutagen.Bethesda.Plugins;
+using Mutagen.Bethesda.Skyrim;
 using SkyrimJPStringPatcher.Core;
 using SkyrimJPStringPatcher.PickUpTarget;
 using SkyrimJPStringPatcher.Translation;
@@ -468,6 +471,66 @@ public class PickUpTargetToTranslationScenarioTests
             Assert.True(translations.ContainsKey("Vrenn"));
             var (japanese, notes) = translations["Vrenn"];
             Assert.Equal("ヴレン", japanese);
+            Assert.Equal("TranslationNameFallback", notes);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>⑧a 汎用名前グロッサリー（Data/name_glossary.tsv）が実候補の
+    /// 自動翻訳に反映される（④NameFallbackTranslator経由、MOD別グロッサリー
+    /// ⑦とは別の、全MOD共通のグロッサリー源が正しく配線されているかを確認）。
+    /// ⑧b（参照用語集）は③⑥と構造的に同じコーパス追加パターンのため対象外
+    /// （ユーザー確認済み）。
+    /// ハードコード回避のため、実データ（Data/name_glossary.tsv、テスト
+    /// プロジェクト自身のビルド出力コピー＝実リポジトリと同一内容）の1件目を
+    /// 実行時に読み取り、その英語テキストをMutagenでその場限りのMODに書き込む
+    /// （固定フィクスチャではなく、常に現在のData/の中身と一致させるため）。</summary>
+    [Fact]
+    public void GlobalNameGlossary_ResolvesARealCandidateViaNameFallback()
+    {
+        var glossaryPath = Path.Combine(AppContext.BaseDirectory, "Data", "name_glossary.tsv");
+        var firstLine = File.ReadLines(glossaryPath, System.Text.Encoding.UTF8).First(l => l.Length > 0 && l.Contains('\t'));
+        var tab = firstLine.IndexOf('\t');
+        // Data/name_glossary.tsv stores its dictionary KEY in lowercase (lookup
+        // is case-insensitive), but a real Bethesda display name is always Title
+        // Case -- NameFieldFilter.LooksLikeNameField requires every word to
+        // contain an uppercase letter, specifically to reject sentence-like
+        // internal notes. Capitalize to match how this word would actually
+        // appear as a real candidate.
+        var english = char.ToUpperInvariant(firstLine[0]) + firstLine[1..tab];
+        var japanese = firstLine[(tab + 1)..];
+
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_scenario_nameglossary_{Guid.NewGuid():N}");
+        var mo2Dir = Path.Combine(root, "mo2");
+        var modDir = Path.Combine(mo2Dir, "mods", "TestMod");
+        var profileDir = Path.Combine(mo2Dir, "profiles", "Default");
+        Directory.CreateDirectory(modDir);
+        Directory.CreateDirectory(profileDir);
+        try
+        {
+            const string plugin = "SjptsNameGlossaryTarget.esp";
+            var modKey = ModKey.FromNameAndExtension(plugin);
+            var mod = new SkyrimMod(modKey, SkyrimRelease.SkyrimSE);
+            var weapon = mod.Weapons.AddNew();
+            weapon.EditorID = "SjptsNameGlossaryWord";
+            weapon.Name = english;
+            mod.WriteToBinary(Path.Combine(modDir, plugin));
+
+            File.WriteAllText(Path.Combine(mo2Dir, "ModOrganizer.ini"),
+                "[General]\r\n" +
+                $"gamePath=@ByteArray({Path.Combine(root, "nonexistent_game")})\r\n" +
+                "selected_profile=@ByteArray(Default)\r\n");
+            File.WriteAllText(Path.Combine(profileDir, "modlist.txt"), "+TestMod\r\n");
+            File.WriteAllText(Path.Combine(profileDir, "plugins.txt"), $"*{plugin}\r\n");
+
+            var (_, translations, _) = RunPickUpTargetThenTranslation(mo2Dir, root, plugin);
+
+            Assert.True(translations.ContainsKey(english));
+            var (resolvedJapanese, notes) = translations[english];
+            Assert.Equal(japanese, resolvedJapanese);
             Assert.Equal("TranslationNameFallback", notes);
         }
         finally
