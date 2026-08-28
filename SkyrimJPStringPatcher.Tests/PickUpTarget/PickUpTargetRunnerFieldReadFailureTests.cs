@@ -79,19 +79,18 @@ public class PickUpTargetRunnerFieldReadFailureTests
         }
     }
 
-    /// <summary>KNOWN BUG found while writing this test (2026-08-28, not yet
-    /// fixed — see DESIGN_NOTES.md): SafeEnumeration.SafeForEach only wraps the
-    /// ENUMERATOR (MoveNext/Current) in try/catch — its onItem callback runs
-    /// OUTSIDE that protection (Core/SafeEnumeration.cs:35). ExtraTranslatableFields'
-    /// SafeForEach call passes `fieldRef => Consider(...)` as onItem, and
-    /// Consider() itself can throw (via TranslatedString.TryLookup, when the
-    /// backing Strings table is corrupted) — so the exception propagates
-    /// straight past SafeForEach's own onError, past ScanTranslatableFields,
-    /// and out of PickUpTargetRunner.Run() entirely uncaught (Run() only has a
-    /// try/finally, no catch). This is the exact class of whole-process crash
-    /// known issue 21 was meant to prevent, just reached via a different call
-    /// site (onItem, not the enumerator) than the one that fix actually covers.</summary>
-    [Fact(Skip = "Known bug: SafeForEach's onItem callback is unprotected, so Consider() throwing inside it (e.g. a corrupted Strings table) crashes PickUpTargetRunner.Run() uncaught instead of being reported as a skipped field — see DESIGN_NOTES.md's SafeForEach entry")]
+    /// <summary>v0.55.3で修正済み: SafeEnumeration.SafeForEachは、以前はENUMERATOR
+    /// （MoveNext/Current）だけをtry/catchで保護し、onItemコールバックは無保護の
+    /// まま呼んでいた（Core/SafeEnumeration.cs）。ExtraTranslatableFieldsの
+    /// SafeForEach呼び出しは`fieldRef => Consider(...)`をonItemとして渡しており、
+    /// Consider()自身がTranslatedString.TryLookup経由で例外を投げうる（Strings
+    /// テーブルが壊れている場合）ため、修正前はSafeForEach自身のonErrorをすり抜け、
+    /// ScanTranslatableFieldsもすり抜け、PickUpTargetRunner.Run()から未捕捉のまま
+    /// 抜けていた（Run()はtry/finallyのみでcatchが無い）。既知の課題21が防ごうと
+    /// していたプロセス全体クラッシュと同じクラスの問題が、別の経路（enumeratorで
+    /// はなくonItem）から起こり得ていた。onItemもtry/catchで保護し、onErrorを
+    /// 呼んだ上で列挙を継続するよう修正済み。</summary>
+    [Fact]
     public void Run_ExtraFieldTableCorrupted_ExcludesOnlyThatField_KeepsTheRecordOtherwiseIntact_ReportsSkippedFields()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_extrafieldcorrupt_{Guid.NewGuid():N}");
