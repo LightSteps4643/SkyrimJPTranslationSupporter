@@ -463,11 +463,20 @@ public static class PickUpTargetRunner
                 effect => latest[effect.FormKey] = effect.Flags.HasFlag(MagicEffect.Flag.HideInUI), // later mods win
                 ex =>
                 {
-                    issues.SkippedPlugins++;
+                    // v0.55.2: this fires for either a single MGEF's HideInUI flag
+                    // failing to read (SafeForEach now catches onItem too — the
+                    // record is simply left out of `latest`, defaulting to "not
+                    // hidden", and the SAME plugin's remaining records are still
+                    // processed) or the rarer case of the enumerator itself
+                    // breaking (only then does this plugin's MGEF pass actually
+                    // stop early). Either way the blast radius is one flag
+                    // determination, not the plugin's candidates -- SkippedFields
+                    // (not SkippedPlugins) reflects that.
+                    issues.SkippedFields++;
                     issues.AffectedPlugins.Add(mod.ModKey.FileName);
-                    log.Detail("除外: MGEFのHideInUI判定の列挙が途中で壊れた（この先はプラグインを問わず継続）", "Excluded: MGEF HideInUI scan broke partway through this plugin (continuing with the next plugin)",
+                    log.Detail("除外: MGEFのHideInUI判定が読めなかった（該当レコードは非表示扱いにせず処理を継続）", "Excluded: could not read an MGEF's HideInUI flag (that record is treated as not hidden; processing continues)",
                         $"{mod.ModKey.FileName} — {ex.Message}");
-                    trace?.Warning($"CollectHiddenMagicEffects enumeration failed for '{mod.ModKey.FileName}': {ex.Message}");
+                    trace?.Warning($"CollectHiddenMagicEffects: could not read HideInUI for a record in '{mod.ModKey.FileName}': {ex.Message}");
                 });
         }
         return latest.Where(kv => kv.Value).Select(kv => kv.Key).ToHashSet();
@@ -485,25 +494,30 @@ public static class PickUpTargetRunner
         var latest = new Dictionary<FormKey, bool>();
         foreach (var mod in mods)
         {
+            // v0.55.2: see CollectHiddenMagicEffects's remarks -- SkippedFields
+            // (not SkippedPlugins) reflects that a single record's NonPlayable
+            // flag failing to read only leaves that record out of `latest`
+            // (defaulting to "playable"), it does not stop this plugin's
+            // remaining candidates from being processed.
             SafeForEach(mod.EnumerateMajorRecords<IArmorGetter>(),
                 armor => latest[armor.FormKey] = armor.MajorFlags.HasFlag(Armor.MajorFlag.NonPlayable),
                 ex =>
                 {
-                    issues.SkippedPlugins++;
+                    issues.SkippedFields++;
                     issues.AffectedPlugins.Add(mod.ModKey.FileName);
-                    log.Detail("除外: ARMOのNonPlayable判定の列挙が途中で壊れた（この先はプラグインを問わず継続）", "Excluded: ARMO NonPlayable scan broke partway through this plugin (continuing with the next plugin)",
+                    log.Detail("除外: ARMOのNonPlayable判定が読めなかった（該当レコードは非playable扱いにせず処理を継続）", "Excluded: could not read an ARMO's NonPlayable flag (that record is treated as playable; processing continues)",
                         $"{mod.ModKey.FileName} — {ex.Message}");
-                    trace?.Warning($"CollectNonPlayableGear (ARMO) enumeration failed for '{mod.ModKey.FileName}': {ex.Message}");
+                    trace?.Warning($"CollectNonPlayableGear (ARMO): could not read NonPlayable for a record in '{mod.ModKey.FileName}': {ex.Message}");
                 });
             SafeForEach(mod.EnumerateMajorRecords<IWeaponGetter>(),
                 weapon => latest[weapon.FormKey] = weapon.MajorFlags.HasFlag(Weapon.MajorFlag.NonPlayable),
                 ex =>
                 {
-                    issues.SkippedPlugins++;
+                    issues.SkippedFields++;
                     issues.AffectedPlugins.Add(mod.ModKey.FileName);
-                    log.Detail("除外: WEAPのNonPlayable判定の列挙が途中で壊れた（この先はプラグインを問わず継続）", "Excluded: WEAP NonPlayable scan broke partway through this plugin (continuing with the next plugin)",
+                    log.Detail("除外: WEAPのNonPlayable判定が読めなかった（該当レコードは非playable扱いにせず処理を継続）", "Excluded: could not read a WEAP's NonPlayable flag (that record is treated as playable; processing continues)",
                         $"{mod.ModKey.FileName} — {ex.Message}");
-                    trace?.Warning($"CollectNonPlayableGear (WEAP) enumeration failed for '{mod.ModKey.FileName}': {ex.Message}");
+                    trace?.Warning($"CollectNonPlayableGear (WEAP): could not read NonPlayable for a record in '{mod.ModKey.FileName}': {ex.Message}");
                 });
         }
         return latest.Where(kv => kv.Value).Select(kv => kv.Key).ToHashSet();
@@ -535,9 +549,9 @@ public static class PickUpTargetRunner
                 {
                     issues.ContextExtractionFailures++;
                     issues.AffectedPlugins.Add(mod.ModKey.FileName);
-                    log.Detail("文脈抽出のみ失敗: RACE名の列挙が途中で壊れた（候補・翻訳への影響なし）", "Context extraction only failed: RACE name scan broke partway through this plugin (no effect on candidates or translation)",
+                    log.Detail("文脈抽出のみ失敗: RACE名が読めなかった（候補・翻訳への影響なし）", "Context extraction only failed: could not read a RACE name (no effect on candidates or translation)",
                         $"{mod.ModKey.FileName} — {ex.Message}");
-                    trace?.Warning($"CollectRaceNames enumeration failed for '{mod.ModKey.FileName}': {ex.Message}");
+                    trace?.Warning($"CollectRaceNames: could not read a RACE name in '{mod.ModKey.FileName}': {ex.Message}");
                 });
         }
         return names;
