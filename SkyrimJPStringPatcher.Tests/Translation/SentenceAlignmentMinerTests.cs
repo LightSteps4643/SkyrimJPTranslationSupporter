@@ -28,6 +28,11 @@ namespace SkyrimJPStringPatcher.Tests.Translation;
 ///   agrees -> rejected by the phonetic plausibility gate before the
 ///   witness step is even reached.
 /// </summary>
+/// <remarks>[Collection("TuningProfileSerial")]: Mine_PairBelowTheActiveProfilesMinCooccurrence_IsNeverConsidered
+/// temporarily mutates TuningProfile.Current (restored in a finally block),
+/// which CorpusTransliteratorTests also reads — serialized against each
+/// other so neither observes the other's profile mid-run.</remarks>
+[Collection("TuningProfileSerial")]
 public class SentenceAlignmentMinerTests
 {
     private static readonly IReadOnlyList<CorpusEntry> Corpus = CorpusIo.ReadTsv(
