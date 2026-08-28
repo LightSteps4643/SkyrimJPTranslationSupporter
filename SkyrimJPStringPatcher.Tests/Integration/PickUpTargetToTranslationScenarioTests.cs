@@ -538,4 +538,78 @@ public class PickUpTargetToTranslationScenarioTests
             try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
         }
     }
+
+    private static string BuildMeaningTranslitMo2Instance(string root)
+    {
+        var mo2Dir = Path.Combine(root, "mo2");
+        var sourceDir = Path.Combine(mo2Dir, "mods", "SourceFolder");
+        var sourceStringsDir = Path.Combine(sourceDir, "Strings");
+        var targetDir = Path.Combine(mo2Dir, "mods", "TargetFolder");
+        var profileDir = Path.Combine(mo2Dir, "profiles", "Default");
+        Directory.CreateDirectory(sourceStringsDir);
+        Directory.CreateDirectory(targetDir);
+        Directory.CreateDirectory(profileDir);
+
+        var fixturesDir = Path.Combine(AppContext.BaseDirectory, "Fixtures", "Integration");
+        File.Copy(Path.Combine(fixturesDir, "SjptsMeaningSource", "SjptsMeaningSource.esp"), Path.Combine(sourceDir, "SjptsMeaningSource.esp"));
+        foreach (var file in Directory.EnumerateFiles(Path.Combine(fixturesDir, "SjptsMeaningSource", "Strings")))
+            File.Copy(file, Path.Combine(sourceStringsDir, Path.GetFileName(file)));
+        File.Copy(Path.Combine(fixturesDir, "SjptsMeaningTarget", "SjptsMeaningTarget.esp"), Path.Combine(targetDir, "SjptsMeaningTarget.esp"));
+
+        File.WriteAllText(Path.Combine(mo2Dir, "ModOrganizer.ini"),
+            "[General]\r\n" +
+            $"gamePath=@ByteArray({Path.Combine(root, "nonexistent_game")})\r\n" +
+            "selected_profile=@ByteArray(Default)\r\n");
+        File.WriteAllText(Path.Combine(profileDir, "modlist.txt"), "+TargetFolder\r\n+SourceFolder\r\n");
+        File.WriteAllText(Path.Combine(profileDir, "plugins.txt"), "*SjptsMeaningSource.esp\r\n*SjptsMeaningTarget.esp\r\n");
+
+        return mo2Dir;
+    }
+
+    /// <summary>⑨ 意味合成/音訳分解で解決できる実候補。コーパスはテスト用に
+    /// 直接注入するのではなく、実際にPickUpTargetを実行することで実Mutagen
+    /// レコードから収穫される（ユーザー確認済み——実際の動作に近い、価値の
+    /// 高いテスト）。
+    /// Fixtures/Integration/SjptsMeaningSource.esp: バニラ相当のローカライズ
+    /// 済みMOD。Blade/Buckleの2つのHEADに共通する3つのmodifier（Glimmeroot/
+    /// Ashfall/Windrose）＋Ringという別HEADに3つの異なるmodifierを持たせ、
+    /// CorpusMeaningTranslatorの学習閾値（MinHeadSupport=3・MinModifierHeads=2）
+    /// を満たす。音訳分解用に独立した2単語（Nemra/Skol）も追加。
+    /// Fixtures/Integration/SjptsMeaningTarget.esp: 無関係な非ローカライズMOD。
+    /// "Glimmeroot Ring"（新しいmodifier+head組み合わせ、コーパスに無い）と
+    /// "Nemraskol"（未知の複合語だが構成要素が既知）を持つ。
+    /// 実施イメージ: バニラ本体に「Steel Sword→鋼の剣」等、複数の対訳が存在し、
+    /// 別MODの「Steel Mace」（コーパスに無い新組み合わせ）が意味合成で自動解決
+    /// される。</summary>
+    [Fact]
+    public void MeaningCompositionAndTransliterationDecomposition_ResolveRealCandidatesFromHarvestedCorpus()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_scenario_meaningtranslit_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var mo2Dir = BuildMeaningTranslitMo2Instance(root);
+            var (pickUpTargetResult, translations, _) = RunPickUpTargetThenTranslation(mo2Dir, root, "SjptsMeaningTarget.esp");
+
+            // The corpus was genuinely harvested from the source mod's own
+            // bilingual fields, not injected -- confirms the ③-style harvest
+            // mechanism actually produced enough precedent pairs.
+            Assert.Contains(pickUpTargetResult.Corpus, e => e.English == "Glimmeroot Blade" && e.Japanese == "きらめきの刃");
+            Assert.Contains(pickUpTargetResult.Corpus, e => e.English == "Nemra" && e.Japanese == "ネムラ");
+
+            Assert.True(translations.ContainsKey("Glimmeroot Ring"));
+            var (meaningJapanese, meaningNotes) = translations["Glimmeroot Ring"];
+            Assert.Equal("きらめきの指輪", meaningJapanese);
+            Assert.Equal("AutoCorpusMeaning", meaningNotes);
+
+            Assert.True(translations.ContainsKey("Nemraskol"));
+            var (translitJapanese, translitNotes) = translations["Nemraskol"];
+            Assert.Equal("ネムラスコル", translitJapanese);
+            Assert.Equal("AutoCorpusTransliterate", translitNotes);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
 }
