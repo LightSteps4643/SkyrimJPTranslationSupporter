@@ -59,7 +59,8 @@ public class PickUpTargetToTranslationScenarioTests
     /// into PromptGenerator.RunOne exactly as-is — no shortcuts that would let
     /// a real serialization-boundary bug slip past.</summary>
     private static (PickUpTargetResult PickUpTargetResult, Dictionary<string, (string Japanese, string Notes)> Translations, string PromptText) RunPickUpTargetThenTranslation(
-        string mo2Dir, string root, string targetPlugin, bool includeStale = false, bool discardUserEdits = false, TranslationStageOptions? stageOptions = null)
+        string mo2Dir, string root, string targetPlugin, bool includeStale = false, bool discardUserEdits = false, TranslationStageOptions? stageOptions = null,
+        (string Plugin, string RecordType, string Source, string Dest)[]? xTranslatorImports = null)
     {
         var pickUpTargetOutDir = Path.Combine(root, "PickUpTarget", "out_temp");
         Directory.CreateDirectory(pickUpTargetOutDir);
@@ -74,7 +75,18 @@ public class PickUpTargetToTranslationScenarioTests
         CorpusIo.WriteTsv(corpusTsvPath, pickUpTargetResult.Corpus);
 
         var translationOutDir = Path.Combine(root, "Translation", "out_temp");
-        var importDir = Path.Combine(root, "Translation", "import"); // deliberately not created -> "no import" (XTranslatorImporter tolerates this)
+        var importDir = Path.Combine(root, "Translation", "import"); // deliberately not created unless xTranslatorImports is given -> "no import" (XTranslatorImporter tolerates this)
+        if (xTranslatorImports is { Length: > 0 })
+        {
+            Directory.CreateDirectory(importDir);
+            foreach (var group in xTranslatorImports.GroupBy(e => e.Plugin))
+            {
+                var strings = string.Join("\n", group.Select(e =>
+                    $"    <String>\n      <REC>{e.RecordType.Replace(' ', ':')}</REC>\n      <Source>{e.Source}</Source>\n      <Dest>{e.Dest}</Dest>\n    </String>"));
+                var xml = $"<SSTXMLRessources>\n  <Params>\n    <Addon>{group.Key}</Addon>\n  </Params>\n  <Content>\n{strings}\n  </Content>\n</SSTXMLRessources>";
+                File.WriteAllText(Path.Combine(importDir, $"{PluginFolderName(group.Key)}.xml"), xml);
+            }
+        }
         using (var translationLog = RunLog.Open(Path.Combine(root, "Translation"), "Translation"))
         {
             PromptGenerator.RunOne(candidatesTsvPath, corpusTsvPath, importDir, targetPlugin, translationOutDir, translationLog,
@@ -336,6 +348,65 @@ public class PickUpTargetToTranslationScenarioTests
             var (japanese, notes) = translations["Sjpts Ornate Blade"];
             Assert.Equal("装飾の刃", japanese);
             Assert.StartsWith("AutoCorpus", notes);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>⑥ xTranslatorインポート済み文字列が実候補を完全一致で自動解決する。
+    /// 実施イメージ: 翻訳者が手作業でxTranslatorを使い、あるMODの候補をまとめて
+    /// 訳し、その結果をXMLとして`Translation/import/`に配置した。GUIから見ても
+    /// CLIオプションではなくファイル配置だけで機能するため、到達可能な操作。
+    /// "Bronze Blade"（`StaleTest.esp`、DSDカバーなし、①の4条件を満たす）を対象に、
+    /// 全く同じ英語テキストのxTranslator XMLを用意する。</summary>
+    [Fact]
+    public void XTranslatorImportedTranslation_ResolvesTheMatchingRealCandidate()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_scenario_xtimport_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var mo2Dir = BuildFakeMo2Instance(root);
+            var (_, translations, _) = RunPickUpTargetThenTranslation(mo2Dir, root, "StaleTest.esp",
+                xTranslatorImports: [("StaleTest.esp", "WEAP FULL", "Bronze Blade", "青銅の刃")]);
+
+            Assert.True(translations.ContainsKey("Bronze Blade"));
+            var (japanese, notes) = translations["Bronze Blade"];
+            Assert.Equal("青銅の刃", japanese);
+            Assert.Equal("AutoCorpusImported", notes);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>⑥の裏付け: xTranslatorインポートに、既にDSD/他MODで日本語化済みの
+    /// レコードと同じ英語テキストのエントリが（古い/紛れ込んだ等の理由で）存在
+    /// していても、そのレコードは翻訳対象として復活しない。除外判定は
+    /// PickUpTarget段階（インポートを一切読む前）で完結しているため、インポート
+    /// データの存在に影響されないことを確認する頑健性のテスト。
+    /// 実施イメージ: 昔作ったxTranslator訳のXMLをそのまま`Translation/import/`に
+    /// 置き続けているが、その後そのMODの一部が公式に翻訳されたDSDパッチに置き
+    /// 換わった。古いインポートファイルを消し忘れていても、既にカバー済みの
+    /// レコードが二重に翻訳対象へ復活してはいけない。</summary>
+    [Fact]
+    public void XTranslatorImportForAnAlreadyDsdCoveredRecord_DoesNotResurrectItAsACandidate()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_scenario_xtimport_stale_import_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var mo2Dir = BuildFakeMo2Instance(root);
+            // "Iron Blade Updated" is already covered by the existing DSD patch
+            // (scenario ④) -- an xTranslator entry for the exact same text is a
+            // leftover/stray import that must have no effect on it.
+            var (_, translations, _) = RunPickUpTargetThenTranslation(mo2Dir, root, "StaleTest.esp",
+                xTranslatorImports: [("StaleTest.esp", "WEAP FULL", "Iron Blade Updated", "紛れ込んだ古いインポート訳")]);
+
+            Assert.False(translations.ContainsKey("Iron Blade Updated"));
         }
         finally
         {
