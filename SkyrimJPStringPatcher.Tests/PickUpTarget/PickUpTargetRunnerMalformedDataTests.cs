@@ -100,4 +100,67 @@ public class PickUpTargetRunnerMalformedDataTests
             try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
         }
     }
+
+    /// <summary>A DIFFERENT failure point from the test above: the whole
+    /// plugin fails to OPEN at all (OpenMods' own try/catch, PickUpTargetRunner.cs
+    /// ~line 204-218) — e.g. a file that isn't valid Mutagen binary data in the
+    /// first place, as opposed to a structurally-valid ESP with one corrupted
+    /// field. Coverage showed this catch block was never exercised. A garbage
+    /// text file with a ".esp" extension is enough to trigger Mutagen's own
+    /// parse failure — no byte-flipping trick needed, unlike the PERK case
+    /// above (which specifically needed a STRUCTURALLY VALID file with one
+    /// deliberately-wrong flag).</summary>
+    [Fact]
+    public void Run_PluginFailsToOpenEntirely_SkipsOnlyThatPlugin_OtherPluginsStillProcessed()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_openfail_{Guid.NewGuid():N}");
+        var mo2Dir = Path.Combine(root, "mo2");
+        var goodModDir = Path.Combine(mo2Dir, "mods", "GoodMod");
+        var badModDir = Path.Combine(mo2Dir, "mods", "BadMod");
+        var profileDir = Path.Combine(mo2Dir, "profiles", "Default");
+        Directory.CreateDirectory(goodModDir);
+        Directory.CreateDirectory(badModDir);
+        Directory.CreateDirectory(profileDir);
+        try
+        {
+            File.Copy(
+                Path.Combine(AppContext.BaseDirectory, "Fixtures", "PickUpTarget", "StaleTest.esp"),
+                Path.Combine(goodModDir, "StaleTest.esp"));
+            File.WriteAllText(Path.Combine(badModDir, "BadMod.esp"), "this is not a valid Mutagen ESP binary file at all");
+
+            File.WriteAllText(Path.Combine(mo2Dir, "ModOrganizer.ini"),
+                "[General]\r\n" +
+                $"gamePath=@ByteArray({Path.Combine(root, "nonexistent_game")})\r\n" +
+                "selected_profile=@ByteArray(Default)\r\n");
+            File.WriteAllText(Path.Combine(profileDir, "modlist.txt"), "+GoodMod\r\n+BadMod\r\n");
+            File.WriteAllText(Path.Combine(profileDir, "plugins.txt"), "*StaleTest.esp\r\n*BadMod.esp\r\n");
+
+            using var log = RunLog.Open(Path.Combine(root, "PickUpTarget"), "PickUpTarget");
+
+            var originalOut = Console.Out;
+            var capturedOut = new StringWriter();
+            Console.SetOut(capturedOut);
+            PickUpTargetResult result;
+            try
+            {
+                result = PickUpTargetRunner.Run(mo2Dir, log);
+            }
+            finally
+            {
+                Console.SetOut(originalOut);
+            }
+            var stdout = capturedOut.ToString();
+
+            // GoodMod's own candidates must still appear — one broken plugin
+            // must never take down the whole run.
+            Assert.Contains(result.Candidates, c => c.CurrentText == "Bronze Blade");
+
+            Assert.Contains("##SJPTS_ISSUES## plugins=1 fields=0 fail_open=0 context_only=0", stdout);
+            Assert.Contains("##SJPTS_ISSUES_PLUGINS## BadMod.esp", stdout);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
 }
