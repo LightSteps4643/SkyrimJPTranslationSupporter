@@ -672,27 +672,20 @@ public class PickUpTargetToTranslationScenarioTests
         }
     }
 
-    /// <summary>KNOWN BUG found while writing Integration scenario ⑪
-    /// (2026-08-28, not yet fixed — see DESIGN_NOTES.md): the GUI's
-    /// "MO2再読込＆初期化" button (MainForm.cs's BtnReloadMo2_Click) is
-    /// documented, in both its own code comment and its user-facing
-    /// confirmation dialog, as a destructive full reset — "全プラグインの
-    /// 翻訳結果（手動での編集・生成AI/ローカルLLMでの翻訳結果を含む）をすべて
-    /// 消去し、初期状態に戻します。元に戻せません。" (confirmed as the intended
-    /// requirement with the user: ②意味合成/③音訳分解/④簡易名前解決の結果も
-    /// 人力翻訳も含め、全てリセットされるべき). But the actual argv it sends —
-    /// {"translation", ..., "--all", "--no-meaning", "--no-translit",
-    /// "--no-namefallback"} — is missing "--discard-user-edits", so
-    /// WritePluginFilesWithDir's ReadExistingTranslations still preserves
-    /// every already-resolved row (any method, including a costly ⑤/⑥ call or
-    /// a human's ModifiedByUser edit) instead of resetting it.
-    /// Confirmed by resolving "Bronze Blade" via an xTranslator import on
-    /// round 1, then deleting that import before round 2 (re-running with the
-    /// exact button's own argv shape) — if the row were correctly reset, round
-    /// 2 would have no way to re-resolve it (no corpus/import source left) and
-    /// Japanese would end up blank; instead it stays "青銅の剣", proving
-    /// preservation where a full reset was intended.</summary>
-    [Fact(Skip = "Known bug: the GUI's \"MO2再読込＆初期化\" button omits --discard-user-edits from its translation argv, so it silently preserves already-resolved rows instead of resetting them as its own confirmation dialog promises — see DESIGN_NOTES.md's scenario ⑪ entry")]
+    /// <summary>v0.55.2で修正済み: GUIの「MO2再読込＆初期化」ボタン
+    /// (MainForm.csのBtnReloadMo2_Click)は、コードコメント・確認ダイアログの
+    /// 両方で「全プラグインの翻訳結果（手動での編集・生成AI/ローカルLLMでの
+    /// 翻訳結果を含む）をすべて消去し、初期状態に戻します。元に戻せません。」
+    /// という破壊的な全リセットを約束している。修正前はこのボタンが送る引数
+    /// （{"translation", ..., "--all", "--no-meaning", "--no-translit",
+    /// "--no-namefallback"}）に"--discard-user-edits"が欠けており、
+    /// WritePluginFilesWithDirのReadExistingTranslationsが既存の解決済み行を
+    /// （手法を問わず）保持してしまい、ダイアログの約束に反していた（既知バグ、
+    /// 2026-08-28発見。DESIGN_NOTES.mdのIntegrationシナリオ⑪参照）。
+    /// "Bronze Blade"をxTranslatorインポートで解決した後、インポート元を削除
+    /// した状態でこのボタンの引数のまま再実行——インポートが無いので再解決は
+    /// 不可能であり、正しくリセットされていれば空欄に戻るはず。</summary>
+    [Fact]
     public void ReloadMo2AndInitializeButtonArgvShape_ResetsAlreadyResolvedRows()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_scenario_reloadmo2_{Guid.NewGuid():N}");
@@ -708,12 +701,20 @@ public class PickUpTargetToTranslationScenarioTests
                 xTranslatorImports: [("StaleTest.esp", "WEAP FULL", "Bronze Blade", "青銅の剣")]);
             Assert.Equal(("青銅の剣", "AutoCorpusImported"), round1Translations["Bronze Blade"]);
 
-            // Round 2: re-run with the EXACT "MO2再読込＆初期化" argv shape
-            // (--all --no-meaning --no-translit --no-namefallback). The import
-            // is gone now, so re-resolution is impossible -- the button's own
-            // documented promise ("元に戻せません") means this row should come
-            // back BLANK, not preserved.
-            var (_, round2Translations, _) = RunPickUpTargetThenTranslation(mo2Dir, root, "StaleTest.esp", stageOptions: stageOptions);
+            // The xTranslator import XML written by round 1 must actually be
+            // gone before round 2 -- RunPickUpTargetThenTranslation's importDir
+            // is unconditionally re-read by XTranslatorImporter.Load on every
+            // call, so leaving the file in place would let round 2 re-resolve
+            // "Bronze Blade" via the import regardless of --discard-user-edits,
+            // which would test nothing about the reset behavior itself.
+            Directory.Delete(Path.Combine(root, "Translation", "import"), recursive: true);
+
+            // Round 2: re-run with the FIXED (v0.55.2) "MO2再読込＆初期化" argv
+            // shape (--all --no-meaning --no-translit --no-namefallback
+            // --discard-user-edits). The import is gone now, so re-resolution
+            // is impossible -- the button's own documented promise
+            // ("元に戻せません") means this row should come back BLANK.
+            var (_, round2Translations, _) = RunPickUpTargetThenTranslation(mo2Dir, root, "StaleTest.esp", stageOptions: stageOptions, discardUserEdits: true);
 
             var (japanese, _) = round2Translations["Bronze Blade"];
             Assert.Equal("", japanese);
