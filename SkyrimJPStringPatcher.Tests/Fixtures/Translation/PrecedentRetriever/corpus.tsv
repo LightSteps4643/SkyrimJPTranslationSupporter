@@ -1,0 +1,11 @@
+English	Japanese	Source	SourceKind	DsdType
+Frostbound Giant	氷結の巨人	ModA.esp	vanilla	MISC FULL
+Frostbound Wolf	氷結の狼	ModA.esp	vanilla	MISC FULL
+Relic Ancient Boots	遺物の古いブーツ	ModA.esp	vanilla	ARMO FULL
+Relic Ancient Journal	遺物の古い日記	ModA.esp	vanilla	BOOK FULL
+Gilded Elven Sword	金の施されたエルフの剣	ModA.esp	vanilla	WEAP FULL
+Gilded Elven Description	金の施されたエルフの説明	ModA.esp	vanilla	WEAP DESC
+Gilded Elven Ring	金の施されたエルフの指輪	ModA.esp	vanilla	ARMO FULL
+Tempered Iron Axe	鍛えられた鉄の斧	OtherMod.esp	vanilla	MISC FULL
+Tempered Iron Lockpick	鍛えられた鉄の鍵開け具	CandidateMod.esp	vanilla	WEAP FULL
+goblin internal note text for testing	内部ゴブリンテストノート	ModA.esp	vanilla	FACT DATA
