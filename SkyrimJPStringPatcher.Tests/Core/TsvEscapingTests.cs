@@ -4,9 +4,13 @@ namespace SkyrimJPStringPatcher.Tests.Core;
 
 /// <summary>
 /// TsvEscaping is the single Escape/Unescape pair every TSV writer/reader in the
-/// pipeline shares (consolidated in v0.46.1 from 6 independent copies). A wrong
-/// or drifted escaping here corrupts TSV structure silently — real data has hit
-/// this with multi-paragraph BOOK DESC text carrying embedded tabs/newlines.
+/// CLI/Core pipeline shares (consolidated in v0.46.1 from 6 independent copies).
+/// A wrong or drifted escaping here corrupts TSV structure silently — real data
+/// has hit this with multi-paragraph BOOK DESC text carrying embedded
+/// tabs/newlines. Note: the GUI project (which has no reference to Core, by
+/// design) keeps its own small duplicate of this exact logic in two places —
+/// MainForm.cs and TranslationDetailForm.cs — so the v0.55.4 fix below had to be
+/// mirrored there too; see those files' own comments.
 /// </summary>
 public class TsvEscapingTests
 {
@@ -84,21 +88,59 @@ public class TsvEscapingTests
         Assert.Equal(original, roundTripped);
     }
 
-    /// <summary>KNOWN BUG (found 2026-08-28, not yet fixed — see DESIGN_NOTES.md):
-    /// a literal backslash immediately followed by a literal 'n' or 't' does not
-    /// survive the round trip. Escape() doubles the backslash; Unescape() then
-    /// runs its "\n"/"\t" replacements BEFORE its "\\" replacement, so the
-    /// second half of the doubled backslash pair accidentally combines with the
-    /// following literal 'n'/'t' into what looks like an escaped newline/tab.
-    /// Skipped (not deleted) so the suite stays honest about this gap instead of
-    /// silently pretending the round trip is safe — same convention as
-    /// Integration/PickUpTargetTranslationCrossModTests. Remove the Skip once
-    /// Unescape's replacement order (or an equivalent placeholder-based fix) is
-    /// corrected.</summary>
-    [Fact(Skip = "Known bug: backslash immediately followed by literal 'n'/'t' does not round-trip — see DESIGN_NOTES.md's TsvEscaping entry")]
+    /// <summary>v0.55.4で修正済み: 修正前は、literal backslash immediately followed
+    /// by a literal 'n' or 't' did not survive the round trip. Escape() doubles the
+    /// backslash; the old Unescape() ran its "\n"/"\t" replacements BEFORE its "\\"
+    /// replacement as three separate whole-string passes, so the second half of the
+    /// doubled backslash pair accidentally combined with the following literal
+    /// 'n'/'t' into what looked like an escaped newline/tab. Fixed by rewriting
+    /// Unescape as a single left-to-right scan that decides a backslash's meaning
+    /// by looking only at the ONE character immediately following it in the
+    /// original escaped text, then consumes both characters as a unit — so a
+    /// character already used to resolve one escape can never be reused as half of
+    /// a different one.</summary>
+    [Fact]
     public void Unescape_RoundTrips_BackslashFollowedByLiteralNOrT()
     {
         const string original = "path\\notes.txt";
+
+        var roundTripped = TsvEscaping.Unescape(TsvEscaping.Escape(original));
+
+        Assert.Equal(original, roundTripped);
+    }
+
+    /// <summary>Same failure class as above but with a literal 't' instead of 'n'
+    /// (the "\\t" pattern is checked before "\\\\" in the same broken order).</summary>
+    [Fact]
+    public void Unescape_RoundTrips_BackslashFollowedByLiteralT()
+    {
+        const string original = "C:\\temp\\test.txt";
+
+        var roundTripped = TsvEscaping.Unescape(TsvEscaping.Escape(original));
+
+        Assert.Equal(original, roundTripped);
+    }
+
+    /// <summary>Multiple consecutive backslashes (not just a pair) immediately
+    /// followed by a literal 'n'/'t' -- confirms the fix consumes doubled-backslash
+    /// pairs two-at-a-time from the left rather than leaving an odd one dangling
+    /// into the next character.</summary>
+    [Fact]
+    public void Unescape_RoundTrips_MultipleConsecutiveBackslashesFollowedByLiteralN()
+    {
+        const string original = "a\\\\\\nb"; // a, three backslashes, n, b
+
+        var roundTripped = TsvEscaping.Unescape(TsvEscaping.Escape(original));
+
+        Assert.Equal(original, roundTripped);
+    }
+
+    /// <summary>A trailing backslash with nothing after it -- the "look at the next
+    /// character" decision must not run off the end of the string.</summary>
+    [Fact]
+    public void Unescape_RoundTrips_TrailingBackslash()
+    {
+        const string original = "ends with a backslash\\";
 
         var roundTripped = TsvEscaping.Unescape(TsvEscaping.Escape(original));
 

@@ -697,8 +697,28 @@ public sealed class MainForm : Form
     }
 
     // Mirrors Core/TsvEscaping.cs's Unescape — see TranslationDetailForm's identical
-    // helper for why this is duplicated rather than referencing Core.
-    private static string Unescape(string s) => s.Replace("\\n", "\n").Replace("\\t", "\t").Replace("\\\\", "\\");
+    // helper for why this is duplicated rather than referencing Core. v0.55.4:
+    // rewritten to a single left-to-right scan — see Core/TsvEscaping.cs's
+    // remarks for why the old sequential-Replace version corrupted a literal
+    // backslash immediately followed by a literal 'n'/'t' (e.g. a Windows path).
+    private static string Unescape(string s)
+    {
+        var sb = new System.Text.StringBuilder(s.Length);
+        for (var i = 0; i < s.Length; i++)
+        {
+            if (s[i] == '\\' && i + 1 < s.Length)
+            {
+                switch (s[i + 1])
+                {
+                    case 'n': sb.Append('\n'); i++; continue;
+                    case 't': sb.Append('\t'); i++; continue;
+                    case '\\': sb.Append('\\'); i++; continue;
+                }
+            }
+            sb.Append(s[i]);
+        }
+        return sb.ToString();
+    }
 
     private void Grid_CellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
     {
