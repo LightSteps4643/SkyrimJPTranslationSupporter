@@ -1,0 +1,29 @@
+[
+  {
+    "editor_id": "sTestGmstCorrectEditorWrongForm",
+    "form_id": "000999|SpecialMatchingTest.esp",
+    "index": 0,
+    "type": "GMST DATA",
+    "original": "Correct Editor Match Setting",
+    "string": "正しいエディタ一致設定",
+    "status": "TranslationProposed"
+  },
+  {
+    "editor_id": "",
+    "form_id": "000801|SpecialMatchingTest.esp",
+    "index": 0,
+    "type": "GMST DATA",
+    "original": "Form Id Only Setting",
+    "string": "フォームIDのみの設定",
+    "status": "TranslationProposed"
+  },
+  {
+    "editor_id": "",
+    "form_id": "000802|SpecialMatchingTest.esp",
+    "index": 99999,
+    "type": "QUST CNAM",
+    "original": "First quest log message.",
+    "string": "最初のクエストログメッセージ。",
+    "status": "TranslationProposed"
+  }
+]
