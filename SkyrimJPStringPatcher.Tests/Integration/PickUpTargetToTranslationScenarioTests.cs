@@ -413,4 +413,66 @@ public class PickUpTargetToTranslationScenarioTests
             try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
         }
     }
+
+    private static string BuildGlossaryTargetMo2Instance(string root)
+    {
+        var mo2Dir = Path.Combine(root, "mo2");
+        var modDir = Path.Combine(mo2Dir, "mods", "TestMod");
+        var profileDir = Path.Combine(mo2Dir, "profiles", "Default");
+        Directory.CreateDirectory(modDir);
+        Directory.CreateDirectory(profileDir);
+
+        var fixturesDir = Path.Combine(AppContext.BaseDirectory, "Fixtures", "Integration");
+        File.Copy(Path.Combine(fixturesDir, "SjptsGlossaryTarget", "SjptsGlossaryTarget.esp"), Path.Combine(modDir, "SjptsGlossaryTarget.esp"));
+
+        File.WriteAllText(Path.Combine(mo2Dir, "ModOrganizer.ini"),
+            "[General]\r\n" +
+            $"gamePath=@ByteArray({Path.Combine(root, "nonexistent_game")})\r\n" +
+            "selected_profile=@ByteArray(Default)\r\n");
+        File.WriteAllText(Path.Combine(profileDir, "modlist.txt"), "+TestMod\r\n");
+        File.WriteAllText(Path.Combine(profileDir, "plugins.txt"), "*SjptsGlossaryTarget.esp\r\n");
+
+        return mo2Dir;
+    }
+
+    /// <summary>Overwrites (not merges) this plugin's mod-scoped glossary with
+    /// one filled row -- matches PromptGeneratorTests' own helper, so a test
+    /// can force ④NameFallbackTranslator resolution deterministically without
+    /// depending on ModGlossary.WriteTemplate's own merge/regeneration timing.</summary>
+    private static void SeedModGlossary(string plugin, string english, string japanese)
+    {
+        var path = Path.Combine(ModGlossary.DirectoryPath, Path.GetFileNameWithoutExtension(plugin) + ".tsv");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, $"{english}\t{japanese}\n");
+    }
+
+    /// <summary>⑦ MOD別グロッサリーが実候補の自動翻訳に反映される（④
+    /// NameFallbackTranslator経由）。②意味合成・③音訳分解は別項目⑨で扱う。
+    /// 実施イメージ: 独自造語が何度も出てくるMODの専用グロッサリーに訳語を
+    /// 記入し、対応する候補が解決される。
+    /// 今回新たに検証した差分: 同機能はPromptGeneratorTestsで合成candidates.tsv
+    /// 経由では検証済みだが、PickUpTarget由来の実Mutagenレコードからこの経路まで
+    /// 正しく流れ着くかは未検証だった。</summary>
+    [Fact]
+    public void ModScopedGlossary_ResolvesARealCandidateViaNameFallback()
+    {
+        const string plugin = "SjptsGlossaryTarget.esp";
+        SeedModGlossary(plugin, "Vrenn", "ヴレン");
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_scenario_modglossary_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var mo2Dir = BuildGlossaryTargetMo2Instance(root);
+            var (_, translations, _) = RunPickUpTargetThenTranslation(mo2Dir, root, plugin);
+
+            Assert.True(translations.ContainsKey("Vrenn"));
+            var (japanese, notes) = translations["Vrenn"];
+            Assert.Equal("ヴレン", japanese);
+            Assert.Equal("TranslationNameFallback", notes);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
 }
