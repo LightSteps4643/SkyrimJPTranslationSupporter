@@ -16,5 +16,35 @@ public static class TsvEscaping
 {
     public static string Escape(string s) => s.Replace("\\", "\\\\").Replace("\t", "\\t").Replace("\n", "\\n").Replace("\r", "");
 
-    public static string Unescape(string s) => s.Replace("\\n", "\n").Replace("\\t", "\t").Replace("\\\\", "\\");
+    /// <summary>v0.55.4: rewritten from three sequential whole-string Replace()
+    /// calls (\n, then \t, then \\) to a single left-to-right scan. The old
+    /// approach broke on a literal backslash immediately followed by a literal
+    /// 'n' or 't' (e.g. a Windows path like "path\notes.txt"): Escape() doubles
+    /// every backslash, and the old Unescape ran its "\n"/"\t" replacements
+    /// BEFORE its "\\" replacement, so the second half of a doubled-backslash
+    /// pair would accidentally combine with an unrelated following literal 'n'/
+    /// 't' into what looked like an escaped newline/tab — corrupting the field.
+    /// This scan instead decides what a backslash means by looking at ONLY the
+    /// single character immediately following it in the escaped text, then
+    /// consumes both characters together as a unit and advances past them — so
+    /// a character already used to resolve one escape can never be reused as
+    /// half of a different one.</summary>
+    public static string Unescape(string s)
+    {
+        var sb = new System.Text.StringBuilder(s.Length);
+        for (var i = 0; i < s.Length; i++)
+        {
+            if (s[i] == '\\' && i + 1 < s.Length)
+            {
+                switch (s[i + 1])
+                {
+                    case 'n': sb.Append('\n'); i++; continue;
+                    case 't': sb.Append('\t'); i++; continue;
+                    case '\\': sb.Append('\\'); i++; continue;
+                }
+            }
+            sb.Append(s[i]);
+        }
+        return sb.ToString();
+    }
 }
