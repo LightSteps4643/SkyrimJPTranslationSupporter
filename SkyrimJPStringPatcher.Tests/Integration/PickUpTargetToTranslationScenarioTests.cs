@@ -612,4 +612,63 @@ public class PickUpTargetToTranslationScenarioTests
             try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
         }
     }
+
+    private static string BuildUnresolvableTargetMo2Instance(string root)
+    {
+        var mo2Dir = Path.Combine(root, "mo2");
+        var modDir = Path.Combine(mo2Dir, "mods", "TestMod");
+        var profileDir = Path.Combine(mo2Dir, "profiles", "Default");
+        Directory.CreateDirectory(modDir);
+        Directory.CreateDirectory(profileDir);
+
+        var fixturesDir = Path.Combine(AppContext.BaseDirectory, "Fixtures", "Integration");
+        File.Copy(Path.Combine(fixturesDir, "SjptsUnresolvableTarget", "SjptsUnresolvableTarget.esp"), Path.Combine(modDir, "SjptsUnresolvableTarget.esp"));
+
+        File.WriteAllText(Path.Combine(mo2Dir, "ModOrganizer.ini"),
+            "[General]\r\n" +
+            $"gamePath=@ByteArray({Path.Combine(root, "nonexistent_game")})\r\n" +
+            "selected_profile=@ByteArray(Default)\r\n");
+        File.WriteAllText(Path.Combine(profileDir, "modlist.txt"), "+TestMod\r\n");
+        File.WriteAllText(Path.Combine(profileDir, "plugins.txt"), "*SjptsUnresolvableTarget.esp\r\n");
+
+        return mo2Dir;
+    }
+
+    /// <summary>⑩ どの自動手法でも解決できない実候補が、未解決のまま`prompt.txt`
+    /// に正しく列挙される。①とは目的が異なる別テスト——①は「候補になること」
+    /// 自体、⑩は「解決手段が尽きたときの受け皿（prompt.txt）が正しく機能する
+    /// こと」を検証する。
+    /// 実施イメージ: 完全に新規の造語（そのMOD作者の独自ネーミング）で、
+    /// コーパスにもグロッサリーにも手がかりが一切ない候補。
+    /// 当初①の"Bronze Blade"を再利用しようとしたが、実データ
+    /// （Data/name_glossary.tsv等、BuildContextが無条件でマージする）経由で
+    /// 偶然「青銅の刀剣」に自動解決されてしまうことが判明——PromptGeneratorTests
+    /// が警告していた「実在しそうな武器名は実データと衝突しうる」リスクが
+    /// 実際に顕在化した例。①の目的には影響しないが⑩には不適切なため、明確に
+    /// 架空の語（Sjpts Quorvenith Blazrukk）を使った専用フィクスチャに
+    /// 差し替えた。</summary>
+    [Fact]
+    public void CandidateUnresolvableByAnyAutomaticMethod_StaysUnresolved_AndIsListedInThePrompt()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_scenario_unresolved_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var mo2Dir = BuildUnresolvableTargetMo2Instance(root);
+            var (_, translations, promptText) = RunPickUpTargetThenTranslation(mo2Dir, root, "SjptsUnresolvableTarget.esp");
+
+            const string text = "Sjpts Quorvenith Blazrukk";
+            Assert.True(translations.ContainsKey(text));
+            var (japanese, notes) = translations[text];
+            Assert.Equal("", japanese);
+            Assert.Equal("", notes);
+
+            Assert.Contains($"Target: \"{text}\"", promptText);
+            Assert.Contains("Type:", promptText);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
 }
