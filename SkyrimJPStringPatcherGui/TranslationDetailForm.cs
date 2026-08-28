@@ -354,8 +354,28 @@ public sealed class TranslationDetailForm : Form
 
     // Mirrors Core/TsvEscaping.cs's Escape/Unescape exactly — GUI has no reference
     // to Core, so this is a small deliberate duplication of two pure string
-    // functions, not a copy of pipeline logic.
-    private static string Unescape(string s) => s.Replace("\\n", "\n").Replace("\\t", "\t").Replace("\\\\", "\\");
+    // functions, not a copy of pipeline logic. v0.55.4: Unescape rewritten to a
+    // single left-to-right scan — see Core/TsvEscaping.cs's remarks for why the
+    // old sequential-Replace version corrupted a literal backslash immediately
+    // followed by a literal 'n'/'t' (e.g. a Windows path).
+    private static string Unescape(string s)
+    {
+        var sb = new System.Text.StringBuilder(s.Length);
+        for (var i = 0; i < s.Length; i++)
+        {
+            if (s[i] == '\\' && i + 1 < s.Length)
+            {
+                switch (s[i + 1])
+                {
+                    case 'n': sb.Append('\n'); i++; continue;
+                    case 't': sb.Append('\t'); i++; continue;
+                    case '\\': sb.Append('\\'); i++; continue;
+                }
+            }
+            sb.Append(s[i]);
+        }
+        return sb.ToString();
+    }
     private static string Escape(string s) => s.Replace("\\", "\\\\").Replace("\t", "\\t").Replace("\n", "\\n").Replace("\r", "");
 
     private void ApplyFilter()
