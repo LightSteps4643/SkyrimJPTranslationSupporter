@@ -877,7 +877,12 @@ public sealed class MainForm : Form
             // state — this is a baseline refresh (e.g. after collecting more
             // xTranslator files), not a preview of what "翻訳実行" would currently
             // do with the checked options.
-            if (!await RunCliAsync(new[] { "translation", "PickUpTarget/out_temp", "Translation/out_temp", "--all", "--no-meaning", "--no-translit", "--no-namefallback" })) return;
+            // v0.55.2: --discard-user-edits was missing here, so this button
+            // silently PRESERVED every already-resolved row instead of the full
+            // reset its own confirmation dialog/comment promises ("初期状態に
+            // 戻します。元に戻せません。") — see DESIGN_NOTES.md's Integration
+            // scenario ⑪ entry for how this was found and confirmed.
+            if (!await RunCliAsync(new[] { "translation", "PickUpTarget/out_temp", "Translation/out_temp", "--all", "--no-meaning", "--no-translit", "--no-namefallback", "--discard-user-edits" })) return;
             LoadData();
         }
         finally
