@@ -17,6 +17,11 @@ namespace SkyrimJPStringPatcher.Tests.Translation;
 /// and "Fall"→"フォール", each a single katakana block attested verbatim —
 /// textbook Pass 0 seed entries.
 /// </summary>
+/// <remarks>[Collection("TuningProfileSerial")]: reads TuningProfile.Current
+/// (MaxIterations) internally, and SentenceAlignmentMinerTests temporarily
+/// mutates that same global static state — serialized against each other so
+/// neither can observe the other's profile mid-run.</remarks>
+[Collection("TuningProfileSerial")]
 public class CorpusTransliteratorTests
 {
     private static CorpusTransliterator BuildFromFixture()
