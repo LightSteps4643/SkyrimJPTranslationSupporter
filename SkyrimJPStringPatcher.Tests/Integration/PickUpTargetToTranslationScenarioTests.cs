@@ -671,4 +671,105 @@ public class PickUpTargetToTranslationScenarioTests
             try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
         }
     }
+
+    /// <summary>KNOWN BUG found while writing Integration scenario ⑪
+    /// (2026-08-28, not yet fixed — see DESIGN_NOTES.md): the GUI's
+    /// "MO2再読込＆初期化" button (MainForm.cs's BtnReloadMo2_Click) is
+    /// documented, in both its own code comment and its user-facing
+    /// confirmation dialog, as a destructive full reset — "全プラグインの
+    /// 翻訳結果（手動での編集・生成AI/ローカルLLMでの翻訳結果を含む）をすべて
+    /// 消去し、初期状態に戻します。元に戻せません。" (confirmed as the intended
+    /// requirement with the user: ②意味合成/③音訳分解/④簡易名前解決の結果も
+    /// 人力翻訳も含め、全てリセットされるべき). But the actual argv it sends —
+    /// {"translation", ..., "--all", "--no-meaning", "--no-translit",
+    /// "--no-namefallback"} — is missing "--discard-user-edits", so
+    /// WritePluginFilesWithDir's ReadExistingTranslations still preserves
+    /// every already-resolved row (any method, including a costly ⑤/⑥ call or
+    /// a human's ModifiedByUser edit) instead of resetting it.
+    /// Confirmed by resolving "Bronze Blade" via an xTranslator import on
+    /// round 1, then deleting that import before round 2 (re-running with the
+    /// exact button's own argv shape) — if the row were correctly reset, round
+    /// 2 would have no way to re-resolve it (no corpus/import source left) and
+    /// Japanese would end up blank; instead it stays "青銅の剣", proving
+    /// preservation where a full reset was intended.</summary>
+    [Fact(Skip = "Known bug: the GUI's \"MO2再読込＆初期化\" button omits --discard-user-edits from its translation argv, so it silently preserves already-resolved rows instead of resetting them as its own confirmation dialog promises — see DESIGN_NOTES.md's scenario ⑪ entry")]
+    public void ReloadMo2AndInitializeButtonArgvShape_ResetsAlreadyResolvedRows()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_scenario_reloadmo2_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var mo2Dir = BuildFakeMo2Instance(root);
+            var stageOptions = new TranslationStageOptions(EnableMeaning: false, EnableTransliteration: false, EnableNameFallback: false);
+
+            // Round 1: resolve "Bronze Blade" via xTranslator import (the ONLY
+            // source that can resolve it -- no corpus precedent otherwise).
+            var (_, round1Translations, _) = RunPickUpTargetThenTranslation(mo2Dir, root, "StaleTest.esp", stageOptions: stageOptions,
+                xTranslatorImports: [("StaleTest.esp", "WEAP FULL", "Bronze Blade", "青銅の剣")]);
+            Assert.Equal(("青銅の剣", "AutoCorpusImported"), round1Translations["Bronze Blade"]);
+
+            // Round 2: re-run with the EXACT "MO2再読込＆初期化" argv shape
+            // (--all --no-meaning --no-translit --no-namefallback). The import
+            // is gone now, so re-resolution is impossible -- the button's own
+            // documented promise ("元に戻せません") means this row should come
+            // back BLANK, not preserved.
+            var (_, round2Translations, _) = RunPickUpTargetThenTranslation(mo2Dir, root, "StaleTest.esp", stageOptions: stageOptions);
+
+            var (japanese, _) = round2Translations["Bronze Blade"];
+            Assert.Equal("", japanese);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>⑬ `--discard-user-edits`で全リセットされる。GUIの「翻訳状況を
+    /// 初期化」（ResetPlugin）／「選択プラグインを一括初期化」（BtnResetSelected_Click）
+    /// ボタンに対応する——両方とも`pickuptarget`の再スキャンは行わず、既存の
+    /// `candidates.tsv`のまま`translation ... --discard-user-edits`のみを呼ぶ
+    /// （⑪の"MO2再読込＆初期化"とは異なり、こちらは正しく`--discard-user-edits`
+    /// を付けている）。
+    /// ⑪と同じ手法（xTranslatorインポートで解決→インポート削除→再実行）で、
+    /// 今度は正しくリセットされることを確認する。</summary>
+    [Fact]
+    public void DiscardUserEditsArgvShape_ResetsAlreadyResolvedRows()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_scenario_discard_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var mo2Dir = BuildFakeMo2Instance(root);
+            var stageOptions = new TranslationStageOptions(EnableMeaning: false, EnableTransliteration: false, EnableNameFallback: false);
+
+            // Round 1: resolve "Bronze Blade" via xTranslator import (the ONLY
+            // source that can resolve it -- no corpus precedent otherwise).
+            var (_, round1Translations, _) = RunPickUpTargetThenTranslation(mo2Dir, root, "StaleTest.esp", stageOptions: stageOptions,
+                xTranslatorImports: [("StaleTest.esp", "WEAP FULL", "Bronze Blade", "青銅の剣")]);
+            Assert.Equal(("青銅の剣", "AutoCorpusImported"), round1Translations["Bronze Blade"]);
+
+            // Round 2: re-run with the EXACT "翻訳状況を初期化"/"選択プラグインを
+            // 一括初期化" argv shape (--no-meaning --no-translit --no-namefallback
+            // --discard-user-edits, NO pickuptarget re-scan -- these buttons reuse
+            // the existing candidates.tsv from the last scan). The import is gone
+            // now, so re-resolution is impossible; a correct reset must come back
+            // blank.
+            var pickUpTargetOutDir = Path.Combine(root, "PickUpTarget", "out_temp"); // already populated by round 1
+            var translationOutDir = Path.Combine(root, "Translation", "out_temp");
+            using (var log = RunLog.Open(Path.Combine(root, "Translation"), "Translation"))
+            {
+                PromptGenerator.RunOne(
+                    Path.Combine(pickUpTargetOutDir, "candidates.tsv"), Path.Combine(pickUpTargetOutDir, "corpus.tsv"),
+                    Path.Combine(root, "Translation", "import_now_empty"), "StaleTest.esp", translationOutDir, log,
+                    discardUserEdits: true, stageOptions: stageOptions);
+            }
+            var round2Translations = ReadTranslationsTemplate(Path.Combine(translationOutDir, "StaleTest", "translations.tsv"));
+
+            Assert.Equal("", round2Translations["Bronze Blade"].Japanese);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
 }
