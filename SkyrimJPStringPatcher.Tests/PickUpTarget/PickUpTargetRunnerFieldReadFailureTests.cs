@@ -66,19 +66,7 @@ public class PickUpTargetRunnerFieldReadFailureTests
             var mo2Dir = BuildFakeMo2Instance(root, "NameFullCorruptTest", "NameFullCorruptTest.esp");
             using var log = RunLog.Open(Path.Combine(root, "PickUpTarget"), "PickUpTarget");
 
-            var originalOut = Console.Out;
-            var capturedOut = new StringWriter();
-            Console.SetOut(capturedOut);
-            PickUpTargetResult result;
-            try
-            {
-                result = PickUpTargetRunner.Run(mo2Dir, log);
-            }
-            finally
-            {
-                Console.SetOut(originalOut);
-            }
-            var stdout = capturedOut.ToString();
+            var (result, stdout) = ConsoleCapture.Run(() => PickUpTargetRunner.Run(mo2Dir, log));
 
             Assert.DoesNotContain(result.Candidates, c => c.RecordType == "ARMO FULL");
 
@@ -113,19 +101,7 @@ public class PickUpTargetRunnerFieldReadFailureTests
             var mo2Dir = BuildFakeMo2Instance(root, "ExtraFieldCorruptTest", "ExtraFieldCorruptTest.esp");
             using var log = RunLog.Open(Path.Combine(root, "PickUpTarget"), "PickUpTarget");
 
-            var originalOut = Console.Out;
-            var capturedOut = new StringWriter();
-            Console.SetOut(capturedOut);
-            PickUpTargetResult result;
-            try
-            {
-                result = PickUpTargetRunner.Run(mo2Dir, log);
-            }
-            finally
-            {
-                Console.SetOut(originalOut);
-            }
-            var stdout = capturedOut.ToString();
+            var (result, stdout) = ConsoleCapture.Run(() => PickUpTargetRunner.Run(mo2Dir, log));
 
             // The record itself was fully processed -- Name/FULL had both
             // languages, so it correctly reached the corpus (proving ② and

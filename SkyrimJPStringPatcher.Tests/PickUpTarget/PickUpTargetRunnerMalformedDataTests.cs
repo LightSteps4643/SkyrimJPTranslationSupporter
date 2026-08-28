@@ -59,23 +59,11 @@ public class PickUpTargetRunnerMalformedDataTests
             var mo2Dir = BuildFakeMo2Instance(root);
             using var log = RunLog.Open(Path.Combine(root, "PickUpTarget"), "PickUpTarget");
 
-            var originalOut = Console.Out;
-            var capturedOut = new StringWriter();
-            Console.SetOut(capturedOut);
-            PickUpTargetResult result;
-            try
-            {
-                // The pre-fix behavior was an unhandled exception here, crashing
-                // the whole process. If a future change regresses SafeForEach or
-                // one of PickUpTargetRunner's per-step try/catch blocks, THIS is
-                // the line that starts throwing again.
-                result = PickUpTargetRunner.Run(mo2Dir, log);
-            }
-            finally
-            {
-                Console.SetOut(originalOut);
-            }
-            var stdout = capturedOut.ToString();
+            // The pre-fix behavior was an unhandled exception here, crashing
+            // the whole process. If a future change regresses SafeForEach or
+            // one of PickUpTargetRunner's per-step try/catch blocks, THIS is
+            // the call that starts throwing again.
+            var (result, stdout) = ConsoleCapture.Run(() => PickUpTargetRunner.Run(mo2Dir, log));
 
             // The record's Name/FULL field does not go through the malformed
             // Effects list at all, so it must survive as a normal candidate —
@@ -137,19 +125,7 @@ public class PickUpTargetRunnerMalformedDataTests
 
             using var log = RunLog.Open(Path.Combine(root, "PickUpTarget"), "PickUpTarget");
 
-            var originalOut = Console.Out;
-            var capturedOut = new StringWriter();
-            Console.SetOut(capturedOut);
-            PickUpTargetResult result;
-            try
-            {
-                result = PickUpTargetRunner.Run(mo2Dir, log);
-            }
-            finally
-            {
-                Console.SetOut(originalOut);
-            }
-            var stdout = capturedOut.ToString();
+            var (result, stdout) = ConsoleCapture.Run(() => PickUpTargetRunner.Run(mo2Dir, log));
 
             // GoodMod's own candidates must still appear — one broken plugin
             // must never take down the whole run.
