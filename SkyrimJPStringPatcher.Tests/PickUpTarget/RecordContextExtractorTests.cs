@@ -12,12 +12,14 @@ namespace SkyrimJPStringPatcher.Tests.PickUpTarget;
 /// translation QUALITY rather than corrupting data, but a regression here is
 /// otherwise invisible — nothing else downstream would catch it.
 ///
-/// Fixtures/PickUpTarget/RecordContextTest.esp bundles one record of each
-/// switch arm (2 armor slots/types, 2 weapon animation types, 2 NPCs
-/// male/female sharing one RACE, all 3 book Teaches arms, spell/power spell
-/// types, one magic effect) into a single plugin — built directly (not
-/// through PickUpTargetRunner/MO2), since this class only needs a Mutagen
-/// getter and a race-name lookup dictionary, both constructed by hand here.
+/// Fixtures/PickUpTarget/RecordContextTest.esp bundles one record of every
+/// switch arm this class has (3 armor types/slots, all 10 weapon animation
+/// types, 2 NPCs male/female sharing one RACE, all 3 book Teaches arms, all
+/// 7 spell types, all 5 magic schools) into a single plugin — built directly
+/// (not through PickUpTargetRunner/MO2), since this class only needs a
+/// Mutagen getter and a race-name lookup dictionary, both constructed by
+/// hand here. Extended 2026-08-28 (coverage-driven pass) from an initial
+/// smaller set that only exercised 1-2 arms per switch.
 /// </summary>
 public class RecordContextExtractorTests
 {
@@ -56,25 +58,35 @@ public class RecordContextExtractorTests
     }
 
     [Fact]
-    public void For_OneHandSword_ReportsOneHandedSword()
+    public void For_Clothing_ReportsClothingAccessory()
     {
         var mod = OpenFixture();
-        var weapon = mod.Weapons.Single(w => w.EditorID == "SjptsSword");
+        var armor = mod.Armors.Single(a => a.EditorID == "SjptsClothing");
 
-        var context = RecordContextExtractor.For(weapon, RaceNames(mod));
+        var context = RecordContextExtractor.For(armor, RaceNames(mod));
 
-        Assert.Equal("one-handed sword", context);
+        Assert.Contains("clothing/accessory", context);
     }
 
-    [Fact]
-    public void For_Bow_ReportsBow()
+    [Theory]
+    [InlineData("SjptsSword", "one-handed sword")]
+    [InlineData("SjptsBow", "bow")]
+    [InlineData("SjptsDagger", "dagger")]
+    [InlineData("SjptsOneHandAxe", "one-handed axe")]
+    [InlineData("SjptsMace", "one-handed mace")]
+    [InlineData("SjptsTwoHandSword", "two-handed sword")]
+    [InlineData("SjptsTwoHandAxe", "two-handed axe/warhammer")]
+    [InlineData("SjptsCrossbow", "crossbow")]
+    [InlineData("SjptsStaff", "staff")]
+    [InlineData("SjptsHandToHand", "hand-to-hand")]
+    public void For_Weapon_ReportsTheAnimationType(string editorId, string expectedContext)
     {
         var mod = OpenFixture();
-        var weapon = mod.Weapons.Single(w => w.EditorID == "SjptsBow");
+        var weapon = mod.Weapons.Single(w => w.EditorID == editorId);
 
         var context = RecordContextExtractor.For(weapon, RaceNames(mod));
 
-        Assert.Equal("bow", context);
+        Assert.Equal(expectedContext, context);
     }
 
     [Fact]
@@ -137,37 +149,38 @@ public class RecordContextExtractorTests
         Assert.Equal("", context);
     }
 
-    [Fact]
-    public void For_Spell_ReportsSpell()
+    [Theory]
+    [InlineData("SjptsSpell", "spell")]
+    [InlineData("SjptsPower", "power")]
+    [InlineData("SjptsLesserPower", "lesser power")]
+    [InlineData("SjptsAbility", "ability (passive)")]
+    [InlineData("SjptsDisease", "disease")]
+    [InlineData("SjptsPoison", "poison")]
+    [InlineData("SjptsVoice", "Shout effect")]
+    public void For_Spell_ReportsTheSpellType(string editorId, string expectedContext)
     {
         var mod = OpenFixture();
-        var spell = mod.Spells.Single(s => s.EditorID == "SjptsSpell");
+        var spell = mod.Spells.Single(s => s.EditorID == editorId);
 
         var context = RecordContextExtractor.For(spell, RaceNames(mod));
 
-        Assert.Equal("spell", context);
+        Assert.Equal(expectedContext, context);
     }
 
-    [Fact]
-    public void For_Power_ReportsPower()
+    [Theory]
+    [InlineData("SjptsMagicEffect", "Destruction magic")]
+    [InlineData("SjptsMagicEffectRestoration", "Restoration magic")]
+    [InlineData("SjptsMagicEffectConjuration", "Conjuration magic")]
+    [InlineData("SjptsMagicEffectIllusion", "Illusion magic")]
+    [InlineData("SjptsMagicEffectAlteration", "Alteration magic")]
+    public void For_MagicEffect_ReportsTheMagicSchool(string editorId, string expectedContext)
     {
         var mod = OpenFixture();
-        var power = mod.Spells.Single(s => s.EditorID == "SjptsPower");
-
-        var context = RecordContextExtractor.For(power, RaceNames(mod));
-
-        Assert.Equal("power", context);
-    }
-
-    [Fact]
-    public void For_MagicEffect_ReportsMagicSchool()
-    {
-        var mod = OpenFixture();
-        var mgef = mod.MagicEffects.Single(m => m.EditorID == "SjptsMagicEffect");
+        var mgef = mod.MagicEffects.Single(m => m.EditorID == editorId);
 
         var context = RecordContextExtractor.For(mgef, RaceNames(mod));
 
-        Assert.Equal("Destruction magic", context);
+        Assert.Equal(expectedContext, context);
     }
 
     /// <summary>A record type not covered by any switch arm (RACE itself)
