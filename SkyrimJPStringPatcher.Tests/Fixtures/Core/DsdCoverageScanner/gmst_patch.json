@@ -1,0 +1,11 @@
+[
+  {
+    "editor_id": "sTestGmstSetting",
+    "form_id": "000801|TestMod.esp",
+    "index": 0,
+    "type": "GMST DATA",
+    "original": "Some Setting Text",
+    "string": "設定のテキスト",
+    "status": "Completed"
+  }
+]
