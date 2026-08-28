@@ -3,3 +3,15 @@ FormId	WinningPlugin	RecordType	EnglishText	Index	EditorId	Context	StaleOriginal
 000801:SjptsTestMod.esp	SjptsTestMod.esp	WEAP FULL	Sjpts Unresolved Candidate	0
 000802:SjptsTestMod.esp	SjptsTestMod.esp	WEAP FULL	Sjpts Llm Candidate	0
 000803:SjptsTestMod.esp	SjptsTestMod.esp	WEAP FULL	Sjpts Preserved Candidate	0
+000810:SjptsResolutionMethods.esp	SjptsResolutionMethods.esp	WEAP FULL	Glimmeroot Ring	0
+000811:SjptsResolutionMethods.esp	SjptsResolutionMethods.esp	WEAP FULL	NemraSkol	0
+000812:SjptsResolutionMethods.esp	SjptsResolutionMethods.esp	WEAP FULL	Vrenn Ring	0
+000813:SjptsResolutionMethods.esp	SjptsResolutionMethods.esp	WEAP FULL	Sjpts Multiline Candidate\nSecond Line	0
+000814:SjptsResolutionMethods.esp	SjptsResolutionMethods.esp	WEAP FULL	Sjpts Batch Candidate One	0
+000815:SjptsResolutionMethods.esp	SjptsResolutionMethods.esp	WEAP FULL	Sjpts Batch Candidate Two	0
+000820:SjptsMultiPluginA.esp	SjptsMultiPluginA.esp	WEAP FULL	Sjpts Multi A First	0
+000821:SjptsMultiPluginA.esp	SjptsMultiPluginA.esp	WEAP FULL	Sjpts Multi A Second	0
+000830:SjptsMultiPluginB.esp	SjptsMultiPluginB.esp	WEAP FULL	Sjpts Multi B Only	0
+000840:Sjpts Corvid Outfit.esp	Sjpts Corvid Outfit.esp	ARMO FULL	Windrose Rex Corvid Nemra Cloak	0		light armor, slot: body
+000841:Sjpts Corvid Outfit.esp	Sjpts Corvid Outfit.esp	ARMO FULL	Windrose Rex Corvid Nemra Cloak	1			Old Windrose Rex Corvid Nemra Cloak	以前の訳
+000842:Sjpts Corvid Outfit.esp	Sjpts Corvid Outfit.esp	NPC_ FULL	Rex	0
