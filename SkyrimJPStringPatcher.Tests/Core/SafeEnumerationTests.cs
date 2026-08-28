@@ -68,4 +68,49 @@ public class SafeEnumerationTests
         Assert.Empty(visited);
         Assert.Single(errors);
     }
+
+    /// <summary>Known bug (found while investigating priority bugs after v0.55.2):
+    /// onItem itself was called OUTSIDE SafeForEach's try/catch, so an exception
+    /// from processing a perfectly-enumerable item (e.g. accessing a lazily-bound
+    /// Mutagen field that turns out to be corrupt) was never caught at all — it
+    /// propagated straight past SafeForEach, defeating the exact fail-open
+    /// protection every PickUpTargetRunner.cs call site relies on it for.
+    /// The enumerator itself is fine in this case (MoveNext/Current succeeded),
+    /// so unlike an enumerator failure this must NOT abandon the rest of the
+    /// sequence -- only the one failing item's processing is lost.</summary>
+    [Fact]
+    public void SafeForEach_OnItemThrows_ReportsOnError_AndContinuesWithRemainingItems()
+    {
+        var visited = new List<int>();
+        var errors = new List<Exception>();
+
+        SafeEnumeration.SafeForEach(Enumerable.Range(0, 5), i =>
+        {
+            if (i == 2) throw new InvalidOperationException($"simulated onItem failure at {i}");
+            visited.Add(i);
+        }, errors.Add);
+
+        // Every item except the failing one was visited -- MoveNext still works
+        // fine for a plain List/array-backed enumerator, so processing continues
+        // past the failure instead of abandoning items 3 and 4.
+        Assert.Equal(new[] { 0, 1, 3, 4 }, visited);
+        var error = Assert.Single(errors);
+        Assert.IsType<InvalidOperationException>(error);
+    }
+
+    [Fact]
+    public void SafeForEach_OnItemThrowsForMultipleItems_ReportsOnErrorForEach()
+    {
+        var visited = new List<int>();
+        var errors = new List<Exception>();
+
+        SafeEnumeration.SafeForEach(Enumerable.Range(0, 5), i =>
+        {
+            if (i == 1 || i == 3) throw new InvalidOperationException($"simulated onItem failure at {i}");
+            visited.Add(i);
+        }, errors.Add);
+
+        Assert.Equal(new[] { 0, 2, 4 }, visited);
+        Assert.Equal(2, errors.Count);
+    }
 }
