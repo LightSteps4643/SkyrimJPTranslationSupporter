@@ -175,4 +175,98 @@ public class AutoTranslatorTests
 
         Assert.Null(result);
     }
+
+    /// <summary>_corpusExact's SourceTier merge (v0.38.0): when a WORSE-tier
+    /// entry for a key is seen first and a BETTER-tier entry for the same key
+    /// arrives later, the later (better) entry must REPLACE it — not just the
+    /// "existing already wins" branch the "Iron Dagger" test above exercises
+    /// (there, vanilla is seen FIRST, so the tier check never needs to
+    /// actually replace anything). Fixtures/Translation/corpus_basic.tsv lists
+    /// "Sjpts Tier Test Alpha" dsd-first, vanilla-second for exactly this.</summary>
+    [Fact]
+    public void TryTranslate_WorseTierSeenFirst_BetterTierSeenLater_ReplacesIt()
+    {
+        var result = BuildFromFixture().TryTranslate("Sjpts Tier Test Alpha", "WEAP FULL");
+
+        Assert.NotNull(result);
+        Assert.Equal("鍵A(vanilla)", result!.Japanese);
+        Assert.Equal("AutoCorpus", result.Method);
+    }
+
+    /// <summary>SeenAsNpcName is tracked INDEPENDENTLY of which entry's text
+    /// wins the SourceTier competition (v0.49.2's Courage guard depends on
+    /// this): "Sjpts Tier Test Beta" is attested first by a non-NPC vanilla
+    /// entry (which wins the text) and second by a WORSE-tier dsd entry whose
+    /// DsdType starts with "NPC_" — the vanilla text keeps winning, but the
+    /// NPC_ homograph guard must still let an NPC_ FULL candidate through,
+    /// proving the flag itself got updated on the already-winning entry.</summary>
+    [Fact]
+    public void TryTranslate_NpcSourcedEntryLosesTheTextButStillFlipsTheSeenAsNpcFlag()
+    {
+        var translator = BuildFromFixture();
+
+        var ordinaryResult = translator.TryTranslate("Sjpts Tier Test Beta", "WEAP FULL");
+        Assert.NotNull(ordinaryResult);
+        Assert.Equal("鍵B", ordinaryResult!.Japanese); // vanilla's text still wins
+
+        var npcResult = translator.TryTranslate("Sjpts Tier Test Beta", "NPC_ FULL");
+        Assert.NotNull(npcResult); // guard does NOT reject — flag was updated despite losing the tier competition
+        Assert.Equal("鍵B", npcResult!.Japanese);
+    }
+
+    /// <summary>④意味合成 (CorpusMeaningTranslator) reached THROUGH
+    /// AutoTranslator.TryTranslate itself — CorpusMeaningTranslatorTests
+    /// covers the class directly, but AutoTranslator's own wiring into it
+    /// (the method tag, the record-type gate) was never exercised. Reuses
+    /// that class's own fixture (Amber/Steel/Iron × Sword/Battleaxe, Gold/
+    /// Silver/Bronze × Boots) rather than duplicating it.</summary>
+    [Fact]
+    public void TryTranslate_MeaningComposition_ReachedThroughAutoTranslatorItself()
+    {
+        var corpus = CorpusIo.ReadTsv(Path.Combine(AppContext.BaseDirectory, "Fixtures", "Translation", "CorpusMeaningTranslator", "corpus.tsv"));
+        var translator = new AutoTranslator(corpus);
+
+        var result = translator.TryTranslate("Amber Boots", "ARMO FULL");
+
+        Assert.NotNull(result);
+        Assert.Equal("AutoCorpusMeaning", result!.Method);
+        Assert.NotEmpty(result.Detail);
+    }
+
+    /// <summary>③音訳分解 (CorpusTransliterator.TryDecompose) reached THROUGH
+    /// AutoTranslator for a single unspaced word ("Frostfall", never itself in
+    /// the corpus) composed from two known transliterated pieces. Reuses
+    /// CorpusTransliteratorTests' own fixture ("Frost"→"フロスト",
+    /// "Fall"→"フォール").</summary>
+    [Fact]
+    public void TryTranslate_SingleWordTransliterationDecomposition_ReachedThroughAutoTranslatorItself()
+    {
+        var corpus = CorpusIo.ReadTsv(Path.Combine(AppContext.BaseDirectory, "Fixtures", "Translation", "CorpusTransliterator", "corpus.tsv"));
+        var translator = new AutoTranslator(corpus);
+
+        var result = translator.TryTranslate("Frostfall", "WEAP FULL");
+
+        Assert.NotNull(result);
+        Assert.Equal("フロストフォール", result!.Japanese);
+        Assert.Equal("AutoCorpusTransliterate", result.Method);
+    }
+
+    /// <summary>The OTHER ③ path: a 2-3 word Title Case phrase with no
+    /// corpus precedent as a whole ("proper noun phrase" heuristic), resolved
+    /// by transliterating each word independently via corpus precedent and
+    /// joining with "・" — deliberately distinct formatting from the
+    /// single-word decomposition above (no separator) to keep the two kinds
+    /// of evidence visually distinguishable.</summary>
+    [Fact]
+    public void TryTranslate_MultiWordProperNounPhrase_JoinsPerWordTransliterationsWithMiddleDot()
+    {
+        var corpus = CorpusIo.ReadTsv(Path.Combine(AppContext.BaseDirectory, "Fixtures", "Translation", "CorpusTransliterator", "corpus.tsv"));
+        var translator = new AutoTranslator(corpus);
+
+        var result = translator.TryTranslate("Frost Fall", "WEAP FULL");
+
+        Assert.NotNull(result);
+        Assert.Equal("フロスト・フォール", result!.Japanese);
+        Assert.Equal("AutoCorpusTransliterate", result.Method);
+    }
 }
