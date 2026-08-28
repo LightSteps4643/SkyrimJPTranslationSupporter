@@ -28,22 +28,23 @@ namespace SkyrimJPStringPatcher.Tests.PickUpTarget;
 ///   pair's English side, so AutoTranslator's ①完全一致 should resolve it
 ///   automatically from the same-mod-harvested precedent alone.
 ///
-/// **KNOWN BUG found while writing this class (2026-08-28, not yet fixed —
-/// see DESIGN_NOTES.md)**: "SjptsUnresolvedWeapon" never becomes a candidate
-/// at all, and PickUpTargetRunner.cs's ② FULL extraction is the cause.
-/// `named.Name` (INamedGetter's plain-string convenience accessor) DOES fall
+/// **KNOWN BUG found while writing this class (2026-08-28), fixed in v0.55.5**:
+/// "SjptsUnresolvedWeapon" used to never become a candidate at all, because
+/// PickUpTargetRunner.cs's ② FULL extraction pre-filtered on `named.Name`
+/// (INamedGetter's plain-string convenience accessor). That accessor DOES fall
 /// back to whatever's embedded when a NON-localized plugin lacks the target
 /// language (confirmed) — but for a genuinely LOCALIZED plugin (this
 /// fixture's shape) whose target-language variant is simply missing for one
-/// field, `named.Name` returns "" instead of falling back, so the
-/// `!string.IsNullOrWhiteSpace(name)` guard silently drops the record before
-/// `Consider()` is ever called — no log entry, no candidate, no corpus
+/// field, `named.Name` used to return "" instead of falling back, so the
+/// `!string.IsNullOrWhiteSpace(name)` guard silently dropped the record before
+/// `Consider()` was ever called — no log entry, no candidate, no corpus
 /// contribution. ③/④'s `Consider()` calls (ExtraTranslatableFields/
-/// NestedTranslatableFields) pass the field object directly and are
-/// unaffected; only ②'s `named.Name` pre-filter has this gap. Two tests
-/// below are Skip-marked (not deleted) until PickUpTargetRunner.cs's ② FULL
-/// extraction is fixed to use the field object's own TryLookup fallback
-/// (matching ③/④) instead of `named.Name`.
+/// NestedTranslatableFields) pass the field object directly and were always
+/// unaffected; only ②'s `named.Name` pre-filter had this gap. Fixed by
+/// dropping the `named.Name` pre-filter entirely and passing the field object
+/// straight to `Consider()`, matching ③/④ — `Consider()` already has its own
+/// TryLookup-based Japanese-then-English fallback that behaves the same
+/// regardless of whether the plugin is localized.
 /// </summary>
 public class SameModCorpusHarvestTests
 {
@@ -97,7 +98,7 @@ public class SameModCorpusHarvestTests
     /// <summary>The already-Japanese record itself never becomes a
     /// candidate — its own text needs no translation. Only the SEPARATE
     /// unresolved record should appear as a candidate.</summary>
-    [Fact(Skip = "Known bug: a localized plugin's FULL field missing the target language never becomes a candidate at all (② extraction's named.Name doesn't fall back the way ③/④ do) — see this class's remarks")]
+    [Fact]
     public void Run_TheLocalizedRecordItself_NeverBecomesACandidate()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_samemodcorpus_{Guid.NewGuid():N}");
@@ -123,7 +124,7 @@ public class SameModCorpusHarvestTests
     /// same-mod-harvested precedent — no DSD file, no AI call needed. Mirrors
     /// the (currently Skip-marked) cross-mod integration test's structure,
     /// but for the scenario that already works today.</summary>
-    [Fact(Skip = "Known bug: a localized plugin's FULL field missing the target language never becomes a candidate at all (② extraction's named.Name doesn't fall back the way ③/④ do) — see this class's remarks")]
+    [Fact]
     public void Run_ThenTranslate_ResolvesTheUnresolvedRecordFromTheHarvestedPrecedent()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_samemodcorpus_{Guid.NewGuid():N}");

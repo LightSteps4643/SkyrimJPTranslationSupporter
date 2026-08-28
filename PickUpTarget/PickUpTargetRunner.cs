@@ -383,18 +383,27 @@ public static class PickUpTargetRunner
                     trace?.Warning($"Classification check failed for {record.FormKey} in '{mod.ModKey.FileName}', fail-open (included): {ex.Message}");
                 }
 
-                // ② FULL (generic across every INamedGetter/ITranslatedNamedGetter record type).
+                // ② FULL (generic across every ITranslatedNamedGetter record type).
+                // v0.55.5: no longer pre-filters via INamedGetter.Name (Mutagen's
+                // plain-string convenience accessor). That accessor DOES fall back
+                // to whatever language is embedded when a NON-localized plugin
+                // lacks the target language, but for a genuinely LOCALIZED plugin
+                // (Strings/*.STRINGS) whose target-language variant is simply
+                // missing for one field, it silently returns "" instead of falling
+                // back -- so the record vanished entirely (no candidate, no
+                // corpus contribution, no log entry) before Consider() was ever
+                // called. Passing the field object straight to Consider(), exactly
+                // like ③/④ (ExtraTranslatableFields/NestedTranslatableFields)
+                // already do, uses Consider()'s own TryLookup-based
+                // Japanese-then-English fallback instead, which behaves the same
+                // regardless of whether the plugin is localized.
                 try
                 {
-                    if (record is INamedGetter named)
+                    if (record is ITranslatedNamedGetter translatedNamed && translatedNamed.Name != null)
                     {
-                        var name = named.Name;
-                        if (!string.IsNullOrWhiteSpace(name) && record is ITranslatedNamedGetter translatedNamed && translatedNamed.Name != null)
-                        {
-                            var signature = RecordSignatureMap.Resolve(record.GetType().Name);
-                            if (RecordSignatureMap.DsdFullNameSupported.Contains(signature))
-                                Consider(record.FormKey, $"{signature} FULL", 0, mod.ModKey, translatedNamed.Name, context: context);
-                        }
+                        var signature = RecordSignatureMap.Resolve(record.GetType().Name);
+                        if (RecordSignatureMap.DsdFullNameSupported.Contains(signature))
+                            Consider(record.FormKey, $"{signature} FULL", 0, mod.ModKey, translatedNamed.Name, context: context);
                     }
                 }
                 catch (Exception ex)
