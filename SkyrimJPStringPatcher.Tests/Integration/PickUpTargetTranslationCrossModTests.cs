@@ -459,6 +459,98 @@ public class PickUpTargetTranslationCrossModTests
         }
     }
 
+    /// <summary>Pattern B' (direct-translation / "2-file" structure, per user
+    /// clarification 2026-08-29): xTranslator's MORE common real-world usage
+    /// is not producing a SEPARATE translation-patch plugin (patterns
+    /// A-E/the blind test all used that "3-file" shape) -- it's editing the
+    /// ORIGINAL plugin IN PLACE and redistributing it under the SAME
+    /// filename, so only ONE file for that mod ever exists in the user's load
+    /// order, and it directly contains Japanese. The equally-common mirror
+    /// image: a mod ORIGINALLY authored in Japanese by its own creator (no
+    /// translation involved at all) gets extended by an overseas user's
+    /// expansion mod. Both stories produce the IDENTICAL structural shape
+    /// tested here, so one fixture covers both.
+    ///
+    /// Given: JpOriginalMod.esp directly defines a WEAP whose ONLY text is
+    /// Japanese ("彼岸の剣") -- no separate English-only file ever existed for
+    /// this mod. ForeignExpansionMod.esp masters it and overrides the SAME
+    /// record to a MEANINGFULLY DIFFERENT English name ("Sjpts Foreign Cursed
+    /// Sword", not just a translation of "彼岸の剣"), and wins.
+    /// When: PickUpTarget -> Translation is run.
+    /// Then: same safety requirement as Pattern B -- "彼岸の剣" must NOT be
+    /// silently applied to "Sjpts Foreign Cursed Sword".
+    ///
+    /// Confirmed to already pass today (same reasoning as Pattern B: nothing
+    /// currently links these two unrelated strings) -- left as a permanent
+    /// safety-net Fact, not a Skip placeholder.</summary>
+    [Fact]
+    public void Run_ThenTranslate_PatternBPrime_DirectlyTranslatedModMeaningfullyOverriddenMustNotReuseStaleTranslation()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_pattern_b_prime_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var mo2Dir = BuildMo2Instance(root,
+            [
+                ("JpOriginalModFolder", "JpOriginalMod.esp"),
+                ("ForeignExpansionModFolder", "ForeignExpansionMod.esp"),
+            ]);
+            var lines = RunPipeline(mo2Dir, root, "ForeignExpansionMod.esp");
+
+            Assert.True(lines.ContainsKey("Sjpts Foreign Cursed Sword"));
+            Assert.NotEqual("彼岸の剣", lines["Sjpts Foreign Cursed Sword"].Japanese);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>Pattern D' (direct-translation / "2-file" structure): the
+    /// SAME structural point as B' above, but for the tie-break rule instead
+    /// of the staleness safeguard -- the original Japanese author (or a
+    /// community translator editing in place) releases a wording revision of
+    /// their own mod, still directly in Japanese (not a separate "patch"
+    /// file), before a foreign expansion mod overrides back to English.
+    ///
+    /// Given: JpOriginalMod2.esp directly defines "たそがれの刃" (v1 wording).
+    /// JpOriginalMod2Revised.esp masters it and re-translates the SAME
+    /// record to "黄昏の刃" (v2 wording, the author's own revision, still
+    /// directly in Japanese). ForeignExpansionMod2.esp masters
+    /// JpOriginalMod2.esp and overrides back to English ("Sjpts Twilight
+    /// Edge"), and wins.
+    /// When: PickUpTarget -> Translation is run.
+    /// Then: the REVISED wording ("黄昏の刃") should be recovered, not the
+    /// original v1 ("たそがれの刃") -- same tie-break rule as Pattern D,
+    /// verified under the more common single-file translation structure.
+    ///
+    /// Confirmed RED (2026-08-29): stays unresolved today, exactly as
+    /// predicted (no corpus entry links "Sjpts Twilight Edge" to either
+    /// Japanese wording).</summary>
+    [Fact(Skip = "TDD placeholder for the not-yet-implemented cross-mod corpus harvesting feature's tie-break rule, verified under the direct-translation (single-file) structure -- see PickUpTargetTranslationCrossModTests's class remarks and DESIGN_NOTES.md")]
+    public void Run_ThenTranslate_PatternDPrime_DirectlyTranslatedModRevisedWordingIsPreferredOverOriginalWording()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_pattern_d_prime_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var mo2Dir = BuildMo2Instance(root,
+            [
+                ("JpOriginalMod2Folder", "JpOriginalMod2.esp"),
+                ("JpOriginalMod2RevisedFolder", "JpOriginalMod2Revised.esp"),
+                ("ForeignExpansionMod2Folder", "ForeignExpansionMod2.esp"),
+            ]);
+            var lines = RunPipeline(mo2Dir, root, "ForeignExpansionMod2.esp");
+
+            Assert.True(lines.ContainsKey("Sjpts Twilight Edge"));
+            Assert.Equal("黄昏の刃", lines["Sjpts Twilight Edge"].Japanese);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
     /// <summary>Pattern E (already covered by existing DSD -- the cross-mod
     /// machinery must never even engage): a record has BOTH a cross-mod
     /// Japanese precedent in its chain AND an existing DSD translation
