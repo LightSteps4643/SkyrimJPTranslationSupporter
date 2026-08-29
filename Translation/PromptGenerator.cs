@@ -449,7 +449,12 @@ public static class PromptGenerator
         var resolved = ordered
             .Select(c => existing.TryGetValue((c.FormId, c.RecordType, c.Index), out var preserved)
                 ? (Candidate: c, Auto: (AutoTranslationResult?)new AutoTranslationResult(preserved.Japanese, preserved.Method, ""))
-                : (Candidate: c, Auto: auto.TryTranslate(c.CurrentText, c.RecordType, trace)))
+                : !string.IsNullOrEmpty(c.CrossModPrecedentJapanese)
+                    // v0.56.0: a cross-mod precedent (PickUpTargetRunner.cs's
+                    // FindCrossModPrecedent) is keyed on record identity, not
+                    // text -- it takes priority even over ①コーパス完全一致.
+                    ? (Candidate: c, Auto: (AutoTranslationResult?)new AutoTranslationResult(c.CrossModPrecedentJapanese, "AutoCrossModPrecedent", ""))
+                    : (Candidate: c, Auto: auto.TryTranslate(c.CurrentText, c.RecordType, trace)))
             .ToList();
 
         // v0.36.0: step 1（コーパス完全一致）は正解データそのものなのでログしない。
@@ -469,6 +474,16 @@ public static class PromptGenerator
                     log.Detail("3.音訳分解による自動解決（要レビュー）",
                         "3. Auto-resolved via transliteration decomposition (needs review)",
                         $"[{plugin}]  \"{candidate.CurrentText}\" → \"{autoResult.Japanese}\"  [{candidate.RecordType}]  {autoResult.Detail}");
+                    break;
+                case "AutoCrossModPrecedent" when candidate.CrossModPrecedentNeedsReview:
+                    // v0.56.0: this tool doesn't adjudicate whether a
+                    // precedent translation is still objectively correct for
+                    // the current text (mirrors the existing DSD stale-
+                    // coverage handling) -- the precedent is applied either
+                    // way, this warning only flags it for human review.
+                    log.Detail("要レビュー: 別MOD由来の過去訳を適用したが、原文の一致を確認できなかった（staleの可能性）",
+                        "Needs review: applied a cross-mod precedent translation, but could not confirm the original text still matches (may be stale)",
+                        $"[{plugin}]  \"{candidate.CurrentText}\" → \"{autoResult.Japanese}\"  [{candidate.RecordType}]");
                     break;
             }
         }
@@ -811,7 +826,7 @@ public static class PromptGenerator
         {
             switch (auto?.Method)
             {
-                case "AutoCorpus" or "AutoCorpusDsd" or "AutoCorpusImported" or "AutoCorpusReferenceTaiyaku" or "AutoCorpusOverride":
+                case "AutoCorpus" or "AutoCorpusDsd" or "AutoCorpusImported" or "AutoCorpusReferenceTaiyaku" or "AutoCorpusOverride" or "AutoCrossModPrecedent":
                     corpus++;
                     break;
                 case "AutoCorpusMeaning" or "AutoCorpusMeaningTranslit":

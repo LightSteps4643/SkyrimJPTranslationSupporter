@@ -7,7 +7,8 @@
 [SjptsMeaningTarget] "Glimmeroot Ring" -> "きらめきの指輪"
 === AutoCorpusTransliterate ===
 [SjptsMeaningTarget] "Nemraskol" -> "ネムラスコル"
+=== AutoCrossModPrecedent ===
+[BigQuestMod] "Sword of Test X" -> "テストXの剣"
+[TestXMod2] "Sword of Test X" -> "テストXの剣"
 === TranslationNameFallback ===
-[BigQuestMod] "Sword of Test X" -> "テスト X 剣"
 [SjptsGlossaryTarget] "Vrenn" -> "ヴレン"
-[TestXMod2] "Sword of Test X" -> "テスト X 剣"
