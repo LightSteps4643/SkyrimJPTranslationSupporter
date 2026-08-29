@@ -314,6 +314,16 @@ public class PickUpTargetTranslationCrossModTests
 
             Assert.True(lines.ContainsKey("Sjpts Frostmere Blade"));
             Assert.Equal("フロストミアの刃", lines["Sjpts Frostmere Blade"].Japanese);
+
+            // v0.56.1 regression guard: a genuinely Strings-file-backed
+            // dual-language contributor must be trusted unconditionally, not
+            // flagged for review just because it happens to be the chain's
+            // first (defining) entry with nothing earlier to compare
+            // against -- see FindCrossModPrecedent's IsDualLanguageByStringsFiles
+            // remarks. Checked via the log rather than the Notes column: the
+            // review flag is deliberately log-only (single Notes tag either way).
+            var logText = File.ReadAllText(Path.Combine(root, "Translation", "translation.log"));
+            Assert.DoesNotContain("要レビュー: 別MOD由来", logText);
         }
         finally
         {
