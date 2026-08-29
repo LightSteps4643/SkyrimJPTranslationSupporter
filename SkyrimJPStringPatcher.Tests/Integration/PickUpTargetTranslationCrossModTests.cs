@@ -331,9 +331,11 @@ public class PickUpTargetTranslationCrossModTests
         }
     }
 
-    /// <summary>Pattern B (stale precedent, applied but flagged -- REVISED
-    /// 2026-08-29): a later mod repurposes the same FormKey for a
-    /// MEANINGFULLY DIFFERENT item, not just a reformatting.
+    /// <summary>Pattern B (confirmed-mismatch precedent, NOT applied --
+    /// REVISED AGAIN 2026-08-29, v0.56.2): a later mod repurposes the same
+    /// FormKey for a MEANINGFULLY DIFFERENT item, not just a reformatting,
+    /// and a genuine reference English text IS available to compare against
+    /// (OriginalItemMod.esp's own original text).
     ///
     /// Given: OriginalItemMod.esp defines "Sjpts Ancient Warblade".
     /// OriginalItemModJapanesePatch.esp masters it, translates it to
@@ -342,25 +344,27 @@ public class PickUpTargetTranslationCrossModTests
     /// (simulating a mod that repurposes the FormKey for a different weapon
     /// entirely), and wins.
     /// When: PickUpTarget -> Translation is run.
-    /// Then (REVISED per user decision, 2026-08-29): this tool does not judge
-    /// whether a given translation is objectively correct for the current
-    /// text -- that mirrors scenario⑤'s existing stale-DSD handling exactly
-    /// (a stale DSD translation is still APPLIED, just logged for review,
-    /// never withheld). So "古の戦刃" SHOULD be applied here too, with a
-    /// warning surfaced through the log (not by withholding the translation
-    /// or by encoding confidence into a second Notes tag -- see class remarks
-    /// on the "single Notes tag" decision).
+    /// Then (REVISED AGAIN, 2026-08-29 -- real-world data on "Ordinator -
+    /// Perks of Skyrim" showed this exact shape confirmed a genuine
+    /// mistranslation: a vanilla perk ("Light Fingers") renamed to
+    /// "Pickpocket Mastery" by Ordinator was silently inheriting the OLD
+    /// vanilla translation): a CONFIRMED mismatch (a reference exists and it
+    /// does NOT match the current text) is different from the "no reference
+    /// available" case -- it is POSITIVE evidence the record changed, not
+    /// just an unverified guess, so "古の戦刃" must NOT be applied at all.
+    /// The candidate should stay unresolved, left for other resolution
+    /// methods (or a human) to actually handle.
     ///
-    /// CORRECTION (2026-08-29): the FIRST version of this test asserted the
-    /// OPPOSITE ("must NOT be applied") and passed only because nothing
-    /// currently links these two strings -- that assertion was written more
-    /// strictly than the design already agreed at the time (apply-with-
-    /// warning, matching scenario⑤), a test-authoring gap rather than an
-    /// actual design conflict. Marked Skip like patterns C/D: this is now a
-    /// genuine TDD-red placeholder (confirmed to fail against today's code,
-    /// since nothing resolves it yet), not a currently-passing safety net.</summary>
+    /// History of this test's own back-and-forth (kept for context): v1
+    /// asserted "must not equal" and passed vacuously (test-authoring gap,
+    /// not a design conflict). v2 (the "apply with warning" revision)
+    /// asserted it SHOULD be applied, matching scenario⑤'s existing DSD
+    /// stale handling -- but real data showed that treating "confirmed
+    /// mismatch" the same as "unverifiable" was too permissive for THIS
+    /// specific sub-case. This v3 assertion is the final, empirically-
+    /// grounded one.</summary>
     [Fact]
-    public void Run_ThenTranslate_PatternB_MeaningfullyDifferentOverrideAppliesStaleTranslationWithWarning()
+    public void Run_ThenTranslate_PatternB_ConfirmedMismatchIsNotApplied()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_pattern_b_{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -375,10 +379,11 @@ public class PickUpTargetTranslationCrossModTests
             var lines = RunPipeline(mo2Dir, root, "RenameMod.esp");
 
             Assert.True(lines.ContainsKey("Sjpts Cursed Battleaxe"));
-            // The stale precedent IS applied -- this tool doesn't adjudicate
-            // whether it's still the objectively correct translation. The
-            // warning itself is surfaced via the log, not asserted here.
-            Assert.Equal("古の戦刃", lines["Sjpts Cursed Battleaxe"].Japanese);
+            // Confirmed mismatch: OriginalItemMod.esp's own text ("Sjpts
+            // Ancient Warblade") does NOT match the current winner's text
+            // ("Sjpts Cursed Battleaxe") -- the old translation must be
+            // withheld entirely, not silently carried forward.
+            Assert.Equal("", lines["Sjpts Cursed Battleaxe"].Japanese);
         }
         finally
         {
@@ -622,6 +627,100 @@ public class PickUpTargetTranslationCrossModTests
             var result = PickUpTargetRunner.Run(mo2Dir, pickUpTargetLog);
 
             Assert.DoesNotContain(result.Candidates, c => c.CurrentText == "Sjpts Gilded Hammer");
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>Pattern F ("Ordinator" pattern, v0.56.2): the real-world case
+    /// that exposed v0.56.1's regression -- a mod overhauls a vanilla record
+    /// so thoroughly that it repurposes the FormKey for something else
+    /// entirely, while the ORIGINAL contributor (unlike Pattern B) is a
+    /// genuinely Strings-file-backed dual-language source, not a separate
+    /// translation-patch plugin. Found on real user data: Ordinator - Perks
+    /// of Skyrim renames vanilla perk "Light Fingers" (translated "器用な指先")
+    /// to "Pickpocket Mastery", and v0.56.1 silently carried the vanilla
+    /// translation over to the new, unrelated perk name.
+    ///
+    /// Given: VanillaEquivMod.esp (UsingLocalization=true, standing in for
+    /// vanilla) defines a WEAP with English "Sjpts Frostmere Blade" /
+    /// Japanese "フロストミアの刃" in the SAME field. OverhaulRepurposeMod.esp
+    /// masters it and overrides the SAME record to a COMPLETELY DIFFERENT
+    /// weapon, "Sjpts Ebony Cleaver" (not a reformatting or rename of the
+    /// same item), and wins.
+    /// When: PickUpTarget -> Translation is run.
+    /// Then: "フロストミアの刃" must NOT be applied to "Sjpts Ebony Cleaver" --
+    /// VanillaEquivMod.esp's own Strings-file pairing gives a genuine
+    /// reference ("Sjpts Frostmere Blade") to compare against, and it
+    /// confirms a mismatch, so the candidate should stay unresolved.</summary>
+    [Fact]
+    public void Run_ThenTranslate_PatternF_OrdinatorStyleRepurposedVanillaRecordIsNotApplied()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_pattern_f_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var mo2Dir = BuildMo2Instance(root,
+            [
+                ("VanillaEquivModFolder", "VanillaEquivMod.esp"),
+                ("OverhaulRepurposeModFolder", "OverhaulRepurposeMod.esp"),
+            ]);
+            var lines = RunPipeline(mo2Dir, root, "OverhaulRepurposeMod.esp");
+
+            Assert.True(lines.ContainsKey("Sjpts Ebony Cleaver"));
+            Assert.Equal("", lines["Sjpts Ebony Cleaver"].Japanese);
+
+            // The skip should still be visible in PickUpTarget's own log for a
+            // curious user (or a future regression check) even though
+            // nothing was applied -- BuildCandidates logs it there, not in
+            // Translation's log.
+            var pickUpTargetLogText = File.ReadAllText(Path.Combine(root, "PickUpTarget", "pickuptarget.log"));
+            Assert.Contains("クロスMOD過去訳を見送った", pickUpTargetLogText);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>Pattern G (case-only difference, v0.56.2): found while
+    /// analyzing real user data alongside Pattern F -- of 1,143 cross-mod
+    /// precedents skipped as "confirmed mismatch" across a 334-plugin load
+    /// order, 24 were a PURE capitalization difference (e.g. "the Jarl" vs
+    /// "the jarl", a common inconsistency between mod authors' own retyping
+    /// of shared quest/item text). A case-only difference is never itself
+    /// evidence the record became something else, unlike Pattern F's genuine
+    /// rename -- so it must still be treated as a confirmed MATCH (applied,
+    /// no warning), not a mismatch.
+    ///
+    /// Given: VanillaEquivMod.esp (same fixture as Pattern F) defines
+    /// English "Sjpts Frostmere Blade" / Japanese "フロストミアの刃".
+    /// CaseVariantMod.esp masters it and overrides the SAME record to "Sjpts
+    /// FROSTMERE Blade" -- identical words, only the capitalization of
+    /// "Frostmere" changed -- and wins.
+    /// When: PickUpTarget -> Translation is run.
+    /// Then: "フロストミアの刃" SHOULD be applied, with no review warning.</summary>
+    [Fact]
+    public void Run_ThenTranslate_PatternG_CaseOnlyDifferenceIsStillAConfirmedMatch()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_pattern_g_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var mo2Dir = BuildMo2Instance(root,
+            [
+                ("VanillaEquivModFolder", "VanillaEquivMod.esp"),
+                ("CaseVariantModFolder", "CaseVariantMod.esp"),
+            ]);
+            var lines = RunPipeline(mo2Dir, root, "CaseVariantMod.esp");
+
+            Assert.True(lines.ContainsKey("Sjpts FROSTMERE Blade"));
+            Assert.Equal("フロストミアの刃", lines["Sjpts FROSTMERE Blade"].Japanese);
+
+            var pickUpTargetLogText = File.ReadAllText(Path.Combine(root, "PickUpTarget", "pickuptarget.log"));
+            Assert.DoesNotContain("クロスMOD過去訳を見送った", pickUpTargetLogText);
         }
         finally
         {
