@@ -61,7 +61,7 @@ public class PickUpTargetTranslationCrossModTests
     /// non-winning Japanese entry. Skipped (not deleted) so the suite stays
     /// green until that PickUpTarget-side fix is designed and implemented;
     /// remove the Skip then.</summary>
-    [Fact(Skip = "TDD placeholder for a not-yet-implemented PickUpTarget feature (cross-mod corpus harvesting) — see the class remarks")]
+    [Fact]
     public void Run_ThenTranslate_RecoversJapaneseFromANonWinningModsContribution()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_crossmod_{Guid.NewGuid():N}");
@@ -131,7 +131,7 @@ public class PickUpTargetTranslationCrossModTests
     /// it LOOKS translated and would not be flagged for review, silently
     /// discarding the translation patch's actual (and correct) "テストXの剣"
     /// that already exists earlier in the same load order.</summary>
-    [Fact(Skip = "TDD placeholder (blind test) for the same not-yet-implemented cross-mod corpus harvesting feature as Run_ThenTranslate_RecoversJapaneseFromANonWinningModsContribution — see the class remarks")]
+    [Fact]
     public void Run_ThenTranslate_BlindTest_JapaneseTranslationPatchSurvivesALaterUnrelatedEnglishOverride()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_crossmod_blind_{Guid.NewGuid():N}");
@@ -349,7 +349,7 @@ public class PickUpTargetTranslationCrossModTests
     /// actual design conflict. Marked Skip like patterns C/D: this is now a
     /// genuine TDD-red placeholder (confirmed to fail against today's code,
     /// since nothing resolves it yet), not a currently-passing safety net.</summary>
-    [Fact(Skip = "TDD placeholder for the not-yet-implemented cross-mod corpus harvesting feature's stale-precedent handling (apply with a warning, mirroring scenario⑤'s existing DSD stale handling -- revised 2026-08-29, see class remarks) -- see DESIGN_NOTES.md")]
+    [Fact]
     public void Run_ThenTranslate_PatternB_MeaningfullyDifferentOverrideAppliesStaleTranslationWithWarning()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_pattern_b_{Guid.NewGuid():N}");
@@ -394,7 +394,7 @@ public class PickUpTargetTranslationCrossModTests
     ///
     /// Confirmed RED (2026-08-29): stays unresolved today, exactly as
     /// predicted (the trailing space breaks corpus's exact-text match).</summary>
-    [Fact(Skip = "TDD placeholder for the not-yet-implemented cross-mod corpus harvesting feature (specifically its record-identity-based robustness to trivial text reformatting) -- see PickUpTargetTranslationCrossModTests's class remarks and DESIGN_NOTES.md")]
+    [Fact]
     public void Run_ThenTranslate_PatternC_TrivialReformattingStillResolvesViaRecordIdentity()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_pattern_c_{Guid.NewGuid():N}");
@@ -439,7 +439,7 @@ public class PickUpTargetTranslationCrossModTests
     /// Confirmed RED (2026-08-29): stays unresolved today, exactly as
     /// predicted (no corpus entry links "Sjpts Emberfall Axe" to either
     /// Japanese candidate).</summary>
-    [Fact(Skip = "TDD placeholder for the not-yet-implemented cross-mod corpus harvesting feature's tie-break rule (nearest-to-winner precedent wins) -- see PickUpTargetTranslationCrossModTests's class remarks and DESIGN_NOTES.md")]
+    [Fact]
     public void Run_ThenTranslate_PatternD_RevisedTranslationClosestToWinnerIsPreferredOverOlderOne()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_pattern_d_{Guid.NewGuid():N}");
@@ -499,7 +499,7 @@ public class PickUpTargetTranslationCrossModTests
     /// CORRECTION (2026-08-29): the first version of this test asserted the
     /// opposite and passed only because nothing currently links these two
     /// strings -- see Pattern B's remarks for the identical correction.</summary>
-    [Fact(Skip = "TDD placeholder for the not-yet-implemented cross-mod corpus harvesting feature's stale-precedent handling (apply with a warning even with no reference text to compare against -- revised 2026-08-29, see class remarks) -- see DESIGN_NOTES.md")]
+    [Fact]
     public void Run_ThenTranslate_PatternBPrime_DirectlyTranslatedModMeaningfullyOverriddenAppliesStaleTranslationWithWarning()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_pattern_b_prime_{Guid.NewGuid():N}");
@@ -543,7 +543,7 @@ public class PickUpTargetTranslationCrossModTests
     /// Confirmed RED (2026-08-29): stays unresolved today, exactly as
     /// predicted (no corpus entry links "Sjpts Twilight Edge" to either
     /// Japanese wording).</summary>
-    [Fact(Skip = "TDD placeholder for the not-yet-implemented cross-mod corpus harvesting feature's tie-break rule, verified under the direct-translation (single-file) structure -- see PickUpTargetTranslationCrossModTests's class remarks and DESIGN_NOTES.md")]
+    [Fact]
     public void Run_ThenTranslate_PatternDPrime_DirectlyTranslatedModRevisedWordingIsPreferredOverOriginalWording()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_pattern_d_prime_{Guid.NewGuid():N}");

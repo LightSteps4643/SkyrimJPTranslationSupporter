@@ -12,10 +12,10 @@ public static class CandidateIo
     public static void WriteTsv(string path, IEnumerable<Candidate> candidates)
     {
         using var w = new StreamWriter(path, false, System.Text.Encoding.UTF8);
-        w.WriteLine(string.Join(Sep, "FormId", "WinningPlugin", "RecordType", "EnglishText", "Index", "EditorId", "Context", "StaleOriginal", "StaleTranslation", "Warning"));
+        w.WriteLine(string.Join(Sep, "FormId", "WinningPlugin", "RecordType", "EnglishText", "Index", "EditorId", "Context", "StaleOriginal", "StaleTranslation", "Warning", "CrossModPrecedentJapanese", "CrossModPrecedentNeedsReview"));
         foreach (var c in candidates)
             w.WriteLine(string.Join(Sep, c.FormId, c.WinningPlugin, c.RecordType, Escape(c.CurrentText), c.Index, Escape(c.EditorId), Escape(c.Context),
-                Escape(c.StaleOriginal), Escape(c.StaleTranslation), Escape(c.Warning)));
+                Escape(c.StaleOriginal), Escape(c.StaleTranslation), Escape(c.Warning), Escape(c.CrossModPrecedentJapanese), c.CrossModPrecedentNeedsReview ? "1" : "0"));
     }
 
     public static List<Candidate> ReadTsv(string path)
@@ -33,7 +33,10 @@ public static class CandidateIo
             var staleOriginal = parts.Length > 7 ? Unescape(parts[7]) : "";
             var staleTranslation = parts.Length > 8 ? Unescape(parts[8]) : "";
             var warning = parts.Length > 9 ? Unescape(parts[9]) : "";
-            result.Add(new Candidate(parts[1], parts[0], parts[2], Unescape(parts[3]), index, editorId, context, staleOriginal, staleTranslation, warning));
+            var crossModPrecedentJapanese = parts.Length > 10 ? Unescape(parts[10]) : "";
+            var crossModPrecedentNeedsReview = parts.Length > 11 && parts[11] == "1";
+            result.Add(new Candidate(parts[1], parts[0], parts[2], Unescape(parts[3]), index, editorId, context, staleOriginal, staleTranslation, warning,
+                crossModPrecedentJapanese, crossModPrecedentNeedsReview));
         }
         return result;
     }
