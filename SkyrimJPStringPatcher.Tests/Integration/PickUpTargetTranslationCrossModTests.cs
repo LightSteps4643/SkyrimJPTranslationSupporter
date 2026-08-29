@@ -321,10 +321,9 @@ public class PickUpTargetTranslationCrossModTests
         }
     }
 
-    /// <summary>Pattern B (stale precedent, must NOT blindly reuse): a later
-    /// mod repurposes the same FormKey for a MEANINGFULLY DIFFERENT item, not
-    /// just a reformatting -- the old Japanese translation would be WRONG if
-    /// blindly carried forward.
+    /// <summary>Pattern B (stale precedent, applied but flagged -- REVISED
+    /// 2026-08-29): a later mod repurposes the same FormKey for a
+    /// MEANINGFULLY DIFFERENT item, not just a reformatting.
     ///
     /// Given: OriginalItemMod.esp defines "Sjpts Ancient Warblade".
     /// OriginalItemModJapanesePatch.esp masters it, translates it to
@@ -333,20 +332,25 @@ public class PickUpTargetTranslationCrossModTests
     /// (simulating a mod that repurposes the FormKey for a different weapon
     /// entirely), and wins.
     /// When: PickUpTarget -> Translation is run.
-    /// Then: "古の戦刃" must NOT be silently applied to "Sjpts Cursed
-    /// Battleaxe" -- that would be a wrong translation. The record should
-    /// either stay unresolved or be flagged for review (mirroring scenario⑤'s
-    /// existing stale-DSD handling), never silently mistranslated.
+    /// Then (REVISED per user decision, 2026-08-29): this tool does not judge
+    /// whether a given translation is objectively correct for the current
+    /// text -- that mirrors scenario⑤'s existing stale-DSD handling exactly
+    /// (a stale DSD translation is still APPLIED, just logged for review,
+    /// never withheld). So "古の戦刃" SHOULD be applied here too, with a
+    /// warning surfaced through the log (not by withholding the translation
+    /// or by encoding confidence into a second Notes tag -- see class remarks
+    /// on the "single Notes tag" decision).
     ///
-    /// NOTE (found while writing this test, 2026-08-29): this is a SAFETY-NET
-    /// assertion, not a TDD-red placeholder -- it already passes today
-    /// (nothing links these two unrelated strings), and it must keep passing
-    /// once the cross-mod precedent feature is implemented. Left as a normal
-    /// (non-Skip) Fact for exactly that reason: a future regression here
-    /// would mean the new feature's staleness safeguard was never actually
-    /// wired in.</summary>
-    [Fact]
-    public void Run_ThenTranslate_PatternB_MeaningfullyDifferentOverrideMustNotReuseStaleTranslation()
+    /// CORRECTION (2026-08-29): the FIRST version of this test asserted the
+    /// OPPOSITE ("must NOT be applied") and passed only because nothing
+    /// currently links these two strings -- that assertion was written more
+    /// strictly than the design already agreed at the time (apply-with-
+    /// warning, matching scenario⑤), a test-authoring gap rather than an
+    /// actual design conflict. Marked Skip like patterns C/D: this is now a
+    /// genuine TDD-red placeholder (confirmed to fail against today's code,
+    /// since nothing resolves it yet), not a currently-passing safety net.</summary>
+    [Fact(Skip = "TDD placeholder for the not-yet-implemented cross-mod corpus harvesting feature's stale-precedent handling (apply with a warning, mirroring scenario⑤'s existing DSD stale handling -- revised 2026-08-29, see class remarks) -- see DESIGN_NOTES.md")]
+    public void Run_ThenTranslate_PatternB_MeaningfullyDifferentOverrideAppliesStaleTranslationWithWarning()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_pattern_b_{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -361,9 +365,10 @@ public class PickUpTargetTranslationCrossModTests
             var lines = RunPipeline(mo2Dir, root, "RenameMod.esp");
 
             Assert.True(lines.ContainsKey("Sjpts Cursed Battleaxe"));
-            // The wrong outcome would be silently applying the old item's
-            // translation here -- that must never happen.
-            Assert.NotEqual("古の戦刃", lines["Sjpts Cursed Battleaxe"].Japanese);
+            // The stale precedent IS applied -- this tool doesn't adjudicate
+            // whether it's still the objectively correct translation. The
+            // warning itself is surfaced via the log, not asserted here.
+            Assert.Equal("古の戦刃", lines["Sjpts Cursed Battleaxe"].Japanese);
         }
         finally
         {
@@ -473,18 +478,29 @@ public class PickUpTargetTranslationCrossModTests
     ///
     /// Given: JpOriginalMod.esp directly defines a WEAP whose ONLY text is
     /// Japanese ("彼岸の剣") -- no separate English-only file ever existed for
-    /// this mod. ForeignExpansionMod.esp masters it and overrides the SAME
-    /// record to a MEANINGFULLY DIFFERENT English name ("Sjpts Foreign Cursed
-    /// Sword", not just a translation of "彼岸の剣"), and wins.
+    /// this mod, so there is NO reference English text anywhere in the chain
+    /// to compare against for staleness. ForeignExpansionMod.esp masters it
+    /// and overrides the SAME record to a MEANINGFULLY DIFFERENT English name
+    /// ("Sjpts Foreign Cursed Sword", not just a translation of "彼岸の剣"),
+    /// and wins.
     /// When: PickUpTarget -> Translation is run.
-    /// Then: same safety requirement as Pattern B -- "彼岸の剣" must NOT be
-    /// silently applied to "Sjpts Foreign Cursed Sword".
+    /// Then (REVISED per user decision, 2026-08-29 -- same as Pattern B):
+    /// "彼岸の剣" SHOULD be applied, with a warning. This case is exactly WHY
+    /// that decision was needed -- with no reference text to compare against
+    /// at all, the tool has no way to distinguish "same item, just
+    /// reformatted" from "repurposed FormKey for a different item" (compare
+    /// Pattern D', which needs the identical mechanism to actually recover a
+    /// revised translation). Trying to withhold application only when
+    /// "meaningfully different" is undecidable from text alone -- so the
+    /// tool applies uniformly and lets the log's warning carry the nuance,
+    /// exactly like the case where a reference EXISTS and is stale (Pattern
+    /// B).
     ///
-    /// Confirmed to already pass today (same reasoning as Pattern B: nothing
-    /// currently links these two unrelated strings) -- left as a permanent
-    /// safety-net Fact, not a Skip placeholder.</summary>
-    [Fact]
-    public void Run_ThenTranslate_PatternBPrime_DirectlyTranslatedModMeaningfullyOverriddenMustNotReuseStaleTranslation()
+    /// CORRECTION (2026-08-29): the first version of this test asserted the
+    /// opposite and passed only because nothing currently links these two
+    /// strings -- see Pattern B's remarks for the identical correction.</summary>
+    [Fact(Skip = "TDD placeholder for the not-yet-implemented cross-mod corpus harvesting feature's stale-precedent handling (apply with a warning even with no reference text to compare against -- revised 2026-08-29, see class remarks) -- see DESIGN_NOTES.md")]
+    public void Run_ThenTranslate_PatternBPrime_DirectlyTranslatedModMeaningfullyOverriddenAppliesStaleTranslationWithWarning()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_pattern_b_prime_{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -498,7 +514,7 @@ public class PickUpTargetTranslationCrossModTests
             var lines = RunPipeline(mo2Dir, root, "ForeignExpansionMod.esp");
 
             Assert.True(lines.ContainsKey("Sjpts Foreign Cursed Sword"));
-            Assert.NotEqual("彼岸の剣", lines["Sjpts Foreign Cursed Sword"].Japanese);
+            Assert.Equal("彼岸の剣", lines["Sjpts Foreign Cursed Sword"].Japanese);
         }
         finally
         {
