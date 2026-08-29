@@ -191,4 +191,323 @@ public class PickUpTargetTranslationCrossModTests
             try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
         }
     }
+
+    // ===== Additional black-box patterns (2026-08-29), each written from a
+    // real-world modding story and independent of the planned implementation
+    // -- they check the pipeline's overall OUTPUT (translations.tsv), not any
+    // internal data structure, exactly like the blind test above. =====
+
+    /// <summary>Builds an MO2 instance from an ordered list of (folder, esp)
+    /// mods already present in Fixtures/Integration/, plus an optional extra
+    /// setup callback (e.g. to drop a DSD coverage file into a mod's folder).
+    /// Shared by every pattern test below so each test method only needs to
+    /// state its own mod list and load order.</summary>
+    private static string BuildMo2Instance(string root, (string Folder, string Esp)[] modsInLoadOrder, Action<string, (string Folder, string Esp)[]>? extraSetup = null)
+    {
+        var mo2Dir = Path.Combine(root, "mo2");
+        var profileDir = Path.Combine(mo2Dir, "profiles", "Default");
+        Directory.CreateDirectory(profileDir);
+
+        var fixturesDir = Path.Combine(AppContext.BaseDirectory, "Fixtures", "Integration");
+        foreach (var (folder, esp) in modsInLoadOrder)
+        {
+            var modDir = Path.Combine(mo2Dir, "mods", folder);
+            Directory.CreateDirectory(modDir);
+            File.Copy(Path.Combine(fixturesDir, esp), Path.Combine(modDir, esp));
+
+            // A genuinely localized mod (UsingLocalization=true) ships its
+            // strings as LOOSE Strings/* files, not embedded in the .esp --
+            // copy them over too when this fixture has them
+            // (Fixtures/Integration/<EspNameWithoutExtension>Strings/*).
+            var sourceStringsDir = Path.Combine(fixturesDir, Path.GetFileNameWithoutExtension(esp) + "Strings");
+            if (Directory.Exists(sourceStringsDir))
+            {
+                var destStringsDir = Path.Combine(modDir, "Strings");
+                Directory.CreateDirectory(destStringsDir);
+                foreach (var file in Directory.EnumerateFiles(sourceStringsDir))
+                    File.Copy(file, Path.Combine(destStringsDir, Path.GetFileName(file)));
+            }
+        }
+
+        File.WriteAllText(Path.Combine(mo2Dir, "ModOrganizer.ini"),
+            "[General]\r\n" +
+            $"gamePath=@ByteArray({Path.Combine(root, "nonexistent_game")})\r\n" +
+            "selected_profile=@ByteArray(Default)\r\n");
+        File.WriteAllText(Path.Combine(profileDir, "modlist.txt"), string.Join("\r\n", modsInLoadOrder.Select(m => "+" + m.Folder).Reverse()) + "\r\n");
+        File.WriteAllText(Path.Combine(profileDir, "plugins.txt"), string.Join("\r\n", modsInLoadOrder.Select(m => "*" + m.Esp)) + "\r\n");
+
+        extraSetup?.Invoke(mo2Dir, modsInLoadOrder);
+        return mo2Dir;
+    }
+
+    /// <summary>Runs the real PickUpTarget -> Translation handoff (PromptGenerator.RunOne
+    /// for just the given target plugin) and returns the resulting
+    /// translations.tsv content, keyed by unescaped EnglishText.</summary>
+    private static Dictionary<string, (string Japanese, string Notes)> RunPipeline(string mo2Dir, string root, string targetPlugin)
+    {
+        using var pickUpTargetLog = RunLog.Open(Path.Combine(root, "PickUpTarget"), "PickUpTarget");
+        var result = PickUpTargetRunner.Run(mo2Dir, pickUpTargetLog);
+
+        var pickUpTargetOutDir = Path.Combine(root, "PickUpTarget", "out_temp");
+        Directory.CreateDirectory(pickUpTargetOutDir);
+        var candidatesTsvPath = Path.Combine(pickUpTargetOutDir, "candidates.tsv");
+        var corpusTsvPath = Path.Combine(pickUpTargetOutDir, "corpus.tsv");
+        CandidateIo.WriteTsv(candidatesTsvPath, result.Candidates);
+        CorpusIo.WriteTsv(corpusTsvPath, result.Corpus);
+
+        var translationOutDir = Path.Combine(root, "Translation", "out_temp");
+        var importDir = Path.Combine(root, "Translation", "import");
+        using (var translationLog = RunLog.Open(Path.Combine(root, "Translation"), "Translation"))
+        {
+            PromptGenerator.RunOne(candidatesTsvPath, corpusTsvPath, importDir, targetPlugin, translationOutDir, translationLog);
+        }
+
+        var translationsTsvPath = Path.Combine(translationOutDir, Path.GetFileNameWithoutExtension(targetPlugin), "translations.tsv");
+        return File.ReadAllLines(translationsTsvPath).Skip(1)
+            .Select(l => l.Split('\t'))
+            .Where(parts => parts.Length >= 6)
+            .ToDictionary(parts => TsvEscaping.Unescape(parts[3]), parts => (Japanese: TsvEscaping.Unescape(parts[4]), Notes: TsvEscaping.Unescape(parts[5])));
+    }
+
+    /// <summary>Pattern A (vanilla generalization): a genuinely localized
+    /// (dual-language) mod stands in for vanilla Skyrim.esm's own official
+    /// Japanese localization -- an unrelated mod (a UI/rebalance mod that
+    /// never intended to touch translation) re-saves the SAME record,
+    /// carrying the English text back in as a side effect.
+    ///
+    /// Given: VanillaEquivMod.esp defines a WEAP with BOTH English and
+    /// Japanese in the same FULL field (UsingLocalization=true, mirroring
+    /// how Skyrim.esm itself ships). UnrelatedRebalanceMod.esp masters it and
+    /// re-saves the SAME record with the identical English text, becoming the
+    /// winner.
+    /// When: PickUpTarget -> Translation is run.
+    /// Then: the record should not stay untranslated/mistranslated.
+    ///
+    /// CONFIRMED (2026-08-29, empirically, not assumed): unlike the other
+    /// patterns, this one ALREADY PASSES with today's code -- a genuinely
+    /// localized mod's own dual-language field already feeds the EXISTING
+    /// same-mod corpus harvesting (Consider()'s hasEnglish && hasJapanese
+    /// branch) regardless of whether that mod ends up winning the chain, and
+    /// the override's English text here is byte-identical. So "vanilla
+    /// generalization" is NOT actually a gap the new cross-mod feature needs
+    /// to cover -- it's already handled, as long as the source is genuinely
+    /// localized (dual-language in one field) rather than a separate
+    /// non-localized JP-only patch mod (which is what patterns B/C/D and the
+    /// blind test are about). First attempt at this fixture omitted copying
+    /// VanillaEquivMod.esp's loose Strings/* files into the MO2 instance,
+    /// which made it fail for an unrelated reason (the localized text
+    /// couldn't be read at all) -- fixed by extending BuildMo2Instance to
+    /// copy a per-mod Strings/ folder when the fixture has one.</summary>
+    [Fact]
+    public void Run_ThenTranslate_PatternA_VanillaLikeSourceOverriddenByUnrelatedMod()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_pattern_a_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var mo2Dir = BuildMo2Instance(root,
+            [
+                ("VanillaEquivModFolder", "VanillaEquivMod.esp"),
+                ("UnrelatedRebalanceModFolder", "UnrelatedRebalanceMod.esp"),
+            ]);
+            var lines = RunPipeline(mo2Dir, root, "UnrelatedRebalanceMod.esp");
+
+            Assert.True(lines.ContainsKey("Sjpts Frostmere Blade"));
+            Assert.Equal("フロストミアの刃", lines["Sjpts Frostmere Blade"].Japanese);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>Pattern B (stale precedent, must NOT blindly reuse): a later
+    /// mod repurposes the same FormKey for a MEANINGFULLY DIFFERENT item, not
+    /// just a reformatting -- the old Japanese translation would be WRONG if
+    /// blindly carried forward.
+    ///
+    /// Given: OriginalItemMod.esp defines "Sjpts Ancient Warblade".
+    /// OriginalItemModJapanesePatch.esp masters it, translates it to
+    /// "古の戦刃". RenameMod.esp masters OriginalItemMod.esp and overrides the
+    /// SAME record to a DIFFERENT English name, "Sjpts Cursed Battleaxe"
+    /// (simulating a mod that repurposes the FormKey for a different weapon
+    /// entirely), and wins.
+    /// When: PickUpTarget -> Translation is run.
+    /// Then: "古の戦刃" must NOT be silently applied to "Sjpts Cursed
+    /// Battleaxe" -- that would be a wrong translation. The record should
+    /// either stay unresolved or be flagged for review (mirroring scenario⑤'s
+    /// existing stale-DSD handling), never silently mistranslated.
+    ///
+    /// NOTE (found while writing this test, 2026-08-29): this is a SAFETY-NET
+    /// assertion, not a TDD-red placeholder -- it already passes today
+    /// (nothing links these two unrelated strings), and it must keep passing
+    /// once the cross-mod precedent feature is implemented. Left as a normal
+    /// (non-Skip) Fact for exactly that reason: a future regression here
+    /// would mean the new feature's staleness safeguard was never actually
+    /// wired in.</summary>
+    [Fact]
+    public void Run_ThenTranslate_PatternB_MeaningfullyDifferentOverrideMustNotReuseStaleTranslation()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_pattern_b_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var mo2Dir = BuildMo2Instance(root,
+            [
+                ("OriginalItemModFolder", "OriginalItemMod.esp"),
+                ("OriginalItemModJapanesePatchFolder", "OriginalItemModJapanesePatch.esp"),
+                ("RenameModFolder", "RenameMod.esp"),
+            ]);
+            var lines = RunPipeline(mo2Dir, root, "RenameMod.esp");
+
+            Assert.True(lines.ContainsKey("Sjpts Cursed Battleaxe"));
+            // The wrong outcome would be silently applying the old item's
+            // translation here -- that must never happen.
+            Assert.NotEqual("古の戦刃", lines["Sjpts Cursed Battleaxe"].Japanese);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>Pattern C (trivial reformatting, corpus-only would miss it): a
+    /// later mod re-saves the record for an unrelated reason and the English
+    /// text comes back with a single trailing space -- a byte-for-byte corpus
+    /// match would fail, but the record identity (FormKey/type/index) is
+    /// unchanged.
+    ///
+    /// Given: ReformatOriginalMod.esp defines "Sjpts Moonlit Rapier".
+    /// ReformatJapanesePatch.esp masters it, translates it to "月光の刺剣".
+    /// TrivialRebalanceMod.esp masters ReformatOriginalMod.esp and overrides
+    /// the SAME record with "Sjpts Moonlit Rapier " (note the trailing
+    /// space -- a CK/xEdit re-save artifact), and wins.
+    /// When: PickUpTarget -> Translation is run.
+    /// Then: "月光の刺剣" should still be applied -- this is clearly the same
+    /// item, just with an incidental formatting difference in the carried-
+    /// forward English text.
+    ///
+    /// Confirmed RED (2026-08-29): stays unresolved today, exactly as
+    /// predicted (the trailing space breaks corpus's exact-text match).</summary>
+    [Fact(Skip = "TDD placeholder for the not-yet-implemented cross-mod corpus harvesting feature (specifically its record-identity-based robustness to trivial text reformatting) -- see PickUpTargetTranslationCrossModTests's class remarks and DESIGN_NOTES.md")]
+    public void Run_ThenTranslate_PatternC_TrivialReformattingStillResolvesViaRecordIdentity()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_pattern_c_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var mo2Dir = BuildMo2Instance(root,
+            [
+                ("ReformatOriginalModFolder", "ReformatOriginalMod.esp"),
+                ("ReformatJapanesePatchFolder", "ReformatJapanesePatch.esp"),
+                ("TrivialRebalanceModFolder", "TrivialRebalanceMod.esp"),
+            ]);
+            var lines = RunPipeline(mo2Dir, root, "TrivialRebalanceMod.esp");
+
+            Assert.True(lines.ContainsKey("Sjpts Moonlit Rapier "));
+            Assert.Equal("月光の刺剣", lines["Sjpts Moonlit Rapier "].Japanese);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>Pattern D (multiple JP patches with different content, the
+    /// revised/closest-to-winner one should be preferred): two competing
+    /// Japanese translation patches exist in the same load order (an old one
+    /// and a later revision), then an unrelated mod overrides back to
+    /// English.
+    ///
+    /// Given: MultiPatchMod.esp defines "Sjpts Emberfall Axe".
+    /// MultiPatchJapanesePatchOld.esp masters it, translates it to "旧訳・
+    /// 灰塵の斧" (an old/deprecated translation). MultiPatchJapanesePatchRevised.esp
+    /// masters the OLD patch (loads after it) and re-translates the SAME
+    /// record to "エンバーフォールの斧" (the revised, more current
+    /// translation). MultiPatchQuestMod.esp masters MultiPatchMod.esp and
+    /// overrides back to English, and wins.
+    /// When: PickUpTarget -> Translation is run.
+    /// Then: the REVISED translation ("エンバーフォールの斧") should be
+    /// recovered, not the old one -- the nearest-to-winner precedent in the
+    /// chain is the most current/intentional one.
+    ///
+    /// Confirmed RED (2026-08-29): stays unresolved today, exactly as
+    /// predicted (no corpus entry links "Sjpts Emberfall Axe" to either
+    /// Japanese candidate).</summary>
+    [Fact(Skip = "TDD placeholder for the not-yet-implemented cross-mod corpus harvesting feature's tie-break rule (nearest-to-winner precedent wins) -- see PickUpTargetTranslationCrossModTests's class remarks and DESIGN_NOTES.md")]
+    public void Run_ThenTranslate_PatternD_RevisedTranslationClosestToWinnerIsPreferredOverOlderOne()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_pattern_d_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var mo2Dir = BuildMo2Instance(root,
+            [
+                ("MultiPatchModFolder", "MultiPatchMod.esp"),
+                ("MultiPatchJapanesePatchOldFolder", "MultiPatchJapanesePatchOld.esp"),
+                ("MultiPatchJapanesePatchRevisedFolder", "MultiPatchJapanesePatchRevised.esp"),
+                ("MultiPatchQuestModFolder", "MultiPatchQuestMod.esp"),
+            ]);
+            var lines = RunPipeline(mo2Dir, root, "MultiPatchQuestMod.esp");
+
+            Assert.True(lines.ContainsKey("Sjpts Emberfall Axe"));
+            Assert.Equal("エンバーフォールの斧", lines["Sjpts Emberfall Axe"].Japanese);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>Pattern E (already covered by existing DSD -- the cross-mod
+    /// machinery must never even engage): a record has BOTH a cross-mod
+    /// Japanese precedent in its chain AND an existing DSD translation
+    /// patch that already covers it.
+    ///
+    /// Given: DsdCoveredMod.esp defines "Sjpts Gilded Hammer".
+    /// DsdCoveredJapanesePatch.esp masters it, translates it to "金箔の槌"
+    /// (a cross-mod precedent, same shape as the other patterns).
+    /// DsdCoveredQuestMod.esp masters DsdCoveredMod.esp, overrides back to
+    /// English "Sjpts Gilded Hammer", and wins. An EXISTING DSD coverage file
+    /// (Fixtures/Integration/DsdCoveredModDsd/ExistingCommunityPatch.json)
+    /// already targets this exact (FormID, WEAP FULL, index) with a
+    /// DIFFERENT, independently-authored Japanese string, "金箔のハンマー".
+    /// When: PickUpTarget -> Translation is run.
+    /// Then: the record should not become a translation candidate at all
+    /// (already covered by DSD, exactly like scenario④) -- the cross-mod
+    /// precedent ("金箔の槌") must never surface or compete with the DSD
+    /// translation.</summary>
+    [Fact]
+    public void Run_ThenTranslate_PatternE_ExistingDsdCoverageTakesPrecedenceOverCrossModPrecedent()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_pattern_e_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var mo2Dir = BuildMo2Instance(root,
+            [
+                ("DsdCoveredModFolder", "DsdCoveredMod.esp"),
+                ("DsdCoveredJapanesePatchFolder", "DsdCoveredJapanesePatch.esp"),
+                ("DsdCoveredQuestModFolder", "DsdCoveredQuestMod.esp"),
+            ], (mo2Dir, mods) =>
+            {
+                var fixturesDir = Path.Combine(AppContext.BaseDirectory, "Fixtures", "Integration");
+                var questModDir = Path.Combine(mo2Dir, "mods", "DsdCoveredQuestModFolder");
+                var dsdDir = Path.Combine(questModDir, "SKSE", "Plugins", "DynamicStringDistributor", "DsdCoveredQuestMod.esp");
+                Directory.CreateDirectory(dsdDir);
+                File.Copy(
+                    Path.Combine(fixturesDir, "DsdCoveredModDsd", "ExistingCommunityPatch.json"),
+                    Path.Combine(dsdDir, "ExistingCommunityPatch.json"));
+            });
+
+            using var pickUpTargetLog = RunLog.Open(Path.Combine(root, "PickUpTarget"), "PickUpTarget");
+            var result = PickUpTargetRunner.Run(mo2Dir, pickUpTargetLog);
+
+            Assert.DoesNotContain(result.Candidates, c => c.CurrentText == "Sjpts Gilded Hammer");
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
 }
