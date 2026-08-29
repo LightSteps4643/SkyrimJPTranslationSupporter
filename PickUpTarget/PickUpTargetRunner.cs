@@ -14,7 +14,7 @@ using static SkyrimJPStringPatcher.Core.SafeEnumeration;
 // the same FormKey+type. "index" is 0 for every FormID-only type; see
 // Candidate.cs and NestedTranslatableFields.cs for what it means per type.
 using ChainKey = (Mutagen.Bethesda.Plugins.FormKey FormKey, string DsdType, int Index);
-using ChainValue = System.Collections.Generic.List<(Mutagen.Bethesda.Plugins.ModKey Source, string Text, string EditorId, string Context)>;
+using ChainValue = System.Collections.Generic.List<(Mutagen.Bethesda.Plugins.ModKey Source, string Text, string EditorId, string Context, bool IsDualLanguageByStringsFiles)>;
 
 namespace SkyrimJPStringPatcher.PickUpTarget;
 
@@ -321,7 +321,15 @@ public static class PickUpTargetRunner
                 list = new ChainValue();
                 chains[key] = list;
             }
-            list.Add((source, winnerText!, editorId, context));
+            // v0.56.1: whether THIS mod's own field had a genuine English/
+            // Japanese pair via Strings files (same condition as the corpus
+            // registration just above) -- lets FindCrossModPrecedent trust a
+            // dual-language contributor unconditionally instead of needing a
+            // separate chain entry to compare against for staleness (that
+            // English side would otherwise be silently discarded here, since
+            // this entry only ever keeps ONE text per contributor).
+            var isDualLanguageByStringsFiles = hasEnglish && hasJapanese && engText != jpnText;
+            list.Add((source, winnerText!, editorId, context, isDualLanguageByStringsFiles));
         }
 
         var raceNames = CollectRaceNames(mods, issues, log, trace);
@@ -592,30 +600,36 @@ public static class PickUpTargetRunner
     /// later override carried non-Japanese text back in. General-purpose:
     /// runs uniformly for every chain regardless of whether it was ever
     /// overridden at all — a single-contributor chain simply has nothing to
-    /// find. Applies equally to a genuinely-vanilla source in the chain,
-    /// though in practice that case is already resolved by the same-mod
-    /// dual-language corpus harvesting in Consider() above, since a
-    /// localized mod's own field harvest doesn't depend on it winning the
-    /// chain (confirmed empirically, DESIGN_NOTES.md's Pattern A).
+    /// find.
     ///
-    /// <paramref name="Reference"/> is the English text the chain entry
-    /// immediately BEFORE the found Japanese one carried, if any and if it
-    /// isn't itself Japanese — this is the closest thing to "what the
-    /// Japanese was translated FROM" the chain records. Comparing it
-    /// (trimmed, matching the existing DSD-staleness comparison's own
-    /// leniency) against the CURRENT winner's text is how staleness is
-    /// judged; when no such reference exists at all (a mod translated
-    /// directly in place, with no separate English-only file ever existing),
-    /// staleness simply cannot be verified.</summary>
-    private static (string? Japanese, string? Reference) FindCrossModPrecedent(ChainValue chain)
+    /// <paramref name="NeedsReview"/> is false (trusted, no reference needed)
+    /// whenever the found contributor's OWN field had a genuine English/
+    /// Japanese pair via Strings files (<see cref="ChainValue"/>'s
+    /// IsDualLanguageByStringsFiles) — the same trust the existing same-mod
+    /// dual-language corpus harvesting in Consider() already extends to this
+    /// exact data, independent of whether that contributor won the chain
+    /// (confirmed empirically, DESIGN_NOTES.md's Pattern A; v0.56.1 fixed a
+    /// regression where this case was wrongly flagged, since a chain entry
+    /// only ever keeps ONE text per contributor and so silently drops the
+    /// English side that field also had, leaving nothing to compare against).
+    ///
+    /// Otherwise (a directly-translated, single-language contributor),
+    /// falls back to comparing the chain entry immediately BEFORE the found
+    /// Japanese one (if any, and if it isn't itself Japanese) against the
+    /// current winner's text (trimmed, matching the existing DSD-staleness
+    /// comparison's own leniency) — when no such reference exists at all,
+    /// staleness simply cannot be verified and NeedsReview is true.</summary>
+    private static (string? Japanese, bool NeedsReview) FindCrossModPrecedent(ChainValue chain, string winnerText)
     {
         for (var i = chain.Count - 2; i >= 0; i--)
         {
             if (!LanguageDetector.ContainsJapanese(chain[i].Text)) continue;
+            if (chain[i].IsDualLanguageByStringsFiles) return (chain[i].Text, false);
             var reference = i > 0 && !LanguageDetector.ContainsJapanese(chain[i - 1].Text) ? chain[i - 1].Text : null;
-            return (chain[i].Text, reference);
+            var needsReview = reference == null || reference.Trim() != winnerText.Trim();
+            return (chain[i].Text, needsReview);
         }
-        return (null, null);
+        return (null, false);
     }
 
     /// <summary>A cross-mod precedent is harvested into the corpus too (not
@@ -632,7 +646,7 @@ public static class PickUpTargetRunner
         {
             var winner = chain[^1];
             if (LanguageDetector.ContainsJapanese(winner.Text)) continue;
-            var (japanese, _) = FindCrossModPrecedent(chain);
+            var (japanese, _) = FindCrossModPrecedent(chain, winner.Text);
             if (japanese == null || string.IsNullOrWhiteSpace(winner.Text) || winner.Text == japanese) continue;
             corpus.Add(new CorpusEntry(winner.Text, japanese, winner.Source.FileName, "cross_mod", key.DsdType));
         }
@@ -865,9 +879,7 @@ public static class PickUpTargetRunner
             // remarks) is attached to the candidate itself, keyed on record
             // identity rather than text -- Translation applies it ahead of
             // every other resolution method.
-            var (crossModJapanese, crossModReference) = FindCrossModPrecedent(chain);
-            var crossModNeedsReview = crossModJapanese != null
-                && (crossModReference == null || crossModReference.Trim() != winner.Text.Trim());
+            var (crossModJapanese, crossModNeedsReview) = FindCrossModPrecedent(chain, winner.Text);
             if (crossModJapanese != null)
             {
                 trace?.Trace($"CrossModPrecedent [{dsdType}] {formKey}: \"{winner.Text}\" <- \"{crossModJapanese}\" (needsReview={crossModNeedsReview})");
