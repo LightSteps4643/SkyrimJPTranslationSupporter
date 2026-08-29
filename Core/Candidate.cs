@@ -31,7 +31,26 @@ namespace SkyrimJPStringPatcher.Core;
 /// into translations.tsv's Notes column, but ONLY while the row stays
 /// unresolved (see PromptGenerator.WriteTranslationTemplate) — once any method
 /// resolves it, the resolution tag takes over and this warning is dropped, on
-/// the reasoning that a successfully-translated string no longer needs review.</summary>
+/// the reasoning that a successfully-translated string no longer needs review.
+///
+/// <paramref name="CrossModPrecedentJapanese"/>/<paramref name="CrossModPrecedentNeedsReview"/>
+/// (v0.56.0): set when this exact (FormKey, RecordType, Index) chain has a
+/// NON-winning contributor whose text was Japanese — some other mod (or an
+/// earlier revision of the same one) already translated this very record,
+/// before the current winner's override carried English text back in. Takes
+/// priority over every other resolution method in Translation (even ①コーパス
+/// 完全一致) since it is keyed on record identity, not text matching, so it
+/// survives incidental reformatting a text-only corpus match would miss.
+/// <paramref name="CrossModPrecedentNeedsReview"/> is true whenever the tool
+/// cannot positively confirm the precedent still applies (either the
+/// immediately-preceding chain entry's English text differs from the current
+/// winner's — a genuine known issue 21-style stale precedent — or no English
+/// reference exists in the chain at all to compare against, e.g. a mod
+/// translated directly in place with no separate English-only file ever
+/// installed). This tool does not adjudicate whether a translation is still
+/// objectively correct for the current text (mirrors the existing DSD
+/// stale-coverage handling): the precedent is still applied either way, this
+/// flag only controls whether a review warning is logged.</summary>
 public sealed record Candidate(
     string WinningPlugin,
     string FormId,
@@ -42,4 +61,6 @@ public sealed record Candidate(
     string Context = "",
     string StaleOriginal = "",
     string StaleTranslation = "",
-    string Warning = "");
+    string Warning = "",
+    string CrossModPrecedentJapanese = "",
+    bool CrossModPrecedentNeedsReview = false);
