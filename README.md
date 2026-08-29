@@ -49,6 +49,10 @@ dotnet build SkyrimJPStringPatcherGui\SkyrimJPStringPatcherGui.csproj
 .\publish-release.ps1
 ```
 
+## 変更履歴
+
+[CHANGELOG.md](./CHANGELOG.md) を参照してください。
+
 ## ライセンス
 
 [GPL-3.0](./LICENSE)
