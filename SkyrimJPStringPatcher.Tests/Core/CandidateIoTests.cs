@@ -23,7 +23,9 @@ public class CandidateIoTests
         Context: "Some Context",
         StaleOriginal: "Old Text",
         StaleTranslation: "古いテキスト",
-        Warning: "PickUpTargetClassificationFailed");
+        Warning: "PickUpTargetClassificationFailed",
+        CrossModPrecedentJapanese: "過去の訳文",
+        CrossModPrecedentNeedsReview: true);
 
     [Fact]
     public void ReadTsv_FullFormatFixture_ParsesEveryFieldCorrectly()
