@@ -57,6 +57,10 @@ To build the distributable package (self-contained, win-x64):
 .\publish-release.ps1
 ```
 
+## Changelog
+
+See [CHANGELOG.md](./CHANGELOG.md) (Japanese only).
+
 ## License
 
 [GPL-3.0](./LICENSE)
