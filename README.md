@@ -1,5 +1,7 @@
 # Skyrim JP Translation Supporter
 
+*日本語 | [English](./README.en.md)*
+
 英語版Skyrim SEのMODを、Mod Organizer 2 (MO2) のロードオーダー全体でまとめて日本語化する
 作業を支援するツールです。[DSD (Dynamic String Distributor)](https://www.nexusmods.com/skyrimspecialedition/mods/107676)
 向けの翻訳ファイルを、ESP/ESMを一切改変せずに生成します。
