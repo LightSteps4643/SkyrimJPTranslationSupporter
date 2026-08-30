@@ -14,6 +14,14 @@ public class DsdJsonGeneratorTests
 
     private static RunLog OpenTestLog(string root) => RunLog.Open(Path.Combine(root, "GenerateDsdFile"), "GenerateDsdFile");
 
+    // v0.57.4: the output filename now stamps in the run timestamp (see
+    // DsdWriter.cs's own remarks — lets successive incremental runs coexist
+    // instead of shadowing each other in MO2's VFS). Tests pass this fixed
+    // value so the filename stays deterministic and matches the checked-in
+    // golden fixture below.
+    private static readonly DateTime TestTimestamp = new(2026, 1, 1, 0, 0, 0);
+    private const string TestOutputFileName = "SkyrimJPStringPatcher_20260101000000.json";
+
     private static string Normalize(string text) => text.Replace("\r\n", "\n");
 
     /// <summary>Fixtures/translations_basic.tsv exercises, in one pass: a normal
@@ -45,7 +53,7 @@ public class DsdJsonGeneratorTests
             var outDir = Path.Combine(root, "out");
             using var log = OpenTestLog(root);
 
-            DsdJsonGenerator.Run(FixturePath("translations_basic.tsv"), outDir, log);
+            DsdJsonGenerator.Run(FixturePath("translations_basic.tsv"), outDir, log, outputTimestamp: TestTimestamp);
 
             var expectedRoot = FixturePath("expected_output");
             var actualRoot = outDir;
@@ -99,7 +107,7 @@ public class DsdJsonGeneratorTests
             Console.SetError(capturedError);
             try
             {
-                DsdJsonGenerator.Run(FixturePath("translations_basic.tsv"), Path.Combine(root, "out"), log);
+                DsdJsonGenerator.Run(FixturePath("translations_basic.tsv"), Path.Combine(root, "out"), log, outputTimestamp: TestTimestamp);
             }
             finally
             {
@@ -137,11 +145,11 @@ public class DsdJsonGeneratorTests
             var outDir = Path.Combine(root, "out");
             using var log = OpenTestLog(root);
 
-            DsdJsonGenerator.Run(FixturePath("directory_input"), outDir, log);
+            DsdJsonGenerator.Run(FixturePath("directory_input"), outDir, log, outputTimestamp: TestTimestamp);
 
             var dsdRoot = Path.Combine(outDir, "SKSE", "Plugins", "DynamicStringDistributor");
-            Assert.True(File.Exists(Path.Combine(dsdRoot, "PluginA.esp", "SkyrimJPStringPatcher.json")));
-            Assert.True(File.Exists(Path.Combine(dsdRoot, "PluginB.esp", "SkyrimJPStringPatcher.json")));
+            Assert.True(File.Exists(Path.Combine(dsdRoot, "PluginA.esp", TestOutputFileName)));
+            Assert.True(File.Exists(Path.Combine(dsdRoot, "PluginB.esp", TestOutputFileName)));
         }
         finally
         {
@@ -169,9 +177,9 @@ public class DsdJsonGeneratorTests
             var outDir = Path.Combine(root, "out");
             using var log = OpenTestLog(root);
 
-            DsdJsonGenerator.Run(FixturePath("duplicate_input"), outDir, log);
+            DsdJsonGenerator.Run(FixturePath("duplicate_input"), outDir, log, outputTimestamp: TestTimestamp);
 
-            var jsonPath = Path.Combine(outDir, "SKSE", "Plugins", "DynamicStringDistributor", "DupPlugin.esp", "SkyrimJPStringPatcher.json");
+            var jsonPath = Path.Combine(outDir, "SKSE", "Plugins", "DynamicStringDistributor", "DupPlugin.esp", TestOutputFileName);
             var json = File.ReadAllText(jsonPath);
             Assert.Contains("重複剣（旧）", json);
             Assert.Contains("重複剣（新）", json);
