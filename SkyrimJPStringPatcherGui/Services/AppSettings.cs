@@ -11,6 +11,21 @@ namespace SkyrimJPStringPatcherGui.Services;
 public sealed class AppSettings
 {
     public string Mo2InstanceDir { get; set; } = "";
+
+    /// <summary>v0.57.0: MO2の「Paths」タブでmods/profiles/overwriteの実体位置を
+    /// 標準（&lt;Mo2InstanceDir&gt;直下）から変更している場合のみ使う、任意の個別
+    /// 上書き。ModOrganizer.ini自体の位置（Mo2InstanceDir）は「インスタンスフォルダ」
+    /// の定義そのものであり上書き対象にならないが、この3つはMO2内で独立に変更
+    /// 可能なため個別に持つ。空文字なら従来どおりMo2InstanceDirから自動導出する
+    /// （既定・多くのユーザーはここを一切触らない）。</summary>
+    public string Mo2ModsDirOverride { get; set; } = "";
+
+    /// <summary>選択中プロファイル自体のフォルダへの完全パス（"profiles"という
+    /// 親フォルダではない）。空なら&lt;Mo2InstanceDir&gt;/profiles/&lt;選択中
+    /// プロファイル&gt;を自動導出する。</summary>
+    public string Mo2ProfileDirOverride { get; set; } = "";
+
+    public string Mo2OverwriteDirOverride { get; set; } = "";
     public string LlmEndpoint { get; set; } = "http://localhost:11434/v1/chat/completions";
     public string LlmModel { get; set; } = "gemma3:12b";
 
