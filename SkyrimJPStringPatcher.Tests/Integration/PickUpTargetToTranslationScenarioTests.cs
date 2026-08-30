@@ -38,6 +38,7 @@ public class PickUpTargetToTranslationScenarioTests
         var profileDir = Path.Combine(mo2Dir, "profiles", "Default");
         Directory.CreateDirectory(dsdDir);
         Directory.CreateDirectory(profileDir);
+        Directory.CreateDirectory(Path.Combine(mo2Dir, "overwrite"));
 
         var fixturesDir = Path.Combine(AppContext.BaseDirectory, "Fixtures", "PickUpTarget");
         File.Copy(Path.Combine(fixturesDir, "StaleTest.esp"), Path.Combine(modDir, "StaleTest.esp"));
@@ -47,7 +48,7 @@ public class PickUpTargetToTranslationScenarioTests
 
         File.WriteAllText(Path.Combine(mo2Dir, "ModOrganizer.ini"),
             "[General]\r\n" +
-            $"gamePath=@ByteArray({Path.Combine(root, "nonexistent_game")})\r\n" +
+            $"gamePath=@ByteArray({AppContext.BaseDirectory})\r\n" +
             "selected_profile=@ByteArray(Default)\r\n");
         File.WriteAllText(Path.Combine(profileDir, "modlist.txt"), "+TestMod\r\n");
         File.WriteAllText(Path.Combine(profileDir, "plugins.txt"), "*StaleTest.esp\r\n");
@@ -201,6 +202,7 @@ public class PickUpTargetToTranslationScenarioTests
         Directory.CreateDirectory(baseDir);
         Directory.CreateDirectory(patchDir);
         Directory.CreateDirectory(profileDir);
+        Directory.CreateDirectory(Path.Combine(mo2Dir, "overwrite"));
 
         var fixturesDir = Path.Combine(AppContext.BaseDirectory, "Fixtures", "Integration");
         File.Copy(Path.Combine(fixturesDir, "PriorityModBase.esp"), Path.Combine(baseDir, "PriorityModBase.esp"));
@@ -223,7 +225,7 @@ public class PickUpTargetToTranslationScenarioTests
 
         File.WriteAllText(Path.Combine(mo2Dir, "ModOrganizer.ini"),
             "[General]\r\n" +
-            $"gamePath=@ByteArray({Path.Combine(root, "nonexistent_game")})\r\n" +
+            $"gamePath=@ByteArray({AppContext.BaseDirectory})\r\n" +
             "selected_profile=@ByteArray(Default)\r\n");
         File.WriteAllText(Path.Combine(profileDir, "modlist.txt"), "+PriorityModPatchFolder\r\n+PriorityModBaseFolder\r\n");
         // Base loads first, patch loads last (wins) -- plugins.txt order is what
@@ -304,6 +306,7 @@ public class PickUpTargetToTranslationScenarioTests
         Directory.CreateDirectory(sourceStringsDir);
         Directory.CreateDirectory(targetDir);
         Directory.CreateDirectory(profileDir);
+        Directory.CreateDirectory(Path.Combine(mo2Dir, "overwrite"));
 
         var fixturesDir = Path.Combine(AppContext.BaseDirectory, "Fixtures", "Integration");
         File.Copy(Path.Combine(fixturesDir, "SjptsVanillaLikeSource", "SjptsVanillaLikeSource.esp"), Path.Combine(sourceDir, "SjptsVanillaLikeSource.esp"));
@@ -313,7 +316,7 @@ public class PickUpTargetToTranslationScenarioTests
 
         File.WriteAllText(Path.Combine(mo2Dir, "ModOrganizer.ini"),
             "[General]\r\n" +
-            $"gamePath=@ByteArray({Path.Combine(root, "nonexistent_game")})\r\n" +
+            $"gamePath=@ByteArray({AppContext.BaseDirectory})\r\n" +
             "selected_profile=@ByteArray(Default)\r\n");
         File.WriteAllText(Path.Combine(profileDir, "modlist.txt"), "+TargetFolder\r\n+SourceFolder\r\n");
         File.WriteAllText(Path.Combine(profileDir, "plugins.txt"), "*SjptsVanillaLikeSource.esp\r\n*SjptsUnrelatedMod.esp\r\n");
@@ -424,13 +427,14 @@ public class PickUpTargetToTranslationScenarioTests
         var profileDir = Path.Combine(mo2Dir, "profiles", "Default");
         Directory.CreateDirectory(modDir);
         Directory.CreateDirectory(profileDir);
+        Directory.CreateDirectory(Path.Combine(mo2Dir, "overwrite"));
 
         var fixturesDir = Path.Combine(AppContext.BaseDirectory, "Fixtures", "Integration");
         File.Copy(Path.Combine(fixturesDir, "SjptsGlossaryTarget", "SjptsGlossaryTarget.esp"), Path.Combine(modDir, "SjptsGlossaryTarget.esp"));
 
         File.WriteAllText(Path.Combine(mo2Dir, "ModOrganizer.ini"),
             "[General]\r\n" +
-            $"gamePath=@ByteArray({Path.Combine(root, "nonexistent_game")})\r\n" +
+            $"gamePath=@ByteArray({AppContext.BaseDirectory})\r\n" +
             "selected_profile=@ByteArray(Default)\r\n");
         File.WriteAllText(Path.Combine(profileDir, "modlist.txt"), "+TestMod\r\n");
         File.WriteAllText(Path.Combine(profileDir, "plugins.txt"), "*SjptsGlossaryTarget.esp\r\n");
@@ -509,6 +513,7 @@ public class PickUpTargetToTranslationScenarioTests
         var profileDir = Path.Combine(mo2Dir, "profiles", "Default");
         Directory.CreateDirectory(modDir);
         Directory.CreateDirectory(profileDir);
+        Directory.CreateDirectory(Path.Combine(mo2Dir, "overwrite"));
         try
         {
             const string plugin = "SjptsNameGlossaryTarget.esp";
@@ -521,7 +526,7 @@ public class PickUpTargetToTranslationScenarioTests
 
             File.WriteAllText(Path.Combine(mo2Dir, "ModOrganizer.ini"),
                 "[General]\r\n" +
-                $"gamePath=@ByteArray({Path.Combine(root, "nonexistent_game")})\r\n" +
+                $"gamePath=@ByteArray({AppContext.BaseDirectory})\r\n" +
                 "selected_profile=@ByteArray(Default)\r\n");
             File.WriteAllText(Path.Combine(profileDir, "modlist.txt"), "+TestMod\r\n");
             File.WriteAllText(Path.Combine(profileDir, "plugins.txt"), $"*{plugin}\r\n");
@@ -549,6 +554,7 @@ public class PickUpTargetToTranslationScenarioTests
         Directory.CreateDirectory(sourceStringsDir);
         Directory.CreateDirectory(targetDir);
         Directory.CreateDirectory(profileDir);
+        Directory.CreateDirectory(Path.Combine(mo2Dir, "overwrite"));
 
         var fixturesDir = Path.Combine(AppContext.BaseDirectory, "Fixtures", "Integration");
         File.Copy(Path.Combine(fixturesDir, "SjptsMeaningSource", "SjptsMeaningSource.esp"), Path.Combine(sourceDir, "SjptsMeaningSource.esp"));
@@ -558,7 +564,7 @@ public class PickUpTargetToTranslationScenarioTests
 
         File.WriteAllText(Path.Combine(mo2Dir, "ModOrganizer.ini"),
             "[General]\r\n" +
-            $"gamePath=@ByteArray({Path.Combine(root, "nonexistent_game")})\r\n" +
+            $"gamePath=@ByteArray({AppContext.BaseDirectory})\r\n" +
             "selected_profile=@ByteArray(Default)\r\n");
         File.WriteAllText(Path.Combine(profileDir, "modlist.txt"), "+TargetFolder\r\n+SourceFolder\r\n");
         File.WriteAllText(Path.Combine(profileDir, "plugins.txt"), "*SjptsMeaningSource.esp\r\n*SjptsMeaningTarget.esp\r\n");
@@ -620,13 +626,14 @@ public class PickUpTargetToTranslationScenarioTests
         var profileDir = Path.Combine(mo2Dir, "profiles", "Default");
         Directory.CreateDirectory(modDir);
         Directory.CreateDirectory(profileDir);
+        Directory.CreateDirectory(Path.Combine(mo2Dir, "overwrite"));
 
         var fixturesDir = Path.Combine(AppContext.BaseDirectory, "Fixtures", "Integration");
         File.Copy(Path.Combine(fixturesDir, "SjptsUnresolvableTarget", "SjptsUnresolvableTarget.esp"), Path.Combine(modDir, "SjptsUnresolvableTarget.esp"));
 
         File.WriteAllText(Path.Combine(mo2Dir, "ModOrganizer.ini"),
             "[General]\r\n" +
-            $"gamePath=@ByteArray({Path.Combine(root, "nonexistent_game")})\r\n" +
+            $"gamePath=@ByteArray({AppContext.BaseDirectory})\r\n" +
             "selected_profile=@ByteArray(Default)\r\n");
         File.WriteAllText(Path.Combine(profileDir, "modlist.txt"), "+TestMod\r\n");
         File.WriteAllText(Path.Combine(profileDir, "plugins.txt"), "*SjptsUnresolvableTarget.esp\r\n");

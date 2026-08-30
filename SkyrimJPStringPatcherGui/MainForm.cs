@@ -1105,8 +1105,17 @@ public sealed class MainForm : Form
         // 検知したら実行成功時でも明示的なMessageBoxで知らせる（レアケースのため）。
         const string IssuesMarkerPrefix = "##SJPTS_ISSUES##";
         const string IssuesPluginsMarkerPrefix = "##SJPTS_ISSUES_PLUGINS##";
+        // v0.57.1: pickuptarget prints "[error] ..." (readable, not a stack
+        // trace) for a recoverable MO2 configuration problem (see
+        // Mo2InstanceConfigurationException) — captured here so the failure
+        // dialog below can show the ACTUAL cause instead of just a bare exit
+        // code, which is what a real user reported being unable to make
+        // sense of ("終了コード-532462766が表示されて..."). Keeps the last
+        // one seen, in case more than one line happens to match.
+        const string ErrorMarkerPrefix = "[error] ";
         string? issuesLine = null;
         string? issuesPluginsLine = null;
+        string? lastErrorLine = null;
         void OnOutputLine(string line)
         {
             AppendLog(line);
@@ -1117,6 +1126,8 @@ public sealed class MainForm : Form
                 issuesPluginsLine = line[IssuesPluginsMarkerPrefix.Length..].Trim();
             else if (line.StartsWith(IssuesMarkerPrefix, StringComparison.Ordinal))
                 issuesLine = line;
+            else if (line.StartsWith(ErrorMarkerPrefix, StringComparison.Ordinal))
+                lastErrorLine = line[ErrorMarkerPrefix.Length..];
         }
         try
         {
@@ -1125,7 +1136,10 @@ public sealed class MainForm : Form
             if (!result.Succeeded)
             {
                 AppendLog($"[終了コード {result.ExitCode}]");
-                MessageBox.Show(this, $"処理が失敗しました（終了コード {result.ExitCode}）。ログを確認してください。", "実行エラー", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                var message = lastErrorLine != null
+                    ? $"処理が失敗しました:\n{lastErrorLine}"
+                    : $"処理が失敗しました（終了コード {result.ExitCode}）。ログを確認してください。";
+                MessageBox.Show(this, message, "実行エラー", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             else if (issuesLine != null)
             {

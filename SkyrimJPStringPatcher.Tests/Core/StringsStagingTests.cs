@@ -108,7 +108,7 @@ public class StringsStagingTests
         try
         {
             var instance = new Mo2Instance(
-                GamePath: Path.Combine(root, "nonexistent_game"),
+                GamePath: AppContext.BaseDirectory,
                 ProfileName: "Default",
                 ModsDir: Path.Combine(root, "mods"),
                 OverwriteDir: Path.Combine(root, "overwrite"),
