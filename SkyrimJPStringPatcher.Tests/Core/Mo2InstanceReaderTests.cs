@@ -287,4 +287,91 @@ public class Mo2InstanceReaderTests
             try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
         }
     }
+
+    /// <summary>
+    /// v0.57.0: MO2's own "Paths" settings tab ([Settings] mod_directory etc. in
+    /// ModOrganizer.ini) can redirect mods/profiles/overwrite away from the
+    /// instance folder's default children — a case this reader deliberately
+    /// doesn't parse from the ini (see the class doc comment), instead exposing
+    /// three optional override parameters the caller supplies. This proves each
+    /// override, independently, actually replaces (not supplements) its
+    /// corresponding auto-derived default: relocate ONE of mods/profile/overwrite
+    /// entirely outside the instance folder, leave the other two at their normal
+    /// default location, and confirm Read() still resolves correctly when (and
+    /// only when) the matching override is supplied.
+    /// </summary>
+    [Fact]
+    public void Read_WithModsDirOverride_ResolvesPluginsFromRedirectedLocation()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_mo2_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var instanceDir = BuildInstance(root);
+            var redirectedModsDir = Path.Combine(root, "redirected_mods");
+            Directory.Move(Path.Combine(instanceDir, "mods"), redirectedModsDir);
+
+            // Without the override, the default <instanceDir>/mods is now empty/missing
+            // -> Solo.esp (which lives only in a mod folder, not overwrite/ or game/Data) can't resolve.
+            var withoutOverride = Mo2InstanceReader.Read(instanceDir);
+            Assert.DoesNotContain(withoutOverride.LoadOrder, p => p.FileName == "Solo.esp");
+
+            var withOverride = Mo2InstanceReader.Read(instanceDir, modsDirOverride: redirectedModsDir);
+            var solo = Assert.Single(withOverride.LoadOrder, p => p.FileName == "Solo.esp");
+            Assert.Equal("SOLO", File.ReadAllText(solo.AbsolutePath));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    [Fact]
+    public void Read_WithProfileDirOverride_UsesRedirectedProfileFolder()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_mo2_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var instanceDir = BuildInstance(root);
+            var redirectedProfileDir = Path.Combine(root, "redirected_profile");
+            Directory.Move(Path.Combine(instanceDir, "profiles", "Default"), redirectedProfileDir);
+
+            // Default <instanceDir>/profiles/Default no longer exists -> Read() without the override throws.
+            Assert.Throws<DirectoryNotFoundException>(() => Mo2InstanceReader.Read(instanceDir));
+
+            var withOverride = Mo2InstanceReader.Read(instanceDir, profileDirOverride: redirectedProfileDir);
+            Assert.Contains(withOverride.LoadOrder, p => p.FileName == "Solo.esp");
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    [Fact]
+    public void Read_WithOverwriteDirOverride_RedirectedOverwriteStillWinsConflicts()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_mo2_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var instanceDir = BuildInstance(root);
+            var redirectedOverwriteDir = Path.Combine(root, "redirected_overwrite");
+            Directory.Move(Path.Combine(instanceDir, "overwrite"), redirectedOverwriteDir);
+
+            // Without the override, the default <instanceDir>/overwrite is gone -> ModLow's copy wins instead.
+            var withoutOverride = Mo2InstanceReader.Read(instanceDir);
+            Assert.Equal("MOD", File.ReadAllText(
+                withoutOverride.LoadOrder.Single(p => p.FileName == "OverwriteWins.esp").AbsolutePath));
+
+            var withOverride = Mo2InstanceReader.Read(instanceDir, overwriteDirOverride: redirectedOverwriteDir);
+            Assert.Equal("OVERWRITE", File.ReadAllText(
+                withOverride.LoadOrder.Single(p => p.FileName == "OverwriteWins.esp").AbsolutePath));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
 }

@@ -60,6 +60,23 @@ public sealed class MainForm : Form
     internal AppSettings Settings => _settings;
     internal string ProductRoot => _productRoot ?? throw new InvalidOperationException("Product root not resolved.");
     internal string Mo2Dir => _settings.Mo2InstanceDir;
+
+    /// <summary>v0.57.0: "pickuptarget" args for the current MO2 dir, with the
+    /// optional mods/profile/overwrite path overrides appended when set — the
+    /// single place both call sites (this window's "MO2再読込＆初期化" and
+    /// SettingsForm's "MO2フォルダをロード") build this command from, so the
+    /// two can't drift.</summary>
+    internal string[] BuildPickupTargetArgs(string mo2Dir)
+    {
+        var args = new List<string> { "pickuptarget", mo2Dir };
+        if (!string.IsNullOrWhiteSpace(_settings.Mo2ModsDirOverride))
+            args.Add($"--mods-dir={_settings.Mo2ModsDirOverride}");
+        if (!string.IsNullOrWhiteSpace(_settings.Mo2ProfileDirOverride))
+            args.Add($"--profile-dir={_settings.Mo2ProfileDirOverride}");
+        if (!string.IsNullOrWhiteSpace(_settings.Mo2OverwriteDirOverride))
+            args.Add($"--overwrite-dir={_settings.Mo2OverwriteDirOverride}");
+        return args.ToArray();
+    }
     internal string LlmEndpoint => _settings.LlmEndpoint;
     internal string LlmModel => _settings.LlmModel;
     internal string LlmApiKey => _settings.LlmApiKey;
@@ -892,7 +909,7 @@ public sealed class MainForm : Form
         SetBusy(true);
         try
         {
-            if (!await RunCliAsync(new[] { "pickuptarget", Mo2Dir })) return;
+            if (!await RunCliAsync(BuildPickupTargetArgs(Mo2Dir))) return;
             // Always ①バニラコーパスのみ, regardless of this window's current checkbox
             // state — this is a baseline refresh (e.g. after collecting more
             // xTranslator files), not a preview of what "翻訳実行" would currently
