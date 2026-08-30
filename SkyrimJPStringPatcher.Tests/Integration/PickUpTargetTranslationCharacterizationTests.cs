@@ -51,6 +51,7 @@ public class PickUpTargetTranslationCharacterizationTests
         var mo2Dir = Path.Combine(root, "mo2");
         var profileDir = Path.Combine(mo2Dir, "profiles", "Default");
         Directory.CreateDirectory(profileDir);
+        Directory.CreateDirectory(Path.Combine(mo2Dir, "overwrite"));
 
         var fixturesDir = Path.Combine(AppContext.BaseDirectory, "Fixtures", "Integration");
 
@@ -93,7 +94,7 @@ public class PickUpTargetTranslationCharacterizationTests
 
         File.WriteAllText(Path.Combine(mo2Dir, "ModOrganizer.ini"),
             "[General]\r\n" +
-            $"gamePath=@ByteArray({Path.Combine(root, "nonexistent_game")})\r\n" +
+            $"gamePath=@ByteArray({AppContext.BaseDirectory})\r\n" +
             "selected_profile=@ByteArray(Default)\r\n");
         File.WriteAllText(Path.Combine(profileDir, "modlist.txt"), string.Join("\r\n", mods.Select(m => "+" + m.Folder).Reverse()) + "\r\n");
         // Load order: TestXMod1 -> TestXMod2 -> FamousMod -> FamousModJapanesePatch ->

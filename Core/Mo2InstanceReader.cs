@@ -5,6 +5,30 @@ namespace SkyrimJPStringPatcher.Core;
 public sealed record ResolvedPlugin(string FileName, string AbsolutePath);
 
 /// <summary>
+/// v0.57.1: thrown by <see cref="Mo2InstanceReader.Read"/> for a problem that
+/// stems from the SUPPLIED configuration (a wrong instance folder, a missing
+/// ModOrganizer.ini key, a nonexistent override path) rather than a genuine
+/// bug in this tool. Callers (`Program.cs`'s <c>pickuptarget</c> command)
+/// catch this ONE specific type and turn it into a clean, deliberate exit
+/// (code 1 + this exception's own readable <see cref="Exception.Message"/>)
+/// instead of letting it propagate as an unhandled exception.
+///
+/// Added after a real user hit exactly that unhandled-crash path (reported on
+/// a mod mirror site as "終了コード-532462766" — 0xE0434352, .NET's fixed
+/// "unhandled exception" exit code, not anything MO2-specific) from an
+/// ordinary input mistake: pointing at the wrong folder. Before this,
+/// `Read()` let raw framework exceptions
+/// (FileNotFoundException/KeyNotFoundException/DirectoryNotFoundException)
+/// escape for every one of these cases, and `Program.cs` had no outer catch
+/// to stop them from crashing the whole process. See DESIGN_NOTES.md's
+/// v0.57.1 entry for the full black-box test matrix this satisfies.
+/// </summary>
+public sealed class Mo2InstanceConfigurationException : Exception
+{
+    public Mo2InstanceConfigurationException(string message) : base(message) { }
+}
+
+/// <summary>
 /// Reads a Mod Organizer 2 instance (ModOrganizer.ini + the active profile's
 /// modlist.txt / plugins.txt) and resolves each active plugin to the physical
 /// file that MO2's VFS would actually serve, without needing MO2 itself running.
@@ -32,15 +56,39 @@ public static class Mo2InstanceReader
     {
         var iniPath = Path.Combine(instanceDir, "ModOrganizer.ini");
         if (!File.Exists(iniPath))
-            throw new FileNotFoundException($"ModOrganizer.ini not found under {instanceDir}");
+            throw new Mo2InstanceConfigurationException(
+                $"ModOrganizer.ini not found under '{instanceDir}' — is this actually the MO2 instance folder " +
+                "(the one ModOrganizer.ini itself lives in directly), not a parent folder or MO2's own install folder?");
 
         var ini = ParseIni(iniPath);
-        var gamePath = UnwrapByteArray(ini["General"]["gamePath"]);
-        var profileName = UnwrapByteArray(ini["General"]["selected_profile"]);
+        var gamePath = UnwrapByteArray(RequireIniValue(ini, "gamePath", iniPath));
+        var profileName = UnwrapByteArray(RequireIniValue(ini, "selected_profile", iniPath));
+
+        // v0.57.1: gamePath not existing doesn't crash today -- it silently
+        // drops every vanilla/DLC/CC "implicit master" from the load order
+        // with zero warning (AddImplicitMasters below just returns early).
+        // That's worse than a crash (a silent corpus-quality loss, not a
+        // visible failure), so it gets the same clear-error treatment.
+        if (!Directory.Exists(gamePath))
+            throw new Mo2InstanceConfigurationException(
+                $"gamePath in '{iniPath}' points to a folder that doesn't exist: '{gamePath}'");
 
         var modsDir = string.IsNullOrWhiteSpace(modsDirOverride) ? Path.Combine(instanceDir, "mods") : modsDirOverride;
         var overwriteDir = string.IsNullOrWhiteSpace(overwriteDirOverride) ? Path.Combine(instanceDir, "overwrite") : overwriteDirOverride;
         var profileDir = string.IsNullOrWhiteSpace(profileDirOverride) ? Path.Combine(instanceDir, "profiles", profileName) : profileDirOverride;
+
+        // v0.57.1: checked uniformly whether each path came from an explicit
+        // override or was auto-derived from instanceDir -- a missing default
+        // gets exactly the same clear error as a missing override, never a
+        // silent skip (see DESIGN_NOTES.md's v0.57.1 entry for why: a real
+        // MO2 instance always has all three of mods/profiles/overwrite from
+        // the moment it's created, so a missing one is always a genuine
+        // misconfiguration worth surfacing, not a tolerable "empty" state).
+        RequireDirectory(modsDir, "mods");
+        RequireDirectory(overwriteDir, "overwrite");
+        RequireDirectory(profileDir, $"profiles/{profileName}");
+        RequireFile(Path.Combine(profileDir, "modlist.txt"), "modlist.txt");
+        RequireFile(Path.Combine(profileDir, "plugins.txt"), "plugins.txt");
 
         var modPriorityAll = ReadModListPriority(Path.Combine(profileDir, "modlist.txt"), enabledOnly: false);
         var modPriorityEnabled = ReadModListPriority(Path.Combine(profileDir, "modlist.txt"), enabledOnly: true);
@@ -207,6 +255,31 @@ public static class Mo2InstanceReader
 
         Console.Error.WriteLine($"[warn] could not resolve physical path for plugin '{pluginFileName}' — skipping");
         return null;
+    }
+
+    /// <summary>v0.57.1: replaces the raw <c>Dictionary&lt;,&gt;</c> indexer's
+    /// KeyNotFoundException (unreadable, and — being an ordinary framework
+    /// exception, not <see cref="Mo2InstanceConfigurationException"/> — would
+    /// crash the whole process rather than exit cleanly) for a
+    /// ModOrganizer.ini missing an expected `[General]` key (e.g. a
+    /// never-launched/hand-edited instance).</summary>
+    private static string RequireIniValue(Dictionary<string, Dictionary<string, string>> ini, string key, string iniPath)
+    {
+        if (!ini["General"].TryGetValue(key, out var value))
+            throw new Mo2InstanceConfigurationException($"'{key}' not found in the [General] section of '{iniPath}'");
+        return value;
+    }
+
+    private static void RequireDirectory(string path, string label)
+    {
+        if (!Directory.Exists(path))
+            throw new Mo2InstanceConfigurationException($"{label} folder not found: '{path}'");
+    }
+
+    private static void RequireFile(string path, string label)
+    {
+        if (!File.Exists(path))
+            throw new Mo2InstanceConfigurationException($"{label} not found: '{path}'");
     }
 
     /// <summary>Highest priority first (matches modlist.txt top-to-bottom order).</summary>

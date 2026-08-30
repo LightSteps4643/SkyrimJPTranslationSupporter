@@ -38,6 +38,7 @@ public class DsdCoverageScannerTests
         Directory.CreateDirectory(dsdBrokenDir);
         Directory.CreateDirectory(dsdInactiveDir);
         Directory.CreateDirectory(profileDir);
+        Directory.CreateDirectory(Path.Combine(mo2Dir, "overwrite"));
 
         // A dummy (empty) plugin file — only its NAME matters for Mo2InstanceReader
         // to resolve "TestMod.esp" as an active plugin; no Mutagen content needed.
@@ -52,7 +53,7 @@ public class DsdCoverageScannerTests
 
         File.WriteAllText(Path.Combine(mo2Dir, "ModOrganizer.ini"),
             "[General]\r\n" +
-            $"gamePath=@ByteArray({Path.Combine(root, "nonexistent_game")})\r\n" +
+            $"gamePath=@ByteArray({AppContext.BaseDirectory})\r\n" +
             "selected_profile=@ByteArray(Default)\r\n");
         // ModHigh listed first (= highest priority).
         File.WriteAllText(Path.Combine(profileDir, "modlist.txt"), "+ModHigh\r\n+ModLow\r\n+ModBroken\r\n+ModZ\r\n");
