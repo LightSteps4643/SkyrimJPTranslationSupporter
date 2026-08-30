@@ -189,7 +189,13 @@ public sealed class SettingsForm : Form
         inner.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         var explanation = new Label
         {
-            Text = "MO2でグローバルインスタンスで導入している場合や、各種パスをカスタマイズしている場合は、以下の個別のパス設定を実施してください。",
+            // v0.57.3: プロファイルフォルダの上書きは、ModOrganizer.iniの
+            // selected_profile（MO2側で現在選択中のプロファイル）とは無関係に
+            // 任意のプロファイルを指定できる——ユーザーからの質問を受けて確認・
+            // 明文化した挙動。それを踏まえ、空欄／指定時それぞれの挙動を説明文に
+            // 追記した。
+            Text = "MO2でグローバルインスタンスで導入している場合や、各種パスをカスタマイズしている場合は、以下の個別のパス設定を実施してください。\r\n" +
+                   "プロファイルフォルダを空欄にした場合は現在MO2で適用しているプロファイルが選択され、指定した場合は指定したプロファイルを選択して処理します。",
             AutoSize = true,
             MaximumSize = new Size(640, 0),
             Margin = new Padding(3, 3, 3, 10),

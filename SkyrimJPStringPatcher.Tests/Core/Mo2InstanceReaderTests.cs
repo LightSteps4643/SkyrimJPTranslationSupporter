@@ -346,6 +346,14 @@ public class Mo2InstanceReaderTests
 
             var withOverride = Mo2InstanceReader.Read(instanceDir, profileDirOverride: redirectedProfileDir);
             Assert.Contains(withOverride.LoadOrder, p => p.FileName == "Solo.esp");
+
+            // v0.57.3: the override can point at ANY profile folder, independent of
+            // ModOrganizer.ini's own selected_profile ("Default" here) -- so what this
+            // run actually used must be reported as the override folder's own name,
+            // not silently mislabeled as "Default" (found while explaining this
+            // override's behavior to the user; previously ProfileName always echoed
+            // the ini value regardless of the override).
+            Assert.Equal("redirected_profile", withOverride.ProfileName);
         }
         finally
         {
