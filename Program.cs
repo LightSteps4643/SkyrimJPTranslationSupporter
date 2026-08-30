@@ -196,6 +196,25 @@ switch (args[0])
 {
     case "pickuptarget":
     {
+        // v0.57.0: optional overrides for MO2's "Paths" tab customization
+        // ([Settings] mod_directory/profiles_directory/overwrite_directory in
+        // ModOrganizer.ini) — Mo2InstanceReader deliberately doesn't parse that
+        // section (see its own doc comment), so these let a user whose instance
+        // redirects any of the three point the tool at the real location.
+        // instanceDir/ModOrganizer.ini itself is NOT overridable this way since
+        // its location IS by definition what "instance folder" means.
+        string? ExtractFlag(string prefix)
+        {
+            var match = args.FirstOrDefault(a => a.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+            return match?[prefix.Length..];
+        }
+        var modsDirOverride = ExtractFlag("--mods-dir=");
+        var profileDirOverride = ExtractFlag("--profile-dir=");
+        var overwriteDirOverride = ExtractFlag("--overwrite-dir=");
+        args = args.Where(a => !a.StartsWith("--mods-dir=", StringComparison.OrdinalIgnoreCase)
+                               && !a.StartsWith("--profile-dir=", StringComparison.OrdinalIgnoreCase)
+                               && !a.StartsWith("--overwrite-dir=", StringComparison.OrdinalIgnoreCase)).ToArray();
+
         if (args.Length < 2) { PrintUsage(); return 1; }
         var mo2Dir = args[1];
         var outDir = args.Length > 2 ? args[2] : DefaultPickUpTargetOutDir;
@@ -206,7 +225,7 @@ switch (args[0])
         try
         {
             trace.Info($"Resolving MO2 instance: {mo2Dir}");
-            var result = PickUpTargetRunner.Run(mo2Dir, log, includeStale, trace);
+            var result = PickUpTargetRunner.Run(mo2Dir, log, includeStale, trace, modsDirOverride, profileDirOverride, overwriteDirOverride);
             trace.Info($"Scan complete: {result.Candidates.Count} candidates, {result.Corpus.Count} corpus entries");
 
             var candidatesTxt = Path.Combine(outDir, "candidates.txt");
@@ -429,6 +448,10 @@ static void PrintUsage()
     Console.WriteLine("      --include-stale: 既存DSD訳はあるが原文が変化しているものを、再翻訳の対象に含める");
     Console.WriteLine("                       （既定では報告のみで候補にしない。DSDはFormIDだけで照合するため、");
     Console.WriteLine("                        古い訳が現在の原文に適用され続けている箇所を訳し直したい場合に使う）");
+    Console.WriteLine("      --mods-dir=<path> / --profile-dir=<path> / --overwrite-dir=<path>:");
+    Console.WriteLine("                       MO2の「Paths」タブでmods/profiles/overwriteを標準位置から変更している場合の");
+    Console.WriteLine("                       個別上書き（既定は<MO2 instance dir>直下のmods/profiles/<選択中プロファイル>/overwrite）。");
+    Console.WriteLine("                       --profile-dir は選択中プロファイル自体のフォルダを指定（profilesの親ではない）。");
     Console.WriteLine("  SkyrimJPStringPatcher translation [input dir = PickUpTarget/out_temp] [output dir = Translation/out_temp] [target plugin filename | --all]");
     Console.WriteLine("      target plugin omitted or --all -> generates <output dir>/<plugin>/{prompt.txt,translations.tsv} for EVERY plugin with candidates, plus translation_index.txt");
     Console.WriteLine("      target plugin given            -> generates just that one plugin's files");

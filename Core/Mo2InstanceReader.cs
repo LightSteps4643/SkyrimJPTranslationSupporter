@@ -11,7 +11,24 @@ public sealed record ResolvedPlugin(string FileName, string AbsolutePath);
 /// </summary>
 public static class Mo2InstanceReader
 {
-    public static Mo2Instance Read(string instanceDir)
+    /// <param name="instanceDir">Where ModOrganizer.ini lives — this is what
+    /// "instance folder" means by definition, so unlike the three overrides
+    /// below it is never optional.</param>
+    /// <param name="modsDirOverride">v0.57.0: overrides the derived
+    /// `&lt;instanceDir&gt;/mods` location. Needed only when MO2's own "Paths"
+    /// settings tab (<c>[Settings] mod_directory</c> in ModOrganizer.ini, which
+    /// this reader deliberately does not parse — see DESIGN_NOTES.md) redirects
+    /// it elsewhere; null/empty keeps the existing auto-derived default.</param>
+    /// <param name="profileDirOverride">Overrides the derived
+    /// `&lt;instanceDir&gt;/profiles/&lt;selected_profile&gt;` location — the
+    /// full path to the active profile's own folder, not just a base
+    /// `profiles` directory (mirrors `profiles_directory` + selected_profile
+    /// in MO2's own resolution). Null/empty keeps the auto-derived default.</param>
+    /// <param name="overwriteDirOverride">Overrides the derived
+    /// `&lt;instanceDir&gt;/overwrite` location. Null/empty keeps the
+    /// auto-derived default.</param>
+    public static Mo2Instance Read(
+        string instanceDir, string? modsDirOverride = null, string? profileDirOverride = null, string? overwriteDirOverride = null)
     {
         var iniPath = Path.Combine(instanceDir, "ModOrganizer.ini");
         if (!File.Exists(iniPath))
@@ -21,9 +38,9 @@ public static class Mo2InstanceReader
         var gamePath = UnwrapByteArray(ini["General"]["gamePath"]);
         var profileName = UnwrapByteArray(ini["General"]["selected_profile"]);
 
-        var modsDir = Path.Combine(instanceDir, "mods");
-        var overwriteDir = Path.Combine(instanceDir, "overwrite");
-        var profileDir = Path.Combine(instanceDir, "profiles", profileName);
+        var modsDir = string.IsNullOrWhiteSpace(modsDirOverride) ? Path.Combine(instanceDir, "mods") : modsDirOverride;
+        var overwriteDir = string.IsNullOrWhiteSpace(overwriteDirOverride) ? Path.Combine(instanceDir, "overwrite") : overwriteDirOverride;
+        var profileDir = string.IsNullOrWhiteSpace(profileDirOverride) ? Path.Combine(instanceDir, "profiles", profileName) : profileDirOverride;
 
         var modPriorityAll = ReadModListPriority(Path.Combine(profileDir, "modlist.txt"), enabledOnly: false);
         var modPriorityEnabled = ReadModListPriority(Path.Combine(profileDir, "modlist.txt"), enabledOnly: true);

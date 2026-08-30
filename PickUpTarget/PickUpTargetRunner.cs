@@ -74,11 +74,17 @@ public static class PickUpTargetRunner
     /// <param name="includeStale">Treat records whose shipped DSD translation was
     /// written against a now-changed original as translatable again, instead of
     /// only reporting them. Off by default — see the note at the decision site.</param>
-    public static PickUpTargetResult Run(string mo2InstanceDir, RunLog log, bool includeStale = false, TraceLog? trace = null)
+    /// <param name="modsDirOverride">v0.57.0: passed straight through to
+    /// <see cref="Mo2InstanceReader.Read"/> — see its own doc comment.</param>
+    /// <param name="profileDirOverride">See <see cref="Mo2InstanceReader.Read"/>.</param>
+    /// <param name="overwriteDirOverride">See <see cref="Mo2InstanceReader.Read"/>.</param>
+    public static PickUpTargetResult Run(
+        string mo2InstanceDir, RunLog log, bool includeStale = false, TraceLog? trace = null,
+        string? modsDirOverride = null, string? profileDirOverride = null, string? overwriteDirOverride = null)
     {
         Console.WriteLine($"Reading MO2 instance: {mo2InstanceDir}");
         trace?.Info($"Mo2InstanceReader.Read start: {mo2InstanceDir}");
-        var instance = Mo2InstanceReader.Read(mo2InstanceDir);
+        var instance = Mo2InstanceReader.Read(mo2InstanceDir, modsDirOverride, profileDirOverride, overwriteDirOverride);
         trace?.Info($"Mo2InstanceReader.Read done: profile={instance.ProfileName}, {instance.LoadOrder.Count} plugins");
         Console.WriteLine($"Profile: {instance.ProfileName}, active plugins (incl. implicit masters): {instance.LoadOrder.Count}");
 
