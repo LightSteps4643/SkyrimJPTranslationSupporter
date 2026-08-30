@@ -27,6 +27,15 @@
          リポジトリにチェックインした状態で内容を直接確認・diffできるように
          する。テスト実行時に見えるよう出力フォルダへコピーする。 -->
     <None Include="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+    <!-- v0.57.1: xUnitは既定でテストクラスを並列実行するが、多くのテストが
+         PickUpTargetRunner.Run等の本番コード経由でプロセス全体を共有する
+         Console.Out（静的リソース）へ素で書き込む。ConsoleCapture.cs（一部の
+         テストが標準出力を検証用にキャプチャする仕組み）はそれ自身を経由する
+         呼び出し同士は排他できるが、経由しない他の並列テストからの書き込み
+         までは防げず、StringBuilderの非スレッドセーフな破損（
+         ArgumentOutOfRangeException 'chunkLength'）が低頻度で発生していた。
+         テストコレクションの並列実行そのものを無効化して解消する。 -->
+    <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
