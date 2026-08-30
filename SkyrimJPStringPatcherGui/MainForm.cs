@@ -62,10 +62,13 @@ public sealed class MainForm : Form
     internal string Mo2Dir => _settings.Mo2InstanceDir;
 
     /// <summary>v0.57.0: "pickuptarget" args for the current MO2 dir, with the
-    /// optional mods/profile/overwrite path overrides appended when set — the
-    /// single place both call sites (this window's "MO2再読込＆初期化" and
-    /// SettingsForm's "MO2フォルダをロード") build this command from, so the
-    /// two can't drift.</summary>
+    /// optional mods/profile/overwrite path overrides appended when set.
+    /// v0.57.3: SettingsForm used to have its own "MO2フォルダをロード" call
+    /// site here too, but it only ran pickuptarget (never translation), so
+    /// clicking it never actually updated this window's own plugin list
+    /// (which reads Translation/out_temp, not PickUpTarget/out_temp) — a
+    /// button that visibly did nothing, confirmed as dead weight and removed.
+    /// This is now this window's own sole call site (below).</summary>
     internal string[] BuildPickupTargetArgs(string mo2Dir)
     {
         var args = new List<string> { "pickuptarget", mo2Dir };

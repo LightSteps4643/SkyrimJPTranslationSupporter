@@ -34,10 +34,8 @@ public sealed class SettingsForm : Form
     private readonly TextBox _txtImportDir = new() { ReadOnly = true };
     private readonly TextBox _txtOutputDir = new() { ReadOnly = true };
     private readonly Button _btnCloudAiSettings = new() { Text = "生成AI（クラウド）連携設定", AutoSize = true, Margin = new Padding(3, 3, 3, 3) };
-    private readonly Button _btnLoadMo2 = new() { Text = "MO2フォルダをロード", AutoSize = true };
     private readonly Button _btnOk = new() { Text = "OK", AutoSize = true };
     private readonly Button _btnCancel = new() { Text = "キャンセル", AutoSize = true };
-    private readonly Label _lblMo2Status = new() { AutoSize = true, Margin = new Padding(6, 8, 3, 3) };
 
     public SettingsForm(MainForm owner)
     {
@@ -79,26 +77,21 @@ public sealed class SettingsForm : Form
         }
 
         AddRow("MO2インスタンスフォルダ", _txtMo2Dir, "参照...", BrowseMo2Folder);
-        // v0.57.0: MO2の「Paths」タブでmods/profiles/overwriteを標準位置から
-        // 変更している場合のみ使う任意項目——空欄なら上のMO2インスタンス
-        // フォルダから自動導出する（既定・多くのユーザーはここを一切触らない）。
-        // ModOrganizer.ini自体の位置（インスタンスフォルダ）は「インスタンス
-        // フォルダ」の定義そのものなので、これとは別に上書き項目を設けない。
-        AddRow("（任意）modsフォルダの上書き", _txtMo2ModsDirOverride, "参照...", () => BrowseFolder(_txtMo2ModsDirOverride));
-        AddRow("（任意）選択中プロファイルフォルダの上書き", _txtMo2ProfileDirOverride, "参照...", () => BrowseFolder(_txtMo2ProfileDirOverride));
-        AddRow("（任意）overwriteフォルダの上書き", _txtMo2OverwriteDirOverride, "参照...", () => BrowseFolder(_txtMo2OverwriteDirOverride));
 
-        // MO2ロードは設定行と同じグリッドの1行として、ボタン列にだけ配置——
-        // テキストボックスを2行分占有させたくないため専用行にする。
-        var loadRow = grid.RowCount++;
-        grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        _btnLoadMo2.Click += BtnLoadMo2_Click;
-        var loadPanel = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight };
-        loadPanel.Controls.Add(_btnLoadMo2);
-        loadPanel.Controls.Add(_lblMo2Status);
-        grid.SetColumnSpan(loadPanel, 2);
-        grid.Controls.Add(loadPanel, 1, loadRow);
-        settingsButtons.Add(_btnLoadMo2);
+        // v0.57.3: 旧「MO2フォルダをロード」ボタン（pickuptargetのみ実行）を削除した。
+        // pickuptargetはPickUpTarget/out_temp（candidates.tsv等）を書くだけで、
+        // ベース画面のプラグイン一覧はTranslation/out_temp（translationが書く方）
+        // からしか作られないため、押してもリストには何も反映されず、GUI内の他の
+        // どこもPickUpTarget/out_tempを直接読んでいなかった（実質孤立した機能——
+        // ユーザーとの確認により、混乱を避けるため削除に至った）。MO2の動作確認・
+        // スキャンはベース画面の「MO2再読込＆初期化」（pickuptarget+translation
+        // 両方を実行し、リストも更新される）に一本化する。
+
+        // v0.57.2: 「～～フォルダの上書き」という項目名だけでは意味が伝わりにくい
+        // というフィードバックを受け、3項目をGroupBoxでまとめ、「そもそもいつ
+        // 触るべき設定か」を説明文として明示する形に変更した（v0.57.0時点の
+        // 個別行＋「（任意）」プレフィックスのみの表現から改善）。
+        AddMo2PathOverridesGroup(grid, settingsButtons);
 
         AddRow("ローカルLLM エンドポイント", _txtLlmEndpoint, null, null);
         AddRow("ローカルLLM モデル名", _txtLlmModel, null, null);
@@ -153,6 +146,64 @@ public sealed class SettingsForm : Form
         btn.Click += (_, _) => buttonAction();
         grid.Controls.Add(btn, 2, row);
         return btn;
+    }
+
+    /// <summary>v0.57.0のmods/profile/overwrite個別上書き設定3項目を、
+    /// v0.57.2でGroupBox＋説明文にまとめた——「どのフォルダを上書きするか」
+    /// より前に「そもそもいつ使う設定か」（MO2グローバルインスタンス／
+    /// 「Paths」タブでの個別カスタマイズ時のみ）を明示するため。
+    /// ModOrganizer.ini自体の位置（インスタンスフォルダ）は「インスタンス
+    /// フォルダ」の定義そのものなので、これとは別に上書き項目を設けない
+    /// （v0.57.0時点からの判断は変わらず）。</summary>
+    private void AddMo2PathOverridesGroup(TableLayoutPanel parentGrid, List<Button> settingsButtons)
+    {
+        var row = parentGrid.RowCount++;
+        parentGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        var group = new GroupBox
+        {
+            Text = "MO2パスの個別設定",
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Padding = new Padding(8, 4, 8, 8),
+            Margin = new Padding(3, 6, 3, 6),
+        };
+        parentGrid.SetColumnSpan(group, 3);
+        parentGrid.Controls.Add(group, 0, row);
+
+        var inner = new TableLayoutPanel { Dock = DockStyle.Top, ColumnCount = 3, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink };
+        inner.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        inner.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        inner.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        group.Controls.Add(inner);
+
+        var explanationRow = inner.RowCount++;
+        inner.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        var explanation = new Label
+        {
+            // v0.57.3: プロファイルフォルダの上書きは、ModOrganizer.iniの
+            // selected_profile（MO2側で現在選択中のプロファイル）とは無関係に
+            // 任意のプロファイルを指定できる——ユーザーからの質問を受けて確認・
+            // 明文化した挙動。それを踏まえ、空欄／指定時それぞれの挙動を説明文に
+            // 追記した。
+            Text = "MO2でグローバルインスタンスで導入している場合や、各種パスをカスタマイズしている場合は、以下の個別のパス設定を実施してください。\r\n" +
+                   "プロファイルフォルダを空欄にした場合は現在MO2で適用しているプロファイルが選択され、指定した場合は指定したプロファイルを選択して処理します。",
+            AutoSize = true,
+            MaximumSize = new Size(640, 0),
+            Margin = new Padding(3, 3, 3, 10),
+        };
+        inner.SetColumnSpan(explanation, 3);
+        inner.Controls.Add(explanation, 0, explanationRow);
+
+        void AddOverrideRow(string label, TextBox box)
+        {
+            var btn = AddSettingRow(inner, label, box, "参照...", () => BrowseFolder(box));
+            if (btn != null) settingsButtons.Add(btn);
+        }
+        AddOverrideRow("modsフォルダ", _txtMo2ModsDirOverride);
+        AddOverrideRow("プロファイルフォルダ", _txtMo2ProfileDirOverride);
+        AddOverrideRow("overwriteフォルダ", _txtMo2OverwriteDirOverride);
     }
 
     private void AddCloudAiSettingsRow(TableLayoutPanel grid)
@@ -225,28 +276,5 @@ public sealed class SettingsForm : Form
             dlg.SelectedPath = box.Text;
         if (dlg.ShowDialog(this) == DialogResult.OK)
             box.Text = dlg.SelectedPath;
-    }
-
-    private async void BtnLoadMo2_Click(object? sender, EventArgs e)
-    {
-        var mo2Dir = _txtMo2Dir.Text.Trim();
-        if (string.IsNullOrWhiteSpace(mo2Dir) || !Directory.Exists(mo2Dir))
-        {
-            MessageBox.Show(this, "MO2インスタンスフォルダを正しく指定してください。", "入力エラー", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-        SaveToSettings();
-
-        _btnLoadMo2.Enabled = false;
-        _lblMo2Status.Text = "ロード中...";
-        try
-        {
-            var ok = await _owner.RunCliAsync(_owner.BuildPickupTargetArgs(mo2Dir));
-            _lblMo2Status.Text = ok ? "ロード完了" : "";
-        }
-        finally
-        {
-            _btnLoadMo2.Enabled = true;
-        }
     }
 }

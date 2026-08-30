@@ -230,7 +230,23 @@ public class ProgramCliTests
             var (exitCode, output) = RunCli(root, "generatedsdfile");
 
             Assert.Equal(0, exitCode);
-            Assert.True(Directory.Exists(Path.Combine(root, "out", "SKSE", "Plugins", "DynamicStringDistributor")), output);
+            var dsdRoot = Path.Combine(root, "out", "SKSE", "Plugins", "DynamicStringDistributor");
+            Assert.True(Directory.Exists(dsdRoot), output);
+
+            // v0.57.4: the real CLI path (no explicit timestamp override, unlike
+            // the DsdWriter/DsdJsonGenerator unit tests) must actually produce a
+            // timestamped name, not the old fixed "SkyrimJPStringPatcher.json" --
+            // that fixed name is exactly what let two separate incremental runs'
+            // output collide and silently erase each other once both were
+            // installed into the same MO2 plugin folder (see DsdWriter.cs's own
+            // remarks, and DsdWriterTests' dedicated coexistence test).
+            var writtenFiles = Directory.GetFiles(dsdRoot, "*.json", SearchOption.AllDirectories);
+            Assert.NotEmpty(writtenFiles);
+            foreach (var file in writtenFiles)
+            {
+                var name = Path.GetFileName(file);
+                Assert.Matches(@"^SkyrimJPStringPatcher_\d{14}\.json$", name);
+            }
         }
         finally
         {

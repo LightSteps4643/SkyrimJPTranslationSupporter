@@ -12,7 +12,10 @@ namespace SkyrimJPStringPatcher.GenerateDsdFile;
 /// </summary>
 public static class DsdJsonGenerator
 {
-    public static void Run(string translationsInputPath, string outputDir, RunLog log, TraceLog? trace = null)
+    /// <param name="outputTimestamp">Passed straight through to
+    /// <see cref="DsdWriter.WriteAll"/> — see its own doc comment. Defaults to
+    /// the real current time; only tests pass an explicit value.</param>
+    public static void Run(string translationsInputPath, string outputDir, RunLog log, TraceLog? trace = null, DateTime? outputTimestamp = null)
     {
         trace?.Info($"Input file resolution start: {translationsInputPath}");
         var files = ResolveInputFiles(translationsInputPath);
@@ -143,7 +146,7 @@ public static class DsdJsonGenerator
         trace?.Debug($"Conversion done: {entriesByPlugin.Values.Sum(l => l.Count)} entries / excluded: non-Japanese {notJapaneseWarnings} bad-FormId {badFormIdWarnings}");
 
         trace?.Info($"Write start: {outputDir} ({entriesByPlugin.Count} plugin(s))");
-        DsdWriter.WriteAll(outputDir, entriesByPlugin, trace);
+        DsdWriter.WriteAll(outputDir, entriesByPlugin, trace, outputTimestamp);
 
         var totalWritten = entriesByPlugin.Values.Sum(l => l.Count);
         Console.WriteLine($"Wrote {totalWritten} DSD entries across {entriesByPlugin.Count} plugin folder(s) to: {outputDir}");
@@ -160,12 +163,22 @@ public static class DsdJsonGenerator
             "* See the output .json for each entry's actual content");
 
         log.Section("特殊な出力処理の記録", "Special output handling notes");
-        log.Line("ファイル名: プラグイン名ではなく固定名 SkyrimJPStringPatcher.json で出力している。",
-            "File name: a fixed name, SkyrimJPStringPatcher.json, not the plugin name.");
-        log.Line("           既存の翻訳MODが同名ファイルを持つ場合にVFSで上書きし、既存訳を消してしまう",
-            "           An existing translation mod with a same-named file would get overwritten in the VFS,");
-        log.Line("           事故が実際に起きたため（DESIGN_NOTESの該当節を参照）",
-            "           erasing its translation — this actually happened once (see the DESIGN_NOTES section)");
+        log.Line("ファイル名: プラグイン名ではなく、ツール固有の名前＋実行時刻 SkyrimJPStringPatcher_<タイムスタンプ>.json で出力している。",
+            "File name: a tool-specific name plus a run timestamp, SkyrimJPStringPatcher_<timestamp>.json, not the plugin name.");
+        log.Line("           固定名だと、既存の翻訳MODが同名ファイルを持つ場合にVFSで上書きし既存訳を消してしまう事故が",
+            "           A fixed name risks an existing translation mod with a same-named file getting overwritten in the VFS,");
+        log.Line("           実際に起きたため（DESIGN_HISTORYの該当節を参照）。タイムスタンプを付けることで、複数回に",
+            "           erasing its translation — this actually happened once (see DESIGN_HISTORY). The timestamp also lets");
+        log.Line("           分けて生成した出力（例: 未翻訳分を後日追加翻訳した場合）を、同じMODフォルダへ追加導入しても",
+            "           output generated across multiple separate runs (e.g. translating more later) coexist when installed");
+        log.Line("           古い訳を上書き消去せず共存できる（DSDは同一フォルダ内の複数jsonを全て読み込みマージするため）。",
+            "           into the same mod folder, without erasing the earlier run's translations (DSD reads and merges every");
+        log.Line("           ※同一レコードの再翻訳（原文変更によるstale再翻訳等）は、DSD側の重複解決が「先勝ち」のため、",
+            "           .json in a plugin's folder). * Re-translating the SAME record (e.g. a stale re-translation after the");
+        log.Line("             古いファイルの当該行を消さないと新しい訳が反映されない場合がある点に注意。",
+            "             source text changed) may not take effect unless the old file's matching row is removed first —");
+        log.Line("             （新規追加分については問題なし）",
+            "             DSD's own duplicate resolution is first-file-wins (newly-added, previously-untranslated rows are unaffected).");
         log.Line("status欄 : Notes列が空の行は TranslationProposed、埋まっている行はその値をそのまま使用",
             "status   : rows with an empty Notes column get TranslationProposed; otherwise the Notes value is used as-is");
         log.Line("FormId   : Mutagenの \"XXXXXX:Plugin.esp\" 形式を、DSDが要求する \"XXXXXX|Plugin.esp\" に変換",

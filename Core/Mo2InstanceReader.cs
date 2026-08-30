@@ -77,6 +77,17 @@ public static class Mo2InstanceReader
         var overwriteDir = string.IsNullOrWhiteSpace(overwriteDirOverride) ? Path.Combine(instanceDir, "overwrite") : overwriteDirOverride;
         var profileDir = string.IsNullOrWhiteSpace(profileDirOverride) ? Path.Combine(instanceDir, "profiles", profileName) : profileDirOverride;
 
+        // v0.57.3: profileDirOverride can point at ANY profile folder, not just
+        // the one ModOrganizer.ini's own selected_profile names -- that's the
+        // whole point (scan a different profile without touching what's
+        // active in MO2 itself). So when it's set, what this run actually
+        // read is the override folder's OWN name, not the ini's selected_profile
+        // -- using the ini value here would silently mislabel every log line
+        // (found while explaining this override's behavior to the user).
+        var effectiveProfileName = string.IsNullOrWhiteSpace(profileDirOverride)
+            ? profileName
+            : Path.GetFileName(profileDirOverride.TrimEnd('/', '\\'));
+
         // v0.57.1: checked uniformly whether each path came from an explicit
         // override or was auto-derived from instanceDir -- a missing default
         // gets exactly the same clear error as a missing override, never a
@@ -86,7 +97,7 @@ public static class Mo2InstanceReader
         // misconfiguration worth surfacing, not a tolerable "empty" state).
         RequireDirectory(modsDir, "mods");
         RequireDirectory(overwriteDir, "overwrite");
-        RequireDirectory(profileDir, $"profiles/{profileName}");
+        RequireDirectory(profileDir, $"profiles/{effectiveProfileName}");
         RequireFile(Path.Combine(profileDir, "modlist.txt"), "modlist.txt");
         RequireFile(Path.Combine(profileDir, "plugins.txt"), "plugins.txt");
 
@@ -118,7 +129,7 @@ public static class Mo2InstanceReader
             // and is skipped with a console warning there.
         }
 
-        return new Mo2Instance(gamePath, profileName, modsDir, overwriteDir, modPriorityEnabled, resolved);
+        return new Mo2Instance(gamePath, effectiveProfileName, modsDir, overwriteDir, modPriorityEnabled, resolved);
     }
 
     /// <summary>
