@@ -153,12 +153,12 @@ public class PickUpTargetTranslationCharacterizationTests
     [Fact]
     public void Run_ThenTranslate_FullCombinedLoadOrder_MatchesGoldenSnapshot()
     {
-        SeedModGlossary("SjptsGlossaryTarget.esp", "Vrenn", "ヴレン");
-
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_characterization_{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
         try
         {
+            using var cwd = new CurrentDirectoryScope(root); // isolates ModGlossary.DirectoryPath (CWD-relative) to this test
+            SeedModGlossary("SjptsGlossaryTarget.esp", "Vrenn", "ヴレン");
             var mo2Dir = BuildCombinedMo2Instance(root);
             using var pickUpTargetLog = RunLog.Open(Path.Combine(root, "PickUpTarget"), "PickUpTarget");
             var result = PickUpTargetRunner.Run(mo2Dir, pickUpTargetLog);

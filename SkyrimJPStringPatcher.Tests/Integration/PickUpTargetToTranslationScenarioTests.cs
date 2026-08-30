@@ -464,11 +464,12 @@ public class PickUpTargetToTranslationScenarioTests
     public void ModScopedGlossary_ResolvesARealCandidateViaNameFallback()
     {
         const string plugin = "SjptsGlossaryTarget.esp";
-        SeedModGlossary(plugin, "Vrenn", "ヴレン");
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_scenario_modglossary_{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
         try
         {
+            using var cwd = new CurrentDirectoryScope(root); // isolates ModGlossary.DirectoryPath (CWD-relative) to this test
+            SeedModGlossary(plugin, "Vrenn", "ヴレン");
             var mo2Dir = BuildGlossaryTargetMo2Instance(root);
             var (_, translations, _) = RunPickUpTargetThenTranslation(mo2Dir, root, plugin);
 
