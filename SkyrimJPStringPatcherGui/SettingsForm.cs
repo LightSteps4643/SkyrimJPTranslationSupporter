@@ -34,10 +34,8 @@ public sealed class SettingsForm : Form
     private readonly TextBox _txtImportDir = new() { ReadOnly = true };
     private readonly TextBox _txtOutputDir = new() { ReadOnly = true };
     private readonly Button _btnCloudAiSettings = new() { Text = "生成AI（クラウド）連携設定", AutoSize = true, Margin = new Padding(3, 3, 3, 3) };
-    private readonly Button _btnLoadMo2 = new() { Text = "MO2フォルダをロード", AutoSize = true };
     private readonly Button _btnOk = new() { Text = "OK", AutoSize = true };
     private readonly Button _btnCancel = new() { Text = "キャンセル", AutoSize = true };
-    private readonly Label _lblMo2Status = new() { AutoSize = true, Margin = new Padding(6, 8, 3, 3) };
 
     public SettingsForm(MainForm owner)
     {
@@ -80,19 +78,14 @@ public sealed class SettingsForm : Form
 
         AddRow("MO2インスタンスフォルダ", _txtMo2Dir, "参照...", BrowseMo2Folder);
 
-        // MO2ロードは設定行と同じグリッドの1行として、ボタン列にだけ配置——
-        // テキストボックスを2行分占有させたくないため専用行にする。
-        // v0.57.2: ボタンを右端揃えにするため、FlowDirection.RightToLeftで
-        // ボタンを先に追加（一番右に来る）、ステータスラベルをその左に置く。
-        var loadRow = grid.RowCount++;
-        grid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        _btnLoadMo2.Click += BtnLoadMo2_Click;
-        var loadPanel = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Anchor = AnchorStyles.Right };
-        loadPanel.Controls.Add(_btnLoadMo2);
-        loadPanel.Controls.Add(_lblMo2Status);
-        grid.SetColumnSpan(loadPanel, 2);
-        grid.Controls.Add(loadPanel, 1, loadRow);
-        settingsButtons.Add(_btnLoadMo2);
+        // v0.57.3: 旧「MO2フォルダをロード」ボタン（pickuptargetのみ実行）を削除した。
+        // pickuptargetはPickUpTarget/out_temp（candidates.tsv等）を書くだけで、
+        // ベース画面のプラグイン一覧はTranslation/out_temp（translationが書く方）
+        // からしか作られないため、押してもリストには何も反映されず、GUI内の他の
+        // どこもPickUpTarget/out_tempを直接読んでいなかった（実質孤立した機能——
+        // ユーザーとの確認により、混乱を避けるため削除に至った）。MO2の動作確認・
+        // スキャンはベース画面の「MO2再読込＆初期化」（pickuptarget+translation
+        // 両方を実行し、リストも更新される）に一本化する。
 
         // v0.57.2: 「～～フォルダの上書き」という項目名だけでは意味が伝わりにくい
         // というフィードバックを受け、3項目をGroupBoxでまとめ、「そもそもいつ
@@ -283,28 +276,5 @@ public sealed class SettingsForm : Form
             dlg.SelectedPath = box.Text;
         if (dlg.ShowDialog(this) == DialogResult.OK)
             box.Text = dlg.SelectedPath;
-    }
-
-    private async void BtnLoadMo2_Click(object? sender, EventArgs e)
-    {
-        var mo2Dir = _txtMo2Dir.Text.Trim();
-        if (string.IsNullOrWhiteSpace(mo2Dir) || !Directory.Exists(mo2Dir))
-        {
-            MessageBox.Show(this, "MO2インスタンスフォルダを正しく指定してください。", "入力エラー", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-        SaveToSettings();
-
-        _btnLoadMo2.Enabled = false;
-        _lblMo2Status.Text = "ロード中...";
-        try
-        {
-            var ok = await _owner.RunCliAsync(_owner.BuildPickupTargetArgs(mo2Dir));
-            _lblMo2Status.Text = ok ? "ロード完了" : "";
-        }
-        finally
-        {
-            _btnLoadMo2.Enabled = true;
-        }
     }
 }
