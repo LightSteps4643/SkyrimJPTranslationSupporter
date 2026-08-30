@@ -17,21 +17,26 @@ namespace SkyrimJPStringPatcherGui;
 /// 設定編集を残した理由。それ以外の設定（MO2フォルダ・パス類）は単純な文字列だが、
 /// 一貫性のため同じウィンドウにまとめてある。
 ///
-/// CloudAiSettingsFormと同じ「編集して保存」パターン——ただし常時表示のメイン
-/// ウィンドウと違い、ダイアログとしてPseudoModalで開く（Services/PseudoModal.cs）。
+/// CloudAiSettingsFormと同じ「編集してOK確定・キャンセルで破棄」パターン
+/// （v0.57.0でこのウィンドウも揃えた）——ただし常時表示のメインウィンドウと
+/// 違い、ダイアログとしてPseudoModalで開く（Services/PseudoModal.cs）。
 /// </summary>
 public sealed class SettingsForm : Form
 {
     private readonly MainForm _owner;
 
     private readonly TextBox _txtMo2Dir = new();
+    private readonly TextBox _txtMo2ModsDirOverride = new();
+    private readonly TextBox _txtMo2ProfileDirOverride = new();
+    private readonly TextBox _txtMo2OverwriteDirOverride = new();
     private readonly TextBox _txtLlmEndpoint = new();
     private readonly TextBox _txtLlmModel = new();
     private readonly TextBox _txtImportDir = new() { ReadOnly = true };
     private readonly TextBox _txtOutputDir = new() { ReadOnly = true };
     private readonly Button _btnCloudAiSettings = new() { Text = "生成AI（クラウド）連携設定", AutoSize = true, Margin = new Padding(3, 3, 3, 3) };
     private readonly Button _btnLoadMo2 = new() { Text = "MO2フォルダをロード", AutoSize = true };
-    private readonly Button _btnSaveSettings = new() { Text = "設定を保存", AutoSize = true };
+    private readonly Button _btnOk = new() { Text = "OK", AutoSize = true };
+    private readonly Button _btnCancel = new() { Text = "キャンセル", AutoSize = true };
     private readonly Label _lblMo2Status = new() { AutoSize = true, Margin = new Padding(6, 8, 3, 3) };
 
     public SettingsForm(MainForm owner)
@@ -44,10 +49,13 @@ public sealed class SettingsForm : Form
         BuildLayout();
         LoadFromSettings();
 
-        // v0.52.1a: 旧ベース画面は明示的な「設定を保存」以外に、①ロード・
-        // ウィンドウを閉じるタイミングでも暗黙に保存していた——押し忘れで
-        // 編集内容が失われる驚きを避けるため、閉じるときも同様に保存する。
-        FormClosing += (_, _) => SaveToSettings();
+        // v0.57.0: 旧「設定を保存」単一ボタンから、一般的な設定ウィンドウの
+        // OK（保存して閉じる）／キャンセル（保存せず閉じる）に変更した。
+        // ウィンドウを閉じるだけで暗黙に保存していた旧挙動（v0.52.1a由来）は
+        // ここで廃止——「編集して×で閉じたら消えて困る」より「キャンセルの
+        // つもりで閉じたら保存されていた」の驚きの方を避ける判断（一般的な
+        // 設定ウィンドウはキャンセル＝保存しない、が標準の期待のため）。
+        CancelButton = _btnCancel;
     }
 
     private void BuildLayout()
@@ -71,6 +79,14 @@ public sealed class SettingsForm : Form
         }
 
         AddRow("MO2インスタンスフォルダ", _txtMo2Dir, "参照...", BrowseMo2Folder);
+        // v0.57.0: MO2の「Paths」タブでmods/profiles/overwriteを標準位置から
+        // 変更している場合のみ使う任意項目——空欄なら上のMO2インスタンス
+        // フォルダから自動導出する（既定・多くのユーザーはここを一切触らない）。
+        // ModOrganizer.ini自体の位置（インスタンスフォルダ）は「インスタンス
+        // フォルダ」の定義そのものなので、これとは別に上書き項目を設けない。
+        AddRow("（任意）modsフォルダの上書き", _txtMo2ModsDirOverride, "参照...", () => BrowseFolder(_txtMo2ModsDirOverride));
+        AddRow("（任意）選択中プロファイルフォルダの上書き", _txtMo2ProfileDirOverride, "参照...", () => BrowseFolder(_txtMo2ProfileDirOverride));
+        AddRow("（任意）overwriteフォルダの上書き", _txtMo2OverwriteDirOverride, "参照...", () => BrowseFolder(_txtMo2OverwriteDirOverride));
 
         // MO2ロードは設定行と同じグリッドの1行として、ボタン列にだけ配置——
         // テキストボックスを2行分占有させたくないため専用行にする。
@@ -98,15 +114,25 @@ public sealed class SettingsForm : Form
         AddRow("xTranslator用翻訳ファイルインポートフォルダ", _txtImportDir, "開く", () => OpenFolder(Path.Combine(_owner.ProductRoot, "Translation", "import")));
         AddRow("DSDファイル出力先フォルダ", _txtOutputDir, "開く", () => OpenFolder(Path.Combine(_owner.ProductRoot, "out")));
 
-        var saveRow = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Anchor = AnchorStyles.Right, Margin = new Padding(0, 6, 0, 0) };
-        _btnSaveSettings.Click += (_, _) =>
+        var buttonRow = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Anchor = AnchorStyles.Right, Margin = new Padding(0, 6, 0, 0) };
+        _btnOk.Click += (_, _) =>
         {
             SaveToSettings();
-            MessageBox.Show(this, "設定を保存しました。", "設定", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            DialogResult = DialogResult.OK;
+            Close();
         };
-        saveRow.Controls.Add(_btnSaveSettings);
-        settingsButtons.Add(_btnSaveSettings);
-        root.Controls.Add(saveRow, 0, 1);
+        _btnCancel.Click += (_, _) =>
+        {
+            DialogResult = DialogResult.Cancel;
+            Close();
+        };
+        // RightToLeftで先に追加したコントロールが右端に来るため、OKを先に
+        // 追加して右端＝OK、その左＝キャンセルという一般的な並びにする。
+        buttonRow.Controls.Add(_btnOk);
+        buttonRow.Controls.Add(_btnCancel);
+        settingsButtons.Add(_btnOk);
+        settingsButtons.Add(_btnCancel);
+        root.Controls.Add(buttonRow, 0, 1);
 
         ButtonLayout.UnifyWidths(settingsButtons);
 
@@ -156,6 +182,9 @@ public sealed class SettingsForm : Form
     {
         var settings = _owner.Settings;
         _txtMo2Dir.Text = settings.Mo2InstanceDir;
+        _txtMo2ModsDirOverride.Text = settings.Mo2ModsDirOverride;
+        _txtMo2ProfileDirOverride.Text = settings.Mo2ProfileDirOverride;
+        _txtMo2OverwriteDirOverride.Text = settings.Mo2OverwriteDirOverride;
         _txtLlmEndpoint.Text = settings.LlmEndpoint;
         _txtLlmModel.Text = settings.LlmModel;
         _initialLlmEndpoint = settings.LlmEndpoint;
@@ -168,6 +197,9 @@ public sealed class SettingsForm : Form
     {
         var settings = _owner.Settings;
         settings.Mo2InstanceDir = _txtMo2Dir.Text.Trim();
+        settings.Mo2ModsDirOverride = _txtMo2ModsDirOverride.Text.Trim();
+        settings.Mo2ProfileDirOverride = _txtMo2ProfileDirOverride.Text.Trim();
+        settings.Mo2OverwriteDirOverride = _txtMo2OverwriteDirOverride.Text.Trim();
         settings.LlmEndpoint = _txtLlmEndpoint.Text.Trim();
         settings.LlmModel = _txtLlmModel.Text.Trim();
         settings.Save();
@@ -184,13 +216,15 @@ public sealed class SettingsForm : Form
         }
     }
 
-    private void BrowseMo2Folder()
+    private void BrowseMo2Folder() => BrowseFolder(_txtMo2Dir, "MO2インスタンスフォルダを選択");
+
+    private void BrowseFolder(TextBox box, string description = "フォルダを選択")
     {
-        using var dlg = new FolderBrowserDialog { Description = "MO2インスタンスフォルダを選択" };
-        if (!string.IsNullOrWhiteSpace(_txtMo2Dir.Text) && Directory.Exists(_txtMo2Dir.Text))
-            dlg.SelectedPath = _txtMo2Dir.Text;
+        using var dlg = new FolderBrowserDialog { Description = description };
+        if (!string.IsNullOrWhiteSpace(box.Text) && Directory.Exists(box.Text))
+            dlg.SelectedPath = box.Text;
         if (dlg.ShowDialog(this) == DialogResult.OK)
-            _txtMo2Dir.Text = dlg.SelectedPath;
+            box.Text = dlg.SelectedPath;
     }
 
     private async void BtnLoadMo2_Click(object? sender, EventArgs e)
@@ -207,7 +241,7 @@ public sealed class SettingsForm : Form
         _lblMo2Status.Text = "ロード中...";
         try
         {
-            var ok = await _owner.RunCliAsync(new[] { "pickuptarget", mo2Dir });
+            var ok = await _owner.RunCliAsync(_owner.BuildPickupTargetArgs(mo2Dir));
             _lblMo2Status.Text = ok ? "ロード完了" : "";
         }
         finally
