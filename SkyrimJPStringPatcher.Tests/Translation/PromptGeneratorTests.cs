@@ -2,6 +2,7 @@ using SkyrimJPStringPatcher.Core;
 using SkyrimJPStringPatcher.Tests.PickUpTarget;
 using SkyrimJPStringPatcher.Translation;
 using static SkyrimJPStringPatcher.Core.TsvEscaping;
+// CurrentDirectoryScope lives in the SkyrimJPStringPatcher.Tests namespace directly.
 
 namespace SkyrimJPStringPatcher.Tests.Translation;
 
@@ -297,11 +298,12 @@ public class PromptGeneratorTests
     public void RunOne_MeaningTransliterationAndNameFallback_ResolveThroughFullPipeline()
     {
         const string plugin = "SjptsResolutionMethods.esp";
-        SeedModGlossary(plugin, "Vrenn", "ヴレン");
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
         try
         {
+            using var cwd = new CurrentDirectoryScope(root); // isolates ModGlossary.DirectoryPath (CWD-relative) to this test
+            SeedModGlossary(plugin, "Vrenn", "ヴレン");
             var outputDir = Path.Combine(root, "out_temp");
             using (var log = OpenTestLog(root))
                 PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log);
@@ -362,11 +364,12 @@ public class PromptGeneratorTests
     public void RunOne_MultilineCandidate_LlmBatch_RestoresLineBreakAfterRoundTrip()
     {
         const string plugin = "SjptsResolutionMethods.esp";
-        SeedModGlossary(plugin, "Vrenn", "ヴレン"); // keeps this plugin's other candidates resolved/quiet
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
         try
         {
+            using var cwd = new CurrentDirectoryScope(root);
+            SeedModGlossary(plugin, "Vrenn", "ヴレン"); // keeps this plugin's other candidates resolved/quiet
             var outputDir = Path.Combine(root, "out_temp");
             using var log = OpenTestLog(root);
             // The matched key is the FLATTENED text (marker instead of the real
@@ -402,11 +405,12 @@ public class PromptGeneratorTests
     public void RunOne_LlmBatch_SplitsIntoMultipleBatchesWhenOverCharLimit()
     {
         const string plugin = "SjptsResolutionMethods.esp";
-        SeedModGlossary(plugin, "Vrenn", "ヴレン");
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
         try
         {
+            using var cwd = new CurrentDirectoryScope(root);
+            SeedModGlossary(plugin, "Vrenn", "ヴレン");
             var outputDir = Path.Combine(root, "out_temp");
             var fakeLlm = FakeTextTranslator.Succeeding(
                 ("Sjpts Multiline Candidate<SJPTS_BR>Second Line", "マルチライン訳"),
@@ -511,11 +515,12 @@ public class PromptGeneratorTests
     public void RunAll_GroupsPluginsByDescendingCandidateCount_WritesLoadOrderWideSummaryFiles()
     {
         const string resolutionPlugin = "SjptsResolutionMethods.esp";
-        SeedModGlossary(resolutionPlugin, "Vrenn", "ヴレン");
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
         try
         {
+            using var cwd = new CurrentDirectoryScope(root);
+            SeedModGlossary(resolutionPlugin, "Vrenn", "ヴレン");
             var outputDir = Path.Combine(root, "out_temp");
             using var log = OpenTestLog(root);
 
