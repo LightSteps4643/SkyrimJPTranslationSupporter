@@ -278,6 +278,24 @@ switch (args[0])
             log.Line(activePluginsTsv, activePluginsTsv);
             return 0;
         }
+        // v0.57.1: Mo2InstanceConfigurationException means the MO2 instance
+        // folder or one of the mods/profile/overwrite paths is misconfigured
+        // (wrong folder, missing ini key, nonexistent override, ...) -- an
+        // ordinary, recoverable input mistake, not a bug in this tool. Caught
+        // SEPARATELY from the generic handler below so it exits cleanly
+        // (code 1 + its own readable message) instead of falling through to
+        // "rethrow -> crash the whole process". Before this fix, EVERY one of
+        // these cases crashed with .NET's fixed unhandled-exception exit code
+        // (-532462766 / 0xE0434352) and the GUI could show nothing but that
+        // raw number -- exactly what a real user hit and reported.
+        catch (Mo2InstanceConfigurationException ex)
+        {
+            trace.Error("MO2 instance configuration problem during pickuptarget execution", ex);
+            Console.Error.WriteLine($"[error] MO2インスタンスの読み込みに失敗しました: {ex.Message}");
+            log.Section("エラー", "Error");
+            log.Line($"MO2インスタンスの読み込みに失敗しました: {ex.Message}", $"Failed to read the MO2 instance: {ex.Message}");
+            return 1;
+        }
         catch (Exception ex)
         {
             trace.Error("Exception during pickuptarget execution", ex);

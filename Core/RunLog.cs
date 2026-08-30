@@ -171,5 +171,5 @@ public sealed class RunLog : IDisposable
 /// comparing two runs' logs).</summary>
 public static class BuildVersion
 {
-    public const string Current = "v0.57.0";
+    public const string Current = "v0.57.1";
 }
