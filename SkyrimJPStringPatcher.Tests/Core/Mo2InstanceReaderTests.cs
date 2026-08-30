@@ -311,10 +311,11 @@ public class Mo2InstanceReaderTests
             var redirectedModsDir = Path.Combine(root, "redirected_mods");
             Directory.Move(Path.Combine(instanceDir, "mods"), redirectedModsDir);
 
-            // Without the override, the default <instanceDir>/mods is now empty/missing
-            // -> Solo.esp (which lives only in a mod folder, not overwrite/ or game/Data) can't resolve.
-            var withoutOverride = Mo2InstanceReader.Read(instanceDir);
-            Assert.DoesNotContain(withoutOverride.LoadOrder, p => p.FileName == "Solo.esp");
+            // Without the override, the default <instanceDir>/mods no longer exists at
+            // all -> Read() throws instead of silently resolving fewer plugins (v0.57.1:
+            // a missing default is checked exactly like a missing explicit override,
+            // never tolerated -- see Mo2InstanceConfigurationException's doc comment).
+            Assert.Throws<Mo2InstanceConfigurationException>(() => Mo2InstanceReader.Read(instanceDir));
 
             var withOverride = Mo2InstanceReader.Read(instanceDir, modsDirOverride: redirectedModsDir);
             var solo = Assert.Single(withOverride.LoadOrder, p => p.FileName == "Solo.esp");
@@ -338,7 +339,10 @@ public class Mo2InstanceReaderTests
             Directory.Move(Path.Combine(instanceDir, "profiles", "Default"), redirectedProfileDir);
 
             // Default <instanceDir>/profiles/Default no longer exists -> Read() without the override throws.
-            Assert.Throws<DirectoryNotFoundException>(() => Mo2InstanceReader.Read(instanceDir));
+            // v0.57.1: now a clean Mo2InstanceConfigurationException (with a readable
+            // message), not a raw DirectoryNotFoundException -- see that type's own
+            // doc comment for why (a real user's unhandled-crash bug report).
+            Assert.Throws<Mo2InstanceConfigurationException>(() => Mo2InstanceReader.Read(instanceDir));
 
             var withOverride = Mo2InstanceReader.Read(instanceDir, profileDirOverride: redirectedProfileDir);
             Assert.Contains(withOverride.LoadOrder, p => p.FileName == "Solo.esp");
@@ -360,10 +364,10 @@ public class Mo2InstanceReaderTests
             var redirectedOverwriteDir = Path.Combine(root, "redirected_overwrite");
             Directory.Move(Path.Combine(instanceDir, "overwrite"), redirectedOverwriteDir);
 
-            // Without the override, the default <instanceDir>/overwrite is gone -> ModLow's copy wins instead.
-            var withoutOverride = Mo2InstanceReader.Read(instanceDir);
-            Assert.Equal("MOD", File.ReadAllText(
-                withoutOverride.LoadOrder.Single(p => p.FileName == "OverwriteWins.esp").AbsolutePath));
+            // Without the override, the default <instanceDir>/overwrite no longer exists
+            // at all -> Read() throws (v0.57.1: same "missing default is an error too"
+            // contract as the mods-dir case above).
+            Assert.Throws<Mo2InstanceConfigurationException>(() => Mo2InstanceReader.Read(instanceDir));
 
             var withOverride = Mo2InstanceReader.Read(instanceDir, overwriteDirOverride: redirectedOverwriteDir);
             Assert.Equal("OVERWRITE", File.ReadAllText(

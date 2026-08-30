@@ -35,6 +35,7 @@ public class PickUpTargetTranslationCrossModTests
         Directory.CreateDirectory(mod1Dir);
         Directory.CreateDirectory(mod2Dir);
         Directory.CreateDirectory(profileDir);
+        Directory.CreateDirectory(Path.Combine(mo2Dir, "overwrite"));
 
         var fixturesDir = Path.Combine(AppContext.BaseDirectory, "Fixtures", "Integration");
         File.Copy(Path.Combine(fixturesDir, "TestXMod1.esp"), Path.Combine(mod1Dir, "TestXMod1.esp"));
@@ -42,7 +43,7 @@ public class PickUpTargetTranslationCrossModTests
 
         File.WriteAllText(Path.Combine(mo2Dir, "ModOrganizer.ini"),
             "[General]\r\n" +
-            $"gamePath=@ByteArray({Path.Combine(root, "nonexistent_game")})\r\n" +
+            $"gamePath=@ByteArray({AppContext.BaseDirectory})\r\n" +
             "selected_profile=@ByteArray(Default)\r\n");
         // modlist.txt priority order doesn't matter for THIS scenario (neither
         // mod ships loose Strings/DSD files this test cares about) — only
@@ -147,6 +148,7 @@ public class PickUpTargetTranslationCrossModTests
             Directory.CreateDirectory(jpPatchDir);
             Directory.CreateDirectory(questModDir);
             Directory.CreateDirectory(profileDir);
+            Directory.CreateDirectory(Path.Combine(mo2Dir, "overwrite"));
 
             var fixturesDir = Path.Combine(AppContext.BaseDirectory, "Fixtures", "Integration");
             File.Copy(Path.Combine(fixturesDir, "FamousMod.esp"), Path.Combine(famousModDir, "FamousMod.esp"));
@@ -155,7 +157,7 @@ public class PickUpTargetTranslationCrossModTests
 
             File.WriteAllText(Path.Combine(mo2Dir, "ModOrganizer.ini"),
                 "[General]\r\n" +
-                $"gamePath=@ByteArray({Path.Combine(root, "nonexistent_game")})\r\n" +
+                $"gamePath=@ByteArray({AppContext.BaseDirectory})\r\n" +
                 "selected_profile=@ByteArray(Default)\r\n");
             File.WriteAllText(Path.Combine(profileDir, "modlist.txt"), "+BigQuestModFolder\r\n+FamousModJapanesePatchFolder\r\n+FamousModFolder\r\n");
             File.WriteAllText(Path.Combine(profileDir, "plugins.txt"), "*FamousMod.esp\r\n*FamousModJapanesePatch.esp\r\n*BigQuestMod.esp\r\n");
@@ -207,6 +209,7 @@ public class PickUpTargetTranslationCrossModTests
         var mo2Dir = Path.Combine(root, "mo2");
         var profileDir = Path.Combine(mo2Dir, "profiles", "Default");
         Directory.CreateDirectory(profileDir);
+        Directory.CreateDirectory(Path.Combine(mo2Dir, "overwrite"));
 
         var fixturesDir = Path.Combine(AppContext.BaseDirectory, "Fixtures", "Integration");
         foreach (var (folder, esp) in modsInLoadOrder)
@@ -231,7 +234,7 @@ public class PickUpTargetTranslationCrossModTests
 
         File.WriteAllText(Path.Combine(mo2Dir, "ModOrganizer.ini"),
             "[General]\r\n" +
-            $"gamePath=@ByteArray({Path.Combine(root, "nonexistent_game")})\r\n" +
+            $"gamePath=@ByteArray({AppContext.BaseDirectory})\r\n" +
             "selected_profile=@ByteArray(Default)\r\n");
         File.WriteAllText(Path.Combine(profileDir, "modlist.txt"), string.Join("\r\n", modsInLoadOrder.Select(m => "+" + m.Folder).Reverse()) + "\r\n");
         File.WriteAllText(Path.Combine(profileDir, "plugins.txt"), string.Join("\r\n", modsInLoadOrder.Select(m => "*" + m.Esp)) + "\r\n");

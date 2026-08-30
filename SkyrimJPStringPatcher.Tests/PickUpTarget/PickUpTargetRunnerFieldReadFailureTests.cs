@@ -40,6 +40,7 @@ public class PickUpTargetRunnerFieldReadFailureTests
         var profileDir = Path.Combine(mo2Dir, "profiles", "Default");
         Directory.CreateDirectory(stringsDir);
         Directory.CreateDirectory(profileDir);
+        Directory.CreateDirectory(Path.Combine(mo2Dir, "overwrite"));
 
         var fixtureDir = Path.Combine(AppContext.BaseDirectory, "Fixtures", "PickUpTarget", fixtureName);
         File.Copy(Path.Combine(fixtureDir, espFileName), Path.Combine(modDir, espFileName));
@@ -48,7 +49,7 @@ public class PickUpTargetRunnerFieldReadFailureTests
 
         File.WriteAllText(Path.Combine(mo2Dir, "ModOrganizer.ini"),
             "[General]\r\n" +
-            $"gamePath=@ByteArray({Path.Combine(root, "nonexistent_game")})\r\n" +
+            $"gamePath=@ByteArray({AppContext.BaseDirectory})\r\n" +
             "selected_profile=@ByteArray(Default)\r\n");
         File.WriteAllText(Path.Combine(profileDir, "modlist.txt"), "+TestMod\r\n");
         File.WriteAllText(Path.Combine(profileDir, "plugins.txt"), $"*{espFileName}\r\n");
