@@ -23,4 +23,6 @@ gui_settings.json
 # 開発時の検討ログ（社内向け、リポジトリには含めない）
 DESIGN_NOTES.md
 DESIGN_HISTORY.md
-NEXUS_DESCRIPTION_DRAFT.md
+
+# テストカバレッジ出力
+CoverageResults/
