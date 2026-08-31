@@ -4,6 +4,12 @@
 v0.54.0でバージョン管理をgit/GitHub（[Releases](https://github.com/LightSteps4643/SkyrimJPTranslationSupporter/releases)・タグ）ベースに移行しており、本ファイルもそれ以降を対象としています。
 それより前の履歴は開発メモ（非公開）に記録されています。
 
+## v0.58.0 (2026-08-30)
+
+### 変更
+
+- 配布フォルダの構成を変更しました。起動用の実行ファイル（`SkyrimJPStringPatcherGui.exe`）がフォルダ直下に配置され、直接ダブルクリックで起動できるようになりました（ランチャーの`.bat`ファイルは廃止）。内部処理用のCLI（`SkyrimJPStringPatcher.exe`）は`SkyrimJPStringPatcher`サブフォルダに移動しました。
+
 ## v0.57.4 (2026-08-30)
 
 ### 修正

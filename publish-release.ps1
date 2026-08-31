@@ -16,10 +16,12 @@
       と判明した。単一ファイル化でZIP内のPEファイル数を大幅に削減し、この要因を
       弱める狙い。トリミング（-p:PublishTrimmed=true）は、Mutagenがリフレクションを
       使用しているため安全性が不明であり、あえて含めていない。
-    - CLIは出力先フォルダ直下、GUIはその中の `SkyrimJPStringPatcherGui` サブフォルダに
-      分けて publish する（開発版のフォルダ名規約と同じ形——CliLocator.
-      TryGetProductRoot が「SkyrimJPStringPatcherGui」という名前の祖先フォルダを
-      探して親をルートとみなす、という既存ロジックをそのまま利用できる）。
+    - v0.58.0: GUIは出力先フォルダ直下、CLIはその中の `SkyrimJPStringPatcher` サブ
+      フォルダに分けて publish する（CliLocator.TryGetProductRoot の新レイアウト
+      検出に対応、DESIGN_NOTES.md既知の課題25.参照）。GUIをフォルダ直下に置く
+      ことで、ランチャー（.bat/.lnk）を挟まず直接ダブルクリックで起動できる。
+      CLIを別フォルダへ分けているのは、ユーザーが誤って直接実行してしまう混乱を
+      避けるため（CLIは通常GUI経由でのみ使う）。
       【重要】同じフォルダに両方を自己完結型でpublishすると、それぞれが依存する
       ランタイムDLL（例: System.Text.Encoding.CodePages）のバージョンが食い違う場合に
       後から publish した方が前の必須ファイルを上書きし、実行時エラーになることを
@@ -58,7 +60,7 @@ if ([string]::IsNullOrWhiteSpace($OutputDir)) {
     if ([string]::IsNullOrWhiteSpace($gitVersion)) { $gitVersion = "unversioned" }
     $OutputDir = Join-Path (Join-Path (Split-Path -Parent $root) "Releases") "SkyrimJPTranslationSupporter-$gitVersion"
 }
-$guiOutputDir = Join-Path $OutputDir "SkyrimJPStringPatcherGui"
+$cliOutputDir = Join-Path $OutputDir "SkyrimJPStringPatcher"
 
 Write-Host "出力先: $OutputDir"
 if (Test-Path $OutputDir) {
@@ -66,20 +68,20 @@ if (Test-Path $OutputDir) {
     Remove-Item -Recurse -Force $OutputDir
 }
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
-New-Item -ItemType Directory -Force -Path $guiOutputDir | Out-Null
+New-Item -ItemType Directory -Force -Path $cliOutputDir | Out-Null
 
 Write-Host "--- CLI (SkyrimJPStringPatcher) を publish ---"
 dotnet publish (Join-Path $root "SkyrimJPStringPatcher.csproj") `
     -c Release -r win-x64 --self-contained true `
     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
-    -o $OutputDir
+    -o $cliOutputDir
 if ($LASTEXITCODE -ne 0) { throw "CLIのpublishに失敗しました（exit code $LASTEXITCODE）" }
 
 Write-Host "--- GUI (SkyrimJPStringPatcherGui) を publish ---"
 dotnet publish (Join-Path $root "SkyrimJPStringPatcherGui\SkyrimJPStringPatcherGui.csproj") `
     -c Release -r win-x64 --self-contained true `
     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
-    -o $guiOutputDir
+    -o $OutputDir
 if ($LASTEXITCODE -ne 0) { throw "GUIのpublishに失敗しました（exit code $LASTEXITCODE）" }
 
 $importDir = Join-Path $OutputDir "Translation\import"
@@ -88,22 +90,8 @@ New-Item -ItemType Directory -Force -Path $importDir | Out-Null
 # v0.54.0: 謝辞・クレジット表記。エンドユーザーの目に触れる配布物に必ず含める。
 Copy-Item -Path (Join-Path $root "CREDITS.md") -Destination $OutputDir -Force
 
-# v0.54.0: GUIはサブフォルダの中にあるため、フォルダ直下からすぐ起動できるように
-# ランチャーを1つ置いておく——毎回サブフォルダへ潜る必要をなくすため。
-# v0.54.0a: 当初は.lnkショートカット（WScript.Shellで作成）だったが、.lnkは
-# ビルド時点の絶対パス（この開発機のフォルダ構成）をファイル自体に埋め込んで
-# しまい、ユーザーが解凍先を変えても中身を覗けばビルド環境の絶対パスが見える
-# 状態だった（Windowsの「壊れたショートカットの自動修復」機能により、実行自体は
-# 解凍先でも問題なく動くが、プロパティを見れば古い絶対パスが一時的に見えてしまう
-# ——実行後は自動的に書き換わる）。.batなら`%~dp0`（バッチファイル自身の
-# フォルダ）だけで完結し、絶対パスが一切ファイルに含まれない。
-Write-Host "--- ランチャー(.bat)を作成 ---"
-$launcherPath = Join-Path $OutputDir "Skyrim JP Translation Supporter.bat"
-$launcherContent = "@echo off`r`nstart `"`" `"%~dp0SkyrimJPStringPatcherGui\SkyrimJPStringPatcherGui.exe`"`r`n"
-[System.IO.File]::WriteAllText($launcherPath, $launcherContent, (New-Object System.Text.UTF8Encoding($false)))
-
 Write-Host ""
 Write-Host "完了: $OutputDir"
-Write-Host "  SkyrimJPStringPatcher.exe（直下） / SkyrimJPStringPatcherGui\SkyrimJPStringPatcherGui.exe（サブフォルダ） / Data/ / Translation/import/ を含む"
+Write-Host "  SkyrimJPStringPatcherGui.exe（直下） / SkyrimJPStringPatcher\SkyrimJPStringPatcher.exe（サブフォルダ） / Data/ / Translation/import/ を含む"
 Write-Host "  ソースコード・開発用ドキュメント（DESIGN_NOTES.md等）は含まれない"
-Write-Host "  起動は直下の「Skyrim JP Translation Supporter.bat」から（CLIは通常直接使わない）"
+Write-Host "  起動は直下の「SkyrimJPStringPatcherGui.exe」から（CLIは通常直接使わない）"

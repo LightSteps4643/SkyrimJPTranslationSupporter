@@ -1,7 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <!-- v0.58.0: net9.0-windows (not net9.0) so this project can reference
+         SkyrimJPStringPatcherGui.csproj (below). Harmless in practice, since
+         this whole tool (WinForms GUI, MO2 paths) already only runs on Windows
+         regardless of what this TFM declared before. -->
+    <TargetFramework>net9.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
@@ -20,6 +24,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SkyrimJPStringPatcher.csproj" />
+    <!-- v0.58.0: CliLocator.cs is a plain static utility with no WinForms
+         dependency (never instantiates a Form). This reference exists only
+         so its file-layout detection logic (TryGetProductRoot/TryAutoDetect)
+         is unit-testable, not to bring MainForm/SettingsForm etc. into scope. -->
+    <ProjectReference Include="..\SkyrimJPStringPatcherGui\SkyrimJPStringPatcherGui.csproj" />
   </ItemGroup>
 
   <ItemGroup>
