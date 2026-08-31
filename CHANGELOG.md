@@ -2,6 +2,7 @@
 
 このプロジェクトは[セマンティックバージョニング](https://semver.org/lang/ja/)に準拠しています。
 v0.54.0でバージョン管理をgit/GitHub（[Releases](https://github.com/LightSteps4643/SkyrimJPTranslationSupporter/releases)・タグ）ベースに移行しており、本ファイルもそれ以降を対象としています。
+
 それより前の履歴は開発メモ（非公開）に記録されています。
 
 ## v0.58.0 (2026-08-31 12:51)
