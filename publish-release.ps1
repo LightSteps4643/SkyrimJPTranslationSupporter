@@ -92,6 +92,6 @@ Copy-Item -Path (Join-Path $root "CREDITS.md") -Destination $OutputDir -Force
 
 Write-Host ""
 Write-Host "完了: $OutputDir"
-Write-Host "  SkyrimJPStringPatcherGui.exe（直下） / SkyrimJPStringPatcher\SkyrimJPStringPatcher.exe（サブフォルダ） / Data/ / Translation/import/ を含む"
+Write-Host "  Skyrim_JP_Translation_Supporter.exe（直下） / SkyrimJPStringPatcher\SkyrimJPStringPatcher.exe（サブフォルダ） / Data/ / Translation/import/ を含む"
 Write-Host "  ソースコード・開発用ドキュメント（DESIGN_NOTES.md等）は含まれない"
-Write-Host "  起動は直下の「SkyrimJPStringPatcherGui.exe」から（CLIは通常直接使わない）"
+Write-Host "  起動は直下の「Skyrim_JP_Translation_Supporter.exe」から（CLIは通常直接使わない）"

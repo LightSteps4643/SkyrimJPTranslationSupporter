@@ -12,7 +12,7 @@ namespace SkyrimJPStringPatcher.Tests.Gui;
 /// </summary>
 public class CliLocatorTests
 {
-    private const string GuiExeName = "SkyrimJPStringPatcherGui.exe"; // not actually checked by CliLocator, just realism
+    private const string GuiExeName = "Skyrim_JP_Translation_Supporter.exe"; // not actually checked by CliLocator, just realism
     private const string CliExeName = "SkyrimJPStringPatcher.exe";
 
     [Fact]
