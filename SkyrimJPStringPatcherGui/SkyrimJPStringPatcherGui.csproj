@@ -6,6 +6,7 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Skyrim_JP_Translation_Supporter</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>
