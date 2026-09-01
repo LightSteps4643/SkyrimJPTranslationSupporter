@@ -159,7 +159,8 @@ public sealed class MainForm : Form
     // 大きすぎて失敗率が大幅に上がり、逆に小さくしすぎても解決件数は変わらず
     // 実行時間だけ悪化することを確認済み（詳細はDESIGN_NOTES.md既知の課題27.）。
     // ⑥（生成AI・クラウド）側は同じ実機検証をしていないため12000のまま変更していない。
-    private const int DefaultLlmLocalBatchCharLimit = 3_000;
+    // v0.59.0: GUI既定値のみ6000へ変更（ユーザー指示）。
+    private const int DefaultLlmLocalBatchCharLimit = 6_000;
     private const int DefaultLlmCloudBatchCharLimit = 12_000;
     // v0.58.1: 実測（同フォント・同DPIでのPreferredSize）でCheckBox=22px、
     // Label=21px、NumericUpDown=23pxとほぼ揃っており、単独ではここまでの
