@@ -115,9 +115,9 @@ public class DsdJsonGeneratorTests
             }
 
             Assert.Equal(1, log.DetailCount(
-                "情報: 手動編集の訳文に日本語が含まれていないが、そのまま出力する（意図的な可能性があるため除外しない）",
-                "Note: a manually-edited translation doesn't contain Japanese — included as-is (not excluded, since this may be intentional)"));
-            Assert.Contains("[warn] '00099999:TestMod.esp' manually-edited translation doesn't look like Japanese — keeping as-is (not excluded): \"Bob\"",
+                "情報: 訳文に日本語が含まれていないが、そのまま出力する（意図的な可能性があるため除外しない）",
+                "Note: a translation doesn't contain Japanese — included as-is (not excluded, since this may be intentional)"));
+            Assert.Contains("[warn] '00099999:TestMod.esp' translation doesn't look like Japanese — keeping as-is (not excluded): \"Bob\"",
                 capturedError.ToString());
 
             // The untrusted (no-tag) non-Japanese row must still go through the
@@ -125,6 +125,65 @@ public class DsdJsonGeneratorTests
             Assert.Equal(1, log.DetailCount(
                 "除外: Japanese列に日本語が含まれていない（訳し忘れ・貼り付けミスの可能性）",
                 "Excluded: the Japanese column doesn't contain Japanese (possibly a missed translation or a paste mistake)"));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>v0.58.5: PromptGenerator.ApplyLlmStep now tags a candidate whose
+    /// LLM response parsed fine but whose translation contains no Japanese with
+    /// a dedicated "&lt;method&gt;NoJapanese" Notes value (e.g.
+    /// "TranslationLocalLlmNoJapanese") instead of silently discarding it or
+    /// accepting it as an ordinary success — see that method's own remarks for
+    /// why (a real example: vanilla Skyrim's own untranslated "arcane script"
+    /// spell-tome flavor text). DsdJsonGenerator must treat ANY Notes value
+    /// ending in "NoJapanese" the same way it already treats ModifiedByUser —
+    /// included as-is with an informational note, not excluded with a [warn] —
+    /// since this may be genuinely untranslatable content, not a mistake.
+    /// Uses its own self-contained fixture (not translations_basic.tsv) so it
+    /// doesn't disturb that fixture's golden-file JSON diff used elsewhere.</summary>
+    [Fact]
+    public void Run_LlmNoJapaneseTag_IsIncludedAsIsWithANote_NotExcluded()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_dsd_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var inputPath = Path.Combine(root, "translations.tsv");
+            File.WriteAllText(inputPath,
+                "FormId\tWinningPlugin\tRecordType\tEnglishText\tJapanese\tNotes\tIndex\tEditorId\n" +
+                "000ABCDE:TestMod.esp\tTestMod.esp\tBOOK CNAM\tSCRAMBLED GIBBERISH TEXT\tSCRAMBLED GIBBERISH TEXT\tTranslationLocalLlmNoJapanese\t0\t\n");
+
+            var outDir = Path.Combine(root, "out");
+            using var log = OpenTestLog(root);
+
+            var originalError = Console.Error;
+            var capturedError = new StringWriter();
+            Console.SetError(capturedError);
+            try
+            {
+                DsdJsonGenerator.Run(inputPath, outDir, log, outputTimestamp: TestTimestamp);
+            }
+            finally
+            {
+                Console.SetError(originalError);
+            }
+
+            // Included as-is (not excluded) -- the DSD json for TestMod.esp must exist.
+            var dsdPath = Path.Combine(outDir, "SKSE", "Plugins", "DynamicStringDistributor", "TestMod.esp", TestOutputFileName);
+            Assert.True(File.Exists(dsdPath));
+            Assert.Contains("SCRAMBLED GIBBERISH TEXT", File.ReadAllText(dsdPath));
+
+            // Noted (info), not the "excluded" [warn]/log category.
+            Assert.Equal(1, log.DetailCount(
+                "情報: 訳文に日本語が含まれていないが、そのまま出力する（意図的な可能性があるため除外しない）",
+                "Note: a translation doesn't contain Japanese — included as-is (not excluded, since this may be intentional)"));
+            Assert.Equal(0, log.DetailCount(
+                "除外: Japanese列に日本語が含まれていない（訳し忘れ・貼り付けミスの可能性）",
+                "Excluded: the Japanese column doesn't contain Japanese (possibly a missed translation or a paste mistake)"));
+            Assert.Contains("[warn] '000ABCDE:TestMod.esp' translation doesn't look like Japanese — keeping as-is (not excluded)", capturedError.ToString());
         }
         finally
         {
