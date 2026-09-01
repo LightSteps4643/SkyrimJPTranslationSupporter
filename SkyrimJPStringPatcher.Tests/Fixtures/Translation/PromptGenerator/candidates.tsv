@@ -11,6 +11,7 @@ FormId	WinningPlugin	RecordType	EnglishText	Index	EditorId	Context	StaleOriginal
 000815:SjptsResolutionMethods.esp	SjptsResolutionMethods.esp	WEAP FULL	Sjpts Batch Candidate Two	0
 000816:SjptsMarkerFallback.esp	SjptsMarkerFallback.esp	BOOK CNAM	Sjpts Spurious Marker Candidate\nSecond Line	0
 000817:SjptsMarkerFallback.esp	SjptsMarkerFallback.esp	BOOK CNAM	Sjpts Legit Trailing Newline\n	0
+000818:SjptsMarkerFallback.esp	SjptsMarkerFallback.esp	WEAP FULL	Sjpts Target Tag Wrapped Answer	0
 000820:SjptsMultiPluginA.esp	SjptsMultiPluginA.esp	WEAP FULL	Sjpts Multi A First	0
 000821:SjptsMultiPluginA.esp	SjptsMultiPluginA.esp	WEAP FULL	Sjpts Multi A Second	0
 000830:SjptsMultiPluginB.esp	SjptsMultiPluginB.esp	WEAP FULL	Sjpts Multi B Only	0

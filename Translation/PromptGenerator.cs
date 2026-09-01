@@ -804,7 +804,12 @@ public static class PromptGenerator
                 // 一般的な癖は元から別の話として存在する（v0.52.1a、実機で
                 // Claude Code CLIの出力に対して確認済み）ため、対称な
                 // StripSurroundingQuotesはそのまま残す。
-                var japanese = StripSurroundingQuotes(line[(tabIndex + 1)..].Trim());
+                // v0.59.0: 実機（gemma4:26b、Cloaks.esp）で、モデルが原文側では
+                // なく訳文側を<SJPTS_TARGET>...</SJPTS_TARGET>で囲んで返す
+                // ケースを確認した——原文再掲側のタグ除去（NormalizeBatchResponse
+                // Source）はあったが、訳文側には対応する除去処理が無く、
+                // 保存された訳文にタグがそのまま残ってしまっていた。
+                var japanese = StripSurroundingQuotes(StripTargetTags(line[(tabIndex + 1)..].Trim()));
                 if (source.Length > 0 && japanese.Length > 0)
                 {
                     byLine[source] = japanese; // 同じキーが複数行あれば最後の行を採用
@@ -991,6 +996,20 @@ public static class PromptGenerator
     /// grew in v0.58.4.</summary>
     private static string StripSurroundingQuotes(string text) =>
         text.Length >= 2 && text[0] == '"' && text[^1] == '"' ? text[1..^1] : text;
+
+    /// <summary>v0.59.0: 実機（gemma4:26b、Cloaks.espの複数候補）で、モデルが
+    /// 訳文を<c>&lt;SJPTS_TARGET&gt;...&lt;/SJPTS_TARGET&gt;</c>で囲んで返す
+    /// ことを確認した——プロンプト例（"- Target: &lt;SJPTS_TARGET&gt;example
+    /// text&lt;/SJPTS_TARGET&gt;"）を「自分の回答もこの形式で囲むべき」と
+    /// 誤って一般化した可能性がある。原文再掲側（NormalizeBatchResponseSource）
+    /// には対応する除去処理が既にあるが、訳文側には無かったため保存された訳文に
+    /// タグがそのまま残っていた。StripSurroundingQuotesと同じ「対称のみ剥がす」
+    /// 方針——片側だけタグが付くケース（原文自体に偶然この文字列が含まれる等）を
+    /// 誤って壊さないよう、両端が揃っている場合のみ剥がす。</summary>
+    private static string StripTargetTags(string text) =>
+        text.StartsWith(TargetTagOpen, StringComparison.Ordinal) && text.EndsWith(TargetTagClose, StringComparison.Ordinal)
+            ? text[TargetTagOpen.Length..^TargetTagClose.Length]
+            : text;
 
     /// <summary>
     /// v0.35.0: tallies how many of this plugin's candidates were auto-resolved by
