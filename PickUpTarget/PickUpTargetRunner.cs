@@ -818,7 +818,9 @@ public static class PickUpTargetRunner
             if (NonTranslatableText.IsMarkupOnly(winner.Text))
             {
                 markupOnly++;
-                log.Detail("除外: マークアップ/アイコングリフ（翻訳すると表示が壊れる）", "Excluded: markup/icon-glyph (translating it would break the display)", $"[{dsdType}] {winner.Text}");
+                log.Detail("除外: Iconographia等のアイコン専用フォントを使い、タグを除くと文字がほぼ残らないため、その1文字自体がアイコン画像として表示されている（翻訳すると絵柄が崩れる）と判断",
+                    "Excluded: uses an icon-only font (e.g. Iconographia) and almost no text survives once markup is stripped, so the remaining character IS the icon image (translating it would break the display)",
+                    $"[{dsdType}] {winner.Text}");
                 trace?.Trace($"Exclude [{dsdType}] {formKey}: markup/icon-glyph (\"{winner.Text}\")");
                 continue;
             }
@@ -829,8 +831,8 @@ public static class PickUpTargetRunner
             if (hiddenRecords.Contains(formKey))
             {
                 notPlayerFacing++;
-                log.Detail("除外: レコード自体がUIに表示されない（MGEFのHideInUI / 非表示・非習得のPERK / 全効果が非表示のAbility / ARMO・WEAPのNonPlayable）",
-                    "Excluded: the record itself is never shown in the UI (MGEF HideInUI / hidden-or-unlearnable PERK / an Ability whose effects are all hidden / ARMO or WEAP NonPlayable)",
+                log.Detail("除外: MGEFのUI非表示フラグ・非表示または習得不可のPERK・全効果が非表示のAbility・非playable指定のARMO/WEAPのいずれかに該当し、ゲーム中にそもそも表示されないと判断",
+                    "Excluded: matches one of — MGEF flagged UI-hidden / a hidden-or-unlearnable PERK / an Ability whose effects are all hidden / a NonPlayable-flagged ARMO or WEAP — so it's never shown in the game at all",
                     $"[{dsdType}] {winner.Text}");
                 trace?.Trace($"Exclude [{dsdType}] {formKey}: not player-facing (record-level flag) (\"{winner.Text}\")");
                 continue;
@@ -839,7 +841,9 @@ public static class PickUpTargetRunner
             if (NonTranslatableText.IsAssetPath(winner.Text))
             {
                 notPlayerFacing++;
-                log.Detail("除外: 文字列全体がアセットパス（訳すとパスが壊れる）", "Excluded: entire string is an asset path (translating would break the path)", $"[{dsdType}] {winner.Text}");
+                log.Detail("除外: 文字列全体が画像・音声等のファイル拡張子や、パス区切り文字（\\）で構成されており、ファイルパスそのものだと判断（翻訳するとファイルが見つからなくなる）",
+                    "Excluded: the whole string is made of an image/sound/etc. file extension and/or path separators (\\) — it's a literal file path (translating it would break the path)",
+                    $"[{dsdType}] {winner.Text}");
                 trace?.Trace($"Exclude [{dsdType}] {formKey}: asset path (\"{winner.Text}\")");
                 continue;
             }
@@ -847,7 +851,9 @@ public static class PickUpTargetRunner
             if (NonTranslatableText.LooksLikeInternalIdentifier(winner.Text))
             {
                 notPlayerFacing++;
-                log.Detail("除外: EditorID風の内部識別子（表示名として書かれていない）", "Excluded: looks like an internal EditorID-style identifier (not written as a display name)", $"[{dsdType}] {winner.Text}");
+                log.Detail("除外: スペースを含まず、キャメルケースの境界や数字混在等、開発者がIDに付ける特有の書き方をしているため、プレイヤー向けの表示名ではなく内部管理用のIDだと判断",
+                    "Excluded: no spaces, plus a camelCase boundary or letters-and-digits mix — the shape a developer writes an internal ID in, not a player-facing display name",
+                    $"[{dsdType}] {winner.Text}");
                 trace?.Trace($"Exclude [{dsdType}] {formKey}: looks like an internal identifier (\"{winner.Text}\")");
                 continue;
             }
@@ -858,7 +864,9 @@ public static class PickUpTargetRunner
             if (NonTranslatableText.LooksLikeAudioTemplateName(winner.Text))
             {
                 notPlayerFacing++;
-                log.Detail("除外: 音声テンプレート専用の内部NPC名（ゲーム中で表示されない）", "Excluded: an audio-template-only internal NPC name (never shown in the game)", $"[{dsdType}] {winner.Text}");
+                log.Detail("除外: 名前が\"AudioTemplate\"で始まっており、他のNPCへ音声設定を使い回すためだけに存在する内部専用NPCだと判断（ゲーム中に登場しない）",
+                    "Excluded: name starts with \"AudioTemplate\" — an internal NPC that exists only so other NPCs can reuse its voice settings (never appears in the game)",
+                    $"[{dsdType}] {winner.Text}");
                 trace?.Trace($"Exclude [{dsdType}] {formKey}: audio template name (\"{winner.Text}\")");
                 continue;
             }
@@ -868,7 +876,9 @@ public static class PickUpTargetRunner
             if (NonTranslatableText.LooksLikeDoNotDeleteNote(winner.Text))
             {
                 notPlayerFacing++;
-                log.Detail("除外: 削除禁止の内部プレースホルダーレコード（ゲーム中で表示されない）", "Excluded: a \"do not delete\" internal placeholder record (never shown in the game)", $"[{dsdType}] {winner.Text}");
+                log.Detail("除外: 名前が\"Do Not Delete\"で始まっており、Creation Kit上でFormIDの並び順を保つためだけに残されている空きレコードだと判断（ゲーム中に表示されない）",
+                    "Excluded: name starts with \"Do Not Delete\" — an empty record kept only to preserve FormID ordering in the Creation Kit (never shown in the game)",
+                    $"[{dsdType}] {winner.Text}");
                 trace?.Trace($"Exclude [{dsdType}] {formKey}: \"do not delete\" placeholder (\"{winner.Text}\")");
                 continue;
             }
@@ -878,7 +888,9 @@ public static class PickUpTargetRunner
             if (dsdType == "QUST FULL" && NonTranslatableText.LooksLikeVersionTrackingQuestName(winner.Text))
             {
                 notPlayerFacing++;
-                log.Detail("除外: バージョン管理用の内部クエスト名（QUST FULL、ジャーナルに表示されない）", "Excluded: internal version-tracking quest name (QUST FULL, never shown in the journal)", $"[{dsdType}] {winner.Text}");
+                log.Detail("除外: クエスト名（QUST FULL）に数字のバージョン番号（例: 4.2.1）が含まれており、MODの更新履歴を内部管理するためだけのクエストだと判断（クエストジャーナルには表示されない）",
+                    "Excluded: a QUST FULL name contains a version number (e.g. 4.2.1) — used only to track the MOD's own update/patch history (never shown in the quest journal)",
+                    $"[{dsdType}] {winner.Text}");
                 trace?.Trace($"Exclude [{dsdType}] {formKey}: version-tracking quest name (\"{winner.Text}\")");
                 continue;
             }
@@ -887,7 +899,9 @@ public static class PickUpTargetRunner
             if (NonTranslatableText.LooksLikeInternalFxName(winner.Text))
             {
                 notPlayerFacing++;
-                log.Detail("除外: 内部エフェクト名（fxサフィックス）", "Excluded: internal effect name (fx suffix)", $"[{dsdType}] {winner.Text}");
+                log.Detail("除外: 名前の末尾が\" fx\"で終わっており、視覚・音響エフェクトのための内部専用名だと判断（プレイヤーの目には触れない）",
+                    "Excluded: name ends in \" fx\" — an internal name for a visual/sound effect only (never seen by the player)",
+                    $"[{dsdType}] {winner.Text}");
                 trace?.Trace($"Exclude [{dsdType}] {formKey}: internal fx name (\"{winner.Text}\")");
                 continue;
             }
@@ -899,7 +913,9 @@ public static class PickUpTargetRunner
                 && NonTranslatableText.LooksLikeDevTempPlaceholder(winner.Text))
             {
                 notPlayerFacing++;
-                log.Detail("除外: 開発用tempマーカーを含む名称（未完成の仮レコード）", "Excluded: contains a developer temp marker (unfinished placeholder record)", $"[{dsdType}] {winner.Text}");
+                log.Detail("除外: 名前に単語として\"TEMP\"が含まれており、開発中の未完成な仮レコードだと判断",
+                    "Excluded: the name contains \"TEMP\" as a standalone word — an unfinished, work-in-progress record",
+                    $"[{dsdType}] {winner.Text}");
                 trace?.Trace($"Exclude [{dsdType}] {formKey}: dev temp placeholder name (\"{winner.Text}\")");
                 continue;
             }
@@ -908,7 +924,9 @@ public static class PickUpTargetRunner
             if (NonTranslatableText.IsPlaceholderToken(winner.Text))
             {
                 notPlayerFacing++;
-                log.Detail("除外: プレースホルダー文字列", "Excluded: placeholder string", $"[{dsdType}] {winner.Text}");
+                log.Detail("除外: 文字列全体が\"xxx\"・\"TODO\"等の既知のプレースホルダー語と完全一致するため、本番用の内容としてまだ確定していないと判断",
+                    "Excluded: the whole string exactly matches a known placeholder word (\"xxx\"/\"TODO\"/...) — not yet finalized as real content",
+                    $"[{dsdType}] {winner.Text}");
                 trace?.Trace($"Exclude [{dsdType}] {formKey}: placeholder token (\"{winner.Text}\")");
                 continue;
             }
@@ -917,7 +935,9 @@ public static class PickUpTargetRunner
             if (NonTranslatableText.LooksLikeNonWordAcronym(winner.Text))
             {
                 notPlayerFacing++;
-                log.Detail("除外: 母音を含まない全大文字語（辞書に存在しない語・略称の可能性）", "Excluded: all-uppercase word with no vowels (possibly not a dictionary word / an acronym)", $"[{dsdType}] {winner.Text}");
+                log.Detail("除外: スペースを含まない全大文字かつ母音を1つも含まない文字列であり（実在する英単語はほぼ必ず母音を含むため）、MOD名の略称等であり実在する英単語ではないと判断",
+                    "Excluded: an all-uppercase, whitespace-free string with no vowels at all (a real English word almost always has one) — likely a MOD's own acronym/tag, not an actual word",
+                    $"[{dsdType}] {winner.Text}");
                 trace?.Trace($"Exclude [{dsdType}] {formKey}: all-uppercase no-vowel acronym (\"{winner.Text}\")");
                 continue;
             }
