@@ -671,7 +671,7 @@ public class PickUpTargetToTranslationScenarioTests
             Assert.Equal("", japanese);
             Assert.Equal("", notes);
 
-            Assert.Contains($"Target: \"{text}\"", promptText);
+            Assert.Contains($"Target: <SJPTS_TARGET>{text}</SJPTS_TARGET>", promptText);
             Assert.Contains("Type:", promptText);
         }
         finally

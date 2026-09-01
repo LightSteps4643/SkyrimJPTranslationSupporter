@@ -104,7 +104,7 @@ public static class PromptGenerator
     }
 
     /// <summary>1つのプラグインだけを対象に実行する。</summary>
-    public static void RunOne(string candidatesTsvPath, string corpusTsvPath, string importDir, string targetPlugin, string outputDir, RunLog log, TraceLog? trace = null, int topN = 5, ITextTranslator? llmLocal = null, ITextTranslator? llmCloud = null, TranslationStageOptions? stageOptions = null, bool discardUserEdits = false, int llmBatchCharLimit = DefaultLlmBatchCharLimit)
+    public static void RunOne(string candidatesTsvPath, string corpusTsvPath, string importDir, string targetPlugin, string outputDir, RunLog log, TraceLog? trace = null, int topN = 5, ITextTranslator? llmLocal = null, ITextTranslator? llmCloud = null, TranslationStageOptions? stageOptions = null, bool discardUserEdits = false, int llmLocalBatchCharLimit = DefaultLocalLlmBatchCharLimit, int llmCloudBatchCharLimit = DefaultLlmBatchCharLimit)
     {
         var stages = stageOptions ?? TranslationStageOptions.Default;
         var ctx = BuildContext(candidatesTsvPath, corpusTsvPath, importDir, outputDir, log, trace, stages);
@@ -126,7 +126,7 @@ public static class PromptGenerator
             return;
         }
 
-        var (promptPath, templatePath, _, autoCount, unique, _, _, _, methodCounts) = WritePluginFilesWithDir(outputDir, targetPlugin, targetCandidates, ctx.Retriever, ctx.Auto, ctx.NameFallback, ctx.NpcNames, llmLocal, llmCloud, stages.EnableNameFallback, topN, log, trace, discardUserEdits, llmBatchCharLimit);
+        var (promptPath, templatePath, _, autoCount, unique, _, _, _, methodCounts) = WritePluginFilesWithDir(outputDir, targetPlugin, targetCandidates, ctx.Retriever, ctx.Auto, ctx.NameFallback, ctx.NpcNames, llmLocal, llmCloud, stages.EnableNameFallback, topN, log, trace, discardUserEdits, llmLocalBatchCharLimit, llmCloudBatchCharLimit);
         Console.WriteLine($"Target: {targetPlugin} ({targetCandidates.Count} candidates, {autoCount} resolved (①〜⑥))");
         Console.WriteLine($"Wrote AI-chat prompt: {promptPath}");
         Console.WriteLine($"Wrote translation template: {templatePath}");
@@ -162,7 +162,7 @@ public static class PromptGenerator
     /// <param name="cancelFlagPath">v0.53.0a: GUIの「キャンセル」ボタン用。1プラグイン
     /// 処理し終えるたびにこのパスの存在を確認し、あればそこで残りのプラグインを処理せず
     /// 正常終了する（DESIGN_NOTES.md既知の課題15.）。null／未指定なら一切チェックしない。</param>
-    public static void RunMany(string candidatesTsvPath, string corpusTsvPath, string importDir, IReadOnlyList<string> targetPlugins, string outputDir, RunLog log, TraceLog? trace = null, int topN = 5, ITextTranslator? llmLocal = null, ITextTranslator? llmCloud = null, TranslationStageOptions? stageOptions = null, bool discardUserEdits = false, int llmBatchCharLimit = DefaultLlmBatchCharLimit, string? cancelFlagPath = null)
+    public static void RunMany(string candidatesTsvPath, string corpusTsvPath, string importDir, IReadOnlyList<string> targetPlugins, string outputDir, RunLog log, TraceLog? trace = null, int topN = 5, ITextTranslator? llmLocal = null, ITextTranslator? llmCloud = null, TranslationStageOptions? stageOptions = null, bool discardUserEdits = false, int llmLocalBatchCharLimit = DefaultLocalLlmBatchCharLimit, int llmCloudBatchCharLimit = DefaultLlmBatchCharLimit, string? cancelFlagPath = null)
     {
         var stages = stageOptions ?? TranslationStageOptions.Default;
         var ctx = BuildContext(candidatesTsvPath, corpusTsvPath, importDir, outputDir, log, trace, stages);
@@ -193,7 +193,7 @@ public static class PromptGenerator
             processedCount++;
             var candidates = group.ToList();
             var (promptPath, templatePath, _, autoCount, _, _, _, _, methodCounts) =
-                WritePluginFilesWithDir(outputDir, group.Key, candidates, ctx.Retriever, ctx.Auto, ctx.NameFallback, ctx.NpcNames, llmLocal, llmCloud, stages.EnableNameFallback, topN, log, trace, discardUserEdits, llmBatchCharLimit);
+                WritePluginFilesWithDir(outputDir, group.Key, candidates, ctx.Retriever, ctx.Auto, ctx.NameFallback, ctx.NpcNames, llmLocal, llmCloud, stages.EnableNameFallback, topN, log, trace, discardUserEdits, llmLocalBatchCharLimit, llmCloudBatchCharLimit);
             totalCandidates += candidates.Count;
             totalAuto += autoCount;
             trace?.Debug($"{group.Key}: target {candidates.Count} entries, auto-resolved {autoCount} -> {templatePath}");
@@ -229,7 +229,7 @@ public static class PromptGenerator
     }
 
     /// <summary>ロードオーダー全体の候補を、勝者プラグインごとに一括生成する。</summary>
-    public static void RunAll(string candidatesTsvPath, string corpusTsvPath, string importDir, string outputDir, RunLog log, TraceLog? trace = null, int topN = 5, ITextTranslator? llmLocal = null, ITextTranslator? llmCloud = null, TranslationStageOptions? stageOptions = null, bool discardUserEdits = false, int llmBatchCharLimit = DefaultLlmBatchCharLimit)
+    public static void RunAll(string candidatesTsvPath, string corpusTsvPath, string importDir, string outputDir, RunLog log, TraceLog? trace = null, int topN = 5, ITextTranslator? llmLocal = null, ITextTranslator? llmCloud = null, TranslationStageOptions? stageOptions = null, bool discardUserEdits = false, int llmLocalBatchCharLimit = DefaultLocalLlmBatchCharLimit, int llmCloudBatchCharLimit = DefaultLlmBatchCharLimit)
     {
         var stages = stageOptions ?? TranslationStageOptions.Default;
         var ctx = BuildContext(candidatesTsvPath, corpusTsvPath, importDir, outputDir, log, trace, stages);
@@ -263,7 +263,7 @@ public static class PromptGenerator
         {
             var candidates = group.ToList();
             var (_, _, pluginDir, autoCount, unique, autoResolvedChars, remainingChars, sampleRemaining, methodCounts) =
-                WritePluginFilesWithDir(outputDir, group.Key, candidates, ctx.Retriever, ctx.Auto, ctx.NameFallback, ctx.NpcNames, llmLocal, llmCloud, stages.EnableNameFallback, topN, log, trace, discardUserEdits, llmBatchCharLimit);
+                WritePluginFilesWithDir(outputDir, group.Key, candidates, ctx.Retriever, ctx.Auto, ctx.NameFallback, ctx.NpcNames, llmLocal, llmCloud, stages.EnableNameFallback, topN, log, trace, discardUserEdits, llmLocalBatchCharLimit, llmCloudBatchCharLimit);
             index.Add((group.Key, candidates.Count, autoCount, pluginDir));
             autoResolveByPlugin.Add((group.Key, candidates.Count, autoCount, autoResolvedChars, remainingChars, sampleRemaining));
             uniqueForAi += unique;
@@ -420,7 +420,8 @@ public static class PromptGenerator
         (int Corpus, int Meaning, int Transliteration, int NameFallback, int Llm, int CloudLlm) MethodCounts) WritePluginFilesWithDir(
         string outputDir, string plugin, List<Candidate> candidates, PrecedentRetriever retriever, AutoTranslator auto,
         NameFallbackTranslator nameFallback, IReadOnlySet<string> npcNames, ITextTranslator? llmLocal, ITextTranslator? llmCloud, bool enableNameFallback,
-        int topN, RunLog log, TraceLog? trace = null, bool discardUserEdits = false, int llmBatchCharLimit = DefaultLlmBatchCharLimit)
+        int topN, RunLog log, TraceLog? trace = null, bool discardUserEdits = false,
+        int llmLocalBatchCharLimit = DefaultLocalLlmBatchCharLimit, int llmCloudBatchCharLimit = DefaultLlmBatchCharLimit)
     {
         trace?.Trace($"Plugin processing start: {plugin} ({candidates.Count} candidates)");
         var safeName = MakeSafeFolderName(plugin);
@@ -539,8 +540,8 @@ public static class PromptGenerator
         // entirely) and tries a cloud AI backend — the two are independent
         // opt-ins that chain, exactly like ①〜④ already fall through to each
         // other. See ApplyLlmStep for the shared per-candidate logic.
-        resolved = ApplyLlmStep(resolved, llmLocal, "5", "ローカルLLM", "local LLM", "TranslationLocalLlm", plugin, retriever, auto, npcNames, topN, log, trace, llmBatchCharLimit);
-        resolved = ApplyLlmStep(resolved, llmCloud, "6", "生成AI翻訳", "cloud AI", "TranslationCloudLlm", plugin, retriever, auto, npcNames, topN, log, trace, llmBatchCharLimit);
+        resolved = ApplyLlmStep(resolved, llmLocal, "5", "ローカルLLM", "local LLM", "TranslationLocalLlm", plugin, retriever, auto, npcNames, topN, log, trace, llmLocalBatchCharLimit);
+        resolved = ApplyLlmStep(resolved, llmCloud, "6", "生成AI翻訳", "cloud AI", "TranslationCloudLlm", plugin, retriever, auto, npcNames, topN, log, trace, llmCloudBatchCharLimit);
 
         var unresolved = resolved.Where(r => r.Auto == null).Select(r => r.Candidate).ToList();
 
@@ -569,14 +570,23 @@ public static class PromptGenerator
             autoResolvedChars, remainingChars, sampleRemaining, methodCounts);
     }
 
-    /// <summary>プラグイン単位バッチの上限に、CLIから
-    /// <c>--llm-batch-char-limit=</c>で明示指定が無いときのデフォルト値。実測
+    /// <summary>⑥生成AI翻訳（クラウド）のプラグイン単位バッチの上限に、CLIから
+    /// <c>--llm-cloud-batch-char-limit=</c>で明示指定が無いときのデフォルト値。実測
     /// （Light Greatswords.esp: 候補32件・原文計4,438文字→出力12,346トークン）
     /// から逆算した安全マージン込みの値——生成AIサービスや契約プランによって
     /// 妥当な値は変わりうる（Claude Code CLIのProプランは余裕があるが、無料枠や
     /// 他サービスではもっと小さくする必要があるかもしれない）ため、固定値では
     /// なく呼び出し側から上書きできるようにしてある。</summary>
     public const int DefaultLlmBatchCharLimit = 12_000;
+
+    /// <summary>v0.58.1: ⑤ローカルLLM翻訳の既定値。⑥（上記）と共通だったが、
+    /// ⑤専用の実機検証（`Cloaks_SMP_Patch.esp`、gemma3:12b・gemma4:26b双方）で、
+    /// 12000のままだと大きすぎて成功率が大幅に下がり（例: gemma3で7/51件→2000
+    /// 文字にしただけで52/61件）、逆に500まで下げても2000と解決件数は変わらず
+    /// 実行時間だけ3倍に悪化することを確認した。ローカルLLMは⑥と違い従量課金が
+    /// 無く、「呼び出し回数を減らすために大きくまとめる」動機がそもそも弱いため、
+    /// 実測で頭打ちだった2000よりやや余裕を持たせた3000を既定値とした。</summary>
+    public const int DefaultLocalLlmBatchCharLimit = 3_000;
 
     /// <summary>v0.53.0a: 既知の課題13.の対応——改行を含む原文をバッチ送信する際、
     /// `\n`をこの目印タグへ一時的に置き換えて1行に収める（実データ・67件超の
@@ -586,9 +596,39 @@ public static class PromptGenerator
     /// プレフィックス（一時ファイル名で使っているsjpts_と同じ由来）を使う。</summary>
     private const string MultilineBreakMarker = "<SJPTS_BR>";
 
+    /// <summary>v0.58.5: wraps each candidate's original text on the
+    /// "Target:" line (see <see cref="BuildCandidateBlock"/>) instead of the
+    /// former <c>Target: "..."</c> double-quote wrapping — see FlattenMultiline's
+    /// neighboring remarks for why the quote-based approach was replaced.
+    /// A tag pair unlikely to collide with real game text was chosen
+    /// deliberately (as opposed to, say, wrapping in <c>[...]</c> — real
+    /// Skyrim mod data commonly uses both bracket styles already, e.g.
+    /// <c>&lt;font face='...'&gt;</c>/<c>&lt;Global=...&gt;</c> and <c>[E] ...</c>/
+    /// <c>[ELLE] ...</c> mod-name prefixes; confirmed via real gemma4 testing
+    /// that the model correctly distinguishes this wrapper from a candidate's
+    /// own embedded angle-bracket markup rather than getting confused by the
+    /// visual similarity).</summary>
+    private const string TargetTagOpen = "<SJPTS_TARGET>";
+    private const string TargetTagClose = "</SJPTS_TARGET>";
+
     /// <summary>改行を含む候補だけに適用する——単一行の候補はそのまま
     /// <see cref="ApplyLlmStep"/>に渡す（無駄な変換を増やさない）。</summary>
     private static string FlattenMultiline(string text) => text.Replace("\r\n", "\n").Replace("\n", MultilineBreakMarker);
+
+    // v0.58.5: 既知の課題——旧方式（v0.58.4まで）は"Target: \"...\""のように
+    // 原文を引用符で囲んで送っていたため、原文自体が引用符を含む台詞（例:
+    // "Do you take me for a fool, Ulfrand?" she snapped. "..."）だと境界が
+    // 四重引用符になり照合が恒久的に失敗する、あるいは応答側の引用符除去が
+    // 「」で既に自然に訳出済みの引用を末尾の"としてもう一度表現してしまう、
+    // といった問題が実機で確認された（DoubleQuoteMarker/MarkBoundaryQuotesと
+    // いう目印タグでの後始末を試みたが、根本原因である「区切り文字に"を使う
+    // こと自体」は解消できなかった）。実機検証（HTMLタグ<font>や[E]接頭辞を
+    // 含む候補を含む）の結果、区切りを"Target: <SJPTS_TARGET>...</SJPTS_TARGET>"
+    // というゲーム内テキストと衝突しないタグへ変更することで、原文の引用符を
+    // 一切加工せずそのまま送れることを確認したため、この対応（＋その後始末の
+    // ためだけに存在したDoubleQuoteMarker/MarkBoundaryQuotes/
+    // StripOuterQuoteIndependently）は丸ごと不要になり削除した——詳細は
+    // BuildCandidateBlockのTarget行、LlmBatchInstruction参照。
 
     /// <summary>
     /// v0.52.1a: shared body for step 5 (ローカルLLM) and step 6 (生成AI翻訳・クラウド) —
@@ -684,10 +724,13 @@ public static class PromptGenerator
             var batchLabel = batches.Count > 1 ? $"バッチ{batchIndex + 1}/{batches.Count}" : "バッチ";
 
             // v0.52.1a: ClaudeCodeTranslatorは連続失敗（例: 使用上限到達）が
-            // 一定回数続くとCircuitOpenを立てる。サブバッチ化により再び複数回
+            // 一定回数続くとCircuitOpenを立てる。v0.58.4: LocalLlmTranslatorにも
+            // 同じ仕組みを追加した（サーバー異常停止等の持続的な失敗を早期に
+            // 検知するため）——ITextTranslator.CircuitOpen（既定false）経由で
+            // 実装を問わず同じ形で確認できる。サブバッチ化により再び複数回
             // 呼び出す可能性があるため、バッチごとに確認し、開いていれば残りの
             // サブバッチをまとめてスキップする。
-            if (llm is ClaudeCodeTranslator { CircuitOpen: true })
+            if (llm is { CircuitOpen: true })
             {
                 var remainingBatches = batches.Count - batchIndex;
                 var remainingCandidates = batches.Skip(batchIndex).Sum(b => b.Count);
@@ -727,6 +770,23 @@ public static class PromptGenerator
             // なく内容一致でマッチングする方式。行の欠落・順序の入れ替わりがあっても
             // 対応関係が崩れず、見つからなかった候補は単に未解決のまま残る。
             var byLine = new Dictionary<string, string>(StringComparer.Ordinal);
+            // v0.58.6: 既知の課題26.関連の実機調査（unofficial skyrim special
+            // edition patch.espの"Heretical Thoughts"本文、gemma4:26b/gemma3:12b/
+            // qwen2.5:14b-instruct全てで再現）で判明した、複数行候補（原文に
+            // MultilineBreakMarkerを含む）特有の照合失敗を救済するフォールバック
+            // 辞書。原文の再掲そのものは（内容としては）正しく、翻訳も完璧なのに、
+            // 末尾に余分な1個のMultilineBreakMarker（まれに崩れた"</SJPTS_BR>"）を
+            // 付け足してから改行なしでタブへ続ける、という挙動をモデルが高確率で
+            // 取ることが実機で確認された——候補原文が閉じタグ等の目印で終わって
+            // おらず地の文のまま終わる場合に特に起きやすい。このマーカーはこちらが
+            // 独自に発明した記号（意味を持たない）なので、剥がしても翻訳内容には
+            // 影響しない。ただしPickUpTarget/out_temp/candidates.tsvの実データには、
+            // 原文が正当に改行で始まる/終わる候補が315+706件存在し、matchKey自体が
+            // 正当にこのマーカーで始まる/終わることがあるため、無条件に剥がすのは
+            // 危険——正しく再掲された場合の一致を壊しかねない。そのため、あくまで
+            // 「通常の完全一致（byLine）が失敗した場合だけ」の救済としてのみ使う
+            // （下のTryGetValueを参照）。
+            var byLineMarkerTrimmed = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (var rawLine in response.Replace("\r\n", "\n").Split('\n'))
             {
                 var line = rawLine.Trim();
@@ -734,14 +794,45 @@ public static class PromptGenerator
                 var tabIndex = line.IndexOf('\t');
                 if (tabIndex < 0) continue;
                 var source = NormalizeBatchResponseSource(line[..tabIndex]);
+                // v0.58.5: <SJPTS_TARGET>タグ方式への移行前は、境界引用符
+                // マーカー方式の副作用で、モデルが訳文の末尾（まれに先頭）に
+                // 自分で余分な"を片側だけ付け足すことがあった（実測6件、実機
+                // 再検証の8+9パターンでは一切再現せず）。原文を"で囲むのを
+                // やめたことで、その動機自体が無くなったため、片側だけを
+                // 独立して剥がす処理は不要になった。一方、モデルが自分の回答
+                // 全体を（ウチの区切りタグとは無関係に）両端とも"で囲んでしまう
+                // 一般的な癖は元から別の話として存在する（v0.52.1a、実機で
+                // Claude Code CLIの出力に対して確認済み）ため、対称な
+                // StripSurroundingQuotesはそのまま残す。
                 var japanese = StripSurroundingQuotes(line[(tabIndex + 1)..].Trim());
                 if (source.Length > 0 && japanese.Length > 0)
+                {
                     byLine[source] = japanese; // 同じキーが複数行あれば最後の行を採用
+                    var trimmedSource = StripSpuriousBoundaryMarker(source);
+                    if (trimmedSource != source)
+                        byLineMarkerTrimmed[trimmedSource] = japanese;
+                }
             }
 
             foreach (var (group, _, matchKey) in batch)
             {
-                if (byLine.TryGetValue(matchKey, out var japaneseRaw))
+                // v0.58.4: matchKeyは常に候補原文そのまま（Trimしない）だが、
+                // NormalizeBatchResponseSourceは応答側のsource列を必ずTrimしてから
+                // byLineへ格納している——原文の先頭/末尾に空白を含む候補は、
+                // モデルが無意味な空白を保持しない限り未Trim側と絶対に一致せず、
+                // モデルの性能・再実行回数に関係なく毎回この照合に失敗する
+                // 再現性のあるバグだった。ここでTrimして比較することで解消する
+                // ——送信するブロック本文・保存先キー（answers[group.Key]、下の
+                // TryGetValueの外側）はどちらも変更しないため、既存の一致関係を
+                // 壊す副作用は無い。
+                // v0.58.6: まず通常の完全一致（byLine）を試し、それが失敗した
+                // 場合だけbyLineMarkerTrimmed（末尾の余分なMultilineBreakMarker
+                // を剥がした版）へフォールバックする——正当にマーカーで始まる/
+                // 終わる候補（315+706件、実データで確認済み）はbyLine側で先に
+                // 一致するため一切影響を受けない。
+                if (!byLine.TryGetValue(matchKey.Trim(), out var japaneseRaw))
+                    byLineMarkerTrimmed.TryGetValue(matchKey.Trim(), out japaneseRaw);
+                if (japaneseRaw != null)
                 {
                     // v0.53.0a: 改行を含む候補（matchKeyがgroup.Keyと異なる）の場合、
                     // 送信時に埋め込んだMultilineBreakMarkerをここで実際の改行へ
@@ -751,10 +842,40 @@ public static class PromptGenerator
                     // 失敗にはしない）。単一行の候補にはマーカーは含まれないため
                     // この置換は完全なno-op。
                     var japanese = japaneseRaw.Replace(MultilineBreakMarker, "\n");
-                    answers[group.Key] = new AutoTranslationResult(japanese, methodTag, "");
-                    log.Detail($"{stepNumber}.{stepLabelJa}による自動解決（低精度・要レビュー）",
-                        $"{stepNumber}. Auto-resolved via {stepLabelEn} (low confidence, needs review)",
-                        $"[{plugin}]  \"{group.Key}\" → \"{japanese}\"");
+
+                    // v0.58.5: 既知の課題26.関連——以前はバッチ応答全体に対して
+                    // 「日本語が1文字も無ければバッチごと失敗」という粗い判定を
+                    // CallOnce側でしていたが、これは「モデルが形式通り正しく
+                    // 応答した」こと自体は失敗ではない、という実機での発見
+                    // （バニラSkyrim自身が意図的に翻訳していない文字列——
+                    // $MageScriptFont等、マスター魔法書の秘術ページ。公式日本語版
+                    // でも同じ文字列のまま確認済み——にモデルが原文をそのまま
+                    // 返してくること自体は正しい振る舞い）を踏まえ廃止した
+                    // （CallOnce側のContainsJapaneseゲート削除）。
+                    // その代わり、ここ（候補単位）で訳文に日本語が含まれるかを
+                    // 確認する。含まれない場合、「未解決として捨てる」のでも
+                    // 「翻訳成功として無条件受理する」のでもなく、専用タグ
+                    // （methodTag + "NoJapanese"）を付けて保存する——「翻訳不要
+                    // だった」のか「モデルが本当に翻訳を誤っただけ」なのかは
+                    // 機械的に区別できないため、GUIの「翻訳詳細」ウィンドウで
+                    // ユーザーが見分けてレビューできるようにする（原文のまま
+                    // 維持するか、訳文を消して再翻訳するかはユーザー判断）。
+                    if (LanguageDetector.ContainsJapanese(japanese))
+                    {
+                        answers[group.Key] = new AutoTranslationResult(japanese, methodTag, "");
+                        log.Detail($"{stepNumber}.{stepLabelJa}による自動解決（低精度・要レビュー）",
+                            $"{stepNumber}. Auto-resolved via {stepLabelEn} (low confidence, needs review)",
+                            $"[{plugin}]  \"{group.Key}\" → \"{japanese}\"");
+                    }
+                    else
+                    {
+                        var noJapaneseTag = methodTag + "NoJapanese";
+                        answers[group.Key] = new AutoTranslationResult(japanese, noJapaneseTag, "");
+                        trace?.Warning($"{stepLabelEn} [{plugin}] \"{group.Key}\": response parsed but contains no Japanese — saved as \"{noJapaneseTag}\" for review");
+                        log.Detail($"{stepNumber}.{stepLabelJa}: 応答は得られたが訳文に日本語が含まれない（翻訳不要な文字列か、翻訳失敗かは要レビュー）",
+                            $"{stepNumber}. {stepLabelEn}: response parsed but the translation contains no Japanese (needs review — may be untranslatable content, or a genuine translation failure)",
+                            $"[{plugin}]  \"{group.Key}\" → \"{japanese}\"");
+                    }
                 }
                 else
                 {
@@ -782,31 +903,94 @@ public static class PromptGenerator
             .ToList();
     }
 
-    /// <summary>v0.52.1a: the batch prompt writes each source string as
-    /// <c>Target: "..."</c> (quoted) — real responses echo that quoting back on
-    /// both the source and translation columns of the TSV answer even though the
-    /// instructions only ask for the bare text (confirmed against real Ollama/
-    /// gemma3:12b output). Stripped here so the source column matches
-    /// <c>Candidate.CurrentText</c> exactly (unquoted) and the Japanese column
-    /// isn't stored with quote marks baked into the translation.</summary>
-    private static string StripSurroundingQuotes(string text) =>
-        text.Length >= 2 && text[0] == '"' && text[^1] == '"' ? text[1..^1] : text;
-
-    /// <summary>v0.52.1a: the source column is supposed to be just the bare/quoted
+    /// <summary>v0.52.1a: the source column is supposed to be just the bare
     /// text that followed <c>Target:</c> in the prompt — real Claude Code CLI
     /// responses sometimes echo the "Target:" label itself too (confirmed against
-    /// real output: <c>Target: "$TNG_TCT"&lt;TAB&gt;トングトクト</c> instead of the
-    /// requested bare <c>"$TNG_TCT"&lt;TAB&gt;...</c>), which would otherwise never
+    /// real output: <c>Target: $TNG_TCT&lt;TAB&gt;トングトクト</c> instead of the
+    /// requested bare <c>$TNG_TCT&lt;TAB&gt;...</c>), which would otherwise never
     /// match <c>Candidate.CurrentText</c> and silently leave that candidate
     /// unresolved. A leading "- " (as in the prompt's own "- Target: ..." bullet)
-    /// is tolerated the same way.</summary>
+    /// is tolerated the same way.
+    ///
+    /// v0.58.5: also strips a leading/trailing &lt;SJPTS_TARGET&gt;/
+    /// &lt;/SJPTS_TARGET&gt; if the model echoed the wrapper tags back despite
+    /// being told not to — defensive only, not observed in real testing (8/8
+    /// and 8/9 real gemma4 samples across plain text, boundary/embedded quotes,
+    /// HTML-like markup, and other punctuation all echoed cleanly with no
+    /// wrapper-tag artifacts at all).
+    ///
+    /// Deliberately does NOT strip surrounding quotes any more (unlike the
+    /// pre-v0.58.5 versions of this method, and unlike the Japanese answer
+    /// column — see <see cref="StripSurroundingQuotes"/>'s remarks). A
+    /// candidate's own text can legitimately start and/or end with a literal
+    /// " (dialogue, a quoted nickname, ...), and this method has no way to
+    /// tell that apart from a model wrapping its whole answer field in
+    /// quotes as an unrelated habit — stripping here is a genuine ambiguity,
+    /// not a safe heuristic, because a WRONG strip permanently breaks the
+    /// exact-text match against <c>Candidate.CurrentText</c> (found the hard
+    /// way in v0.58.5: a candidate quoted on both sides, e.g.
+    /// <c>"Sjpts Quoted Both Sides"</c>, stopped matching once this method
+    /// started stripping its own genuine boundary quotes). The
+    /// &lt;SJPTS_TARGET&gt; tag delimiter (see its own remarks) exists
+    /// specifically so the model never needs to be told about quoting at
+    /// all any more, and real testing confirmed it doesn't add any on its
+    /// own — so there is nothing left here worth the risk of guessing.</summary>
     private static string NormalizeBatchResponseSource(string text)
     {
         var t = text.Trim();
         if (t.StartsWith("- ", StringComparison.Ordinal)) t = t[2..].TrimStart();
         if (t.StartsWith("Target:", StringComparison.OrdinalIgnoreCase)) t = t[7..].TrimStart();
-        return StripSurroundingQuotes(t);
+        if (t.StartsWith(TargetTagOpen, StringComparison.Ordinal)) t = t[TargetTagOpen.Length..];
+        if (t.EndsWith(TargetTagClose, StringComparison.Ordinal)) t = t[..^TargetTagClose.Length];
+        return t;
     }
+
+    /// <summary>v0.58.6: 既知の課題26.関連の実機調査（unofficial skyrim special
+    /// edition patch.espの"Heretical Thoughts"、gemma4:26b/gemma3:12b/
+    /// qwen2.5:14b-instructの3モデル全てで再現）で判明した挙動への救済——
+    /// 複数行候補（原文にMultilineBreakMarkerを含む）の英文再掲で、モデルが
+    /// 内容自体は完璧に再掲しつつ、末尾に余分なMultilineBreakMarkerを1つ
+    /// （まれに閉じタグ風に崩れた"&lt;/SJPTS_BR&gt;"として）付け足してから
+    /// タブへ続ける、という完全一致を壊す振る舞いを高確率で取ることを確認した
+    /// （候補原文が閉じタグ等の目印で終わらず地の文のまま終わる場合に特に
+    /// 起きやすい）。このマーカーは意味を持たない自前の目印記号なので、
+    /// 末尾/先頭から1個だけ剥がすのは翻訳内容に一切影響しない。
+    ///
+    /// ただしPickUpTarget/out_temp/candidates.tsvの実データには、原文が
+    /// 正当に改行で始まる/終わる候補が315+706件存在し（例:
+    /// "10F786:Skyrim.esm"のBOOK CNAM、末尾が実際に"&lt;/font&gt;&lt;/p&gt;\n"）、
+    /// matchKey自体が正当にこのマーカーで始まる/終わることがある。そのため
+    /// 呼び出し側（ApplyLlmStep）では、この関数の戻り値を通常のbyLine辞書とは
+    /// 別のフォールバック辞書に格納し、通常の完全一致が失敗した場合だけ参照する
+    /// ——正しくマーカーごと再掲された場合の一致を壊さないための設計。</summary>
+    private static string StripSpuriousBoundaryMarker(string source)
+    {
+        var t = source;
+        const string malformedClose = "</SJPTS_BR>";
+        if (t.EndsWith(MultilineBreakMarker, StringComparison.Ordinal))
+            t = t[..^MultilineBreakMarker.Length];
+        else if (t.EndsWith(malformedClose, StringComparison.Ordinal))
+            t = t[..^malformedClose.Length];
+        if (t.StartsWith(MultilineBreakMarker, StringComparison.Ordinal))
+            t = t[MultilineBreakMarker.Length..];
+        return t;
+    }
+
+    /// <summary>v0.52.1a: a model sometimes wraps its whole TSV field in
+    /// quotes as its own unrelated formatting habit (confirmed against real
+    /// Claude Code CLI output), independent of whatever delimiter this
+    /// project's own prompt uses. Used ONLY for the Japanese answer column —
+    /// see <see cref="NormalizeBatchResponseSource"/>'s remarks for why the
+    /// English matching key deliberately does NOT use this any more (the
+    /// same ambiguity is far more damaging there: a wrong strip silently
+    /// breaks the exact-text match instead of just leaving a cosmetic stray
+    /// quote pair in the stored translation). Symmetric only (both ends must
+    /// be ") — restored to this simple original form in v0.58.5 once the
+    /// &lt;SJPTS_TARGET&gt; tag delimiter removed the need for the more
+    /// complex asymmetric boundary-quote-marker handling this method briefly
+    /// grew in v0.58.4.</summary>
+    private static string StripSurroundingQuotes(string text) =>
+        text.Length >= 2 && text[0] == '"' && text[^1] == '"' ? text[1..^1] : text;
 
     /// <summary>
     /// v0.35.0: tallies how many of this plugin's candidates were auto-resolved by
@@ -970,10 +1154,12 @@ public static class PromptGenerator
         "leaving it in English.\n\n" +
         "Output ONE line per string below: the English source, then a single actual tab character (press Tab —\n" +
         "do NOT write the four characters \"<TAB>\" as literal text), then the Japanese translation. No other lines,\n" +
-        "no header row, no numbering, no preamble or explanation. Use the exact text inside the\n" +
-        "quotes after \"Target:\" as the English source (this is the matching key used to parse your answer back —\n" +
-        "copy it exactly, unchanged, including punctuation and case). Do NOT include the word \"Target:\" itself or\n" +
-        "the quote marks in your answer — only the bare text that was inside the quotes.\n\n" +
+        "no header row, no numbering, no preamble or explanation. Each string to translate is wrapped in\n" +
+        TargetTagOpen + " and " + TargetTagClose + " tags, like this: - Target: " + TargetTagOpen + "example text" + TargetTagClose + "\n" +
+        "Translate ONLY the text between these tags. Copy that exact text (unchanged, including any punctuation,\n" +
+        "quotes, or markup it may contain, and including case) as the English source column in your answer — this\n" +
+        "is the matching key used to parse your answer back. Do NOT include the word \"Target:\" or the\n" +
+        TargetTagOpen + "/" + TargetTagClose + " tags themselves anywhere in your answer.\n\n" +
         "Some Target strings contain the literal marker " + MultilineBreakMarker + ". Treat it exactly like any other\n" +
         "in-string placeholder tag (e.g. <mag>, <dur>): copy it unchanged, do not translate or remove it, and place it\n" +
         "at the corresponding point in your Japanese translation too — it stands in for a line break that was removed\n" +
@@ -1037,7 +1223,8 @@ public static class PromptGenerator
         writer.WriteLine("For any word NOT listed, translate it normally using your own judgment regardless of this hint (never skip it).");
         writer.WriteLine();
         writer.WriteLine("Output one line per string, in the format \"English source<TAB>Japanese translation\" (TSV).");
-        writer.WriteLine("Use the exact text inside the quotes after \"Target:\" below as the English source (this is the matching key).");
+        writer.WriteLine($"Use the exact text inside the {TargetTagOpen}{TargetTagClose} tags after \"Target:\" below as the English source");
+        writer.WriteLine("(this is the matching key) — do not include the tags themselves in your answer.");
         writer.WriteLine();
 
         WriteGlossarySection(writer, targetPlugin, blockers);
@@ -1063,7 +1250,10 @@ public static class PromptGenerator
     /// translations等、他の文脈情報は本来の（改行を含む）原文のまま解析する
     /// （精度への影響を避けるため、"Target:"行の表示だけを差し替える）。
     /// prompt.txt（<see cref="WritePrompt"/>）はこの引数を渡さないため、
-    /// 従来通り常にnullで、挙動は一切変わらない。</param>
+    /// 従来通り常にnullで、挙動は一切変わらない。v0.58.5:
+    /// <c>&lt;SJPTS_TARGET&gt;</c>タグ方式への移行に伴い、境界引用符
+    /// （MarkBoundaryQuotes）用の差し替えは不要になった——原文自身の引用符は
+    /// タグの外側と衝突しないため、一切加工せずそのまま送れる。</param>
     private static string BuildCandidateBlock(
         IGrouping<string, Candidate> group, PrecedentRetriever retriever, int topN, AutoTranslator auto, IReadOnlySet<string> npcNames,
         string? targetTextOverride = null)
@@ -1072,12 +1262,19 @@ public static class PromptGenerator
         var first = group.First();
         var types = group.Select(c => c.RecordType).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
-        sb.AppendLine($"- Target: \"{targetTextOverride ?? first.CurrentText}\"");
+        // v0.58.6: 全行を明示的な"\n"終端のAppendで統一している——AppendLineは
+        // Environment.NewLine（Windowsでは"\r\n"）を使うため、LlmBatchInstruction
+        // 側（文字列リテラルの"\n"のみ）と混在すると、同じプロンプト内でCRLFと
+        // LFが入り混じった状態になっていた。実機検証（gemma4:26b）で、この
+        // 混在した実際のプロンプトをそのまま再送したところ、LFのみに正規化した
+        // 版よりタブ区切り形式の省略（既知の課題「単独バッチのタブ抜け」参照）が
+        // 明確に高頻度で再現したため、送信するプロンプト全体をLFのみに統一した。
+        sb.Append($"- Target: {TargetTagOpen}{targetTextOverride ?? first.CurrentText}{TargetTagClose}\n");
 
         var descriptions = types
             .Select(t => DsdTypeDescriptions.Describe(t) is { } d ? $"{d} [{t}]" : t)
             .ToList();
-        sb.AppendLine($"  Type: {string.Join(" / ", descriptions)}");
+        sb.Append($"  Type: {string.Join(" / ", descriptions)}\n");
 
         // v0.6.0: per-record context PickUpTarget read off the Mutagen record —
         // "light armor, slot: head", "one-handed axe", "female, race: Nord".
@@ -1085,7 +1282,7 @@ public static class PromptGenerator
         // name that is ambiguous on its own.
         var contexts = group.Select(c => c.Context).Where(c => c.Length > 0).Distinct().ToList();
         if (contexts.Count > 0)
-            sb.AppendLine($"  Context: {string.Join(" / ", contexts)}");
+            sb.Append($"  Context: {string.Join(" / ", contexts)}\n");
 
         // v0.8.0: a --include-stale candidate already HAS a shipped translation;
         // it was just written for different source text. Showing both lets the
@@ -1095,23 +1292,23 @@ public static class PromptGenerator
         var stale = group.FirstOrDefault(c => c.StaleTranslation.Length > 0);
         if (stale != null)
         {
-            sb.AppendLine($"  Existing translation (for the original text before it changed — use as a starting point): \"{stale.StaleTranslation}\"");
-            sb.AppendLine($"  The original text that existing translation was for: \"{stale.StaleOriginal}\"");
+            sb.Append($"  Existing translation (for the original text before it changed — use as a starting point): \"{stale.StaleTranslation}\"\n");
+            sb.Append($"  The original text that existing translation was for: \"{stale.StaleOriginal}\"\n");
         }
 
         if (group.Count() > 1)
-            sb.AppendLine($"  (This string appears {group.Count()} times in this plugin. Answer once — the same translation applies to all occurrences.)");
+            sb.Append($"  (This string appears {group.Count()} times in this plugin. Answer once — the same translation applies to all occurrences.)\n");
 
         var precedents = retriever.FindPrecedents(first.CurrentText, topN, first.RecordType, first.WinningPlugin);
         if (precedents.Count > 0)
         {
-            sb.AppendLine("  Reference examples:");
+            sb.Append("  Reference examples:\n");
             foreach (var p in precedents)
-                sb.AppendLine($"    \"{p.English}\" → \"{p.Japanese}\" (source: {p.Source}, {p.SourceKind})");
+                sb.Append($"    \"{p.English}\" → \"{p.Japanese}\" (source: {p.Source}, {p.SourceKind})\n");
         }
         else
         {
-            sb.AppendLine("  Reference examples: none (no related existing translation found in the corpus)");
+            sb.Append("  Reference examples: none (no related existing translation found in the corpus)\n");
         }
 
         // v0.14.0: the words of THIS candidate that the corpus already has an
@@ -1122,11 +1319,11 @@ public static class PromptGenerator
         // Only entries the corpus attests are offered, so nothing here is a guess.
         var glossary = WordGlossary(first.CurrentText, auto);
         if (glossary.Count > 0)
-            sb.AppendLine($"  Known translations for words in this candidate: {string.Join(", ", glossary.Select(g => $"{g.English}={g.Japanese}"))}");
+            sb.Append($"  Known translations for words in this candidate: {string.Join(", ", glossary.Select(g => $"{g.English}={g.Japanese}"))}\n");
 
         var transliterationHint = AutoTranslator.SuggestTransliteration(first.CurrentText);
         if (transliterationHint != null)
-            sb.AppendLine($"  Machine transliteration (reference only, accuracy not guaranteed): \"{transliterationHint}\"");
+            sb.Append($"  Machine transliteration (reference only, accuracy not guaranteed): \"{transliterationHint}\"\n");
 
         // v0.48.1: does this candidate's text embed one of this load order's own
         // NPC_ FULL display names? Closes a gap found in DIAL FULL/INFO NAM1: a
@@ -1140,7 +1337,7 @@ public static class PromptGenerator
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
         if (nameHits.Count > 0)
-            sb.AppendLine($"  Known character/creature names in this mod's load order (proper nouns — render phonetically, don't translate by meaning): {string.Join(", ", nameHits)}");
+            sb.Append($"  Known character/creature names in this mod's load order (proper nouns — render phonetically, don't translate by meaning): {string.Join(", ", nameHits)}\n");
 
         // v0.48.1: does a word in this candidate also appear in its own plugin's
         // filename? A recurring modifier that matches the mod's own name is often
@@ -1158,10 +1355,10 @@ public static class PromptGenerator
         if (brandHits.Count > 0)
         {
             var verb = brandHits.Count == 1 ? "also appears" : "also appear";
-            sb.AppendLine($"  Note: {string.Join(", ", brandHits)} {verb} in this mod's own filename ({first.WinningPlugin}) — likely a set/brand/character name here rather than the word's usual dictionary meaning.");
+            sb.Append($"  Note: {string.Join(", ", brandHits)} {verb} in this mod's own filename ({first.WinningPlugin}) — likely a set/brand/character name here rather than the word's usual dictionary meaning.\n");
         }
 
-        sb.AppendLine();
+        sb.Append('\n');
         return sb.ToString();
     }
 
