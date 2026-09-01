@@ -218,7 +218,11 @@ public sealed class TranslationDetailForm : Form
             // 内容量に応じた上余白を付けてしまい、スクロールバーの位置とずれて見える
             // （改行を増やしてスクロールが必要になった瞬間だけ正常に見える、という
             // 現象の原因だった）。上揃えにして余白計算そのものを起こさないようにする。
-            DefaultCellStyle = new DataGridViewCellStyle { Alignment = DataGridViewContentAlignment.TopLeft },
+            // v0.59.0: WrapModeが原文列にしか付いておらず、訳文列は改行を含む
+            // 複数行の訳文（本の本文等）でも改行なしの1本の連続テキストとして
+            // 表示されてしまっていた（translations.tsv自体は正しく改行を保持
+            // していることを確認済み——表示側だけの不具合）。原文列と揃える。
+            DefaultCellStyle = new DataGridViewCellStyle { WrapMode = DataGridViewTriState.True, Alignment = DataGridViewContentAlignment.TopLeft },
         });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Notes", HeaderText = "解決方法（Notes）", Width = 180, ReadOnly = true });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "EditorId", HeaderText = "EditorId", Width = 130, ReadOnly = true });
@@ -358,6 +362,18 @@ public sealed class TranslationDetailForm : Form
     // single left-to-right scan — see Core/TsvEscaping.cs's remarks for why the
     // old sequential-Replace version corrupted a literal backslash immediately
     // followed by a literal 'n'/'t' (e.g. a Windows path).
+    //
+    // v0.59.0: emits "\r\n" (not a bare "\n") — the resting (non-edit) grid cell
+    // paint (GDI+) renders a bare "\n" as a line break fine, but the native
+    // Win32 multiline EDIT control behind the editing TextBox (see
+    // Grid_EditingControlShowing's tb.Multiline) does not; a bare "\n" was
+    // rendered as no line break at all once a multiline cell entered edit mode,
+    // even though the underlying value/translations.tsv were already correct
+    // (confirmed by inspecting the raw file — this was purely a display-only
+    // bug in the editing control). Escape()'s existing ".Replace("\r", "")"
+    // already strips the "\r" back out on save, so "\r\n" round-trips to the
+    // same single "\n" escape sequence as before — no format change to
+    // translations.tsv.
     private static string Unescape(string s)
     {
         var sb = new System.Text.StringBuilder(s.Length);
@@ -367,7 +383,7 @@ public sealed class TranslationDetailForm : Form
             {
                 switch (s[i + 1])
                 {
-                    case 'n': sb.Append('\n'); i++; continue;
+                    case 'n': sb.Append("\r\n"); i++; continue;
                     case 't': sb.Append('\t'); i++; continue;
                     case '\\': sb.Append('\\'); i++; continue;
                 }
