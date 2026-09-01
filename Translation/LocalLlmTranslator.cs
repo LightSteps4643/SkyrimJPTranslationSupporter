@@ -13,7 +13,18 @@ namespace SkyrimJPStringPatcher.Translation;
 /// (OpenAI/OpenRouter/DeepSeek/Groq/etc.), as opposed to an unauthenticated local
 /// server (Ollama/LM Studio/...), which this stays compatible with by simply
 /// omitting the header when empty (the pre-v0.52.1a behavior).</param>
-public sealed record LocalLlmOptions(string Endpoint, string Model, string ApiKey = "");
+/// <param name="ReasoningEffort">v0.58.1: forwarded verbatim as the request body's
+/// `reasoning_effort` field when non-null (e.g. "none"/"low"/"medium"/"high") —
+/// an OpenAI-style knob some "thinking"-capable models (confirmed: Ollama's
+/// gemma4) honor to control how much of the completion token budget goes to an
+/// internal reasoning trace before the actual answer. Left unset (the default)
+/// sends no such field at all, preserving prior behavior for every model/server
+/// that doesn't support it. Confirmed harmless when set against non-thinking
+/// models too (gemma3:12b, qwen2.5:14b-instruct via Ollama both answer normally
+/// either way), so this is safe to set unconditionally rather than gating it on
+/// the configured model name. See <see cref="LocalLlmTranslator.CallOnce"/>'s
+/// remarks for why this exists.</param>
+public sealed record LocalLlmOptions(string Endpoint, string Model, string ApiKey = "", string? ReasoningEffort = null);
 
 /// <summary>
 /// Step 5 (v0.49.0): whatever 1.〜4. leave unresolved, send to a locally-running
@@ -40,116 +51,223 @@ public sealed record LocalLlmOptions(string Endpoint, string Model, string ApiKe
 /// accepted by design (see DESIGN_NOTES.md): a wrong or awkward answer from this
 /// step is expected to be corrected via xTranslator community translation or a
 /// glossary entry, not treated as a tool defect.
+///
+/// v0.58.4: brought in line with <see cref="ClaudeCodeTranslator"/>'s failure
+/// handling — see <see cref="CallOnce"/>'s remarks for the hard-failure-vs-
+/// response-processing-failure split, and <see cref="CircuitOpen"/> for the
+/// consecutive-hard-failure breaker. Previously this class retried EVERY kind of
+/// failure blindly up to 3 times (including an empty/non-Japanese response,
+/// which is highly reproducible for the same prompt and just wastes up to 3x the
+/// per-call wait for no benefit) and had no circuit breaker at all (a genuinely
+/// dead/crashed local server would be retried candidate-by-candidate for the
+/// entire remaining run instead of being detected and skipped).
 /// </summary>
 public sealed class LocalLlmTranslator : ITextTranslator
 {
+    /// <summary>連続で何回「異常系」失敗したらサーキットブレーカーを開くか。
+    /// ClaudeCodeTranslatorと同じ閾値・同じ考え方（下記CallOnceWithHardRetry参照）
+    /// ——ローカルサーバーが異常停止した場合等、系統的な失敗は毎回同じ理由で
+    /// 失敗し続けるため、数回連続で失敗した時点でそれ以降も全滅する可能性が
+    /// 高いと判断してよい。</summary>
+    private const int ConsecutiveFailureThreshold = 3;
+
+    /// <summary>異常系の失敗1件につき、その場で最大何回まで試すか（初回込み）。
+    /// ClaudeCodeTranslatorと同じ——単発のリトライで回復しない、本物の持続的な
+    /// 異常だけをサーキットブレーカーのカウントへ積み上げる。</summary>
+    private const int HardFailureRetryAttempts = 3;
+
+    /// <summary>v0.58.4: 実機検証（gemma4:26b、文字数上限6000・思考ON運用）で
+    /// 1回の呼び出しが約120秒かかるケースを確認したことを基準に、送信する
+    /// プロンプト文字数に比例させる。接続確認（Services/LlmHealthCheck.cs、
+    /// モデルロード済み前提で固定30秒）とは別に、翻訳実行本体は候補（バッチ）が
+    /// 大きい・思考ONで遅いケースほど長く待てるようにする一方、小さい候補が
+    /// ハングした場合はより早く見切れるようにする——固定120秒だと、小さい候補
+    /// がハングしても120秒待たされる一方、思考ONの大きいバッチではまだ足りない
+    /// 可能性もあった。</summary>
+    private const double TimeoutSecondsPerChar = 120.0 / 6000.0;
+
+    private const double MinimumTimeoutSeconds = 30.0;
+
     private readonly HttpClient _http;
     private readonly string _endpoint;
     private readonly string _model;
+    private readonly string? _reasoningEffort;
 
-    public LocalLlmTranslator(LocalLlmOptions options)
+    private int _consecutiveFailures;
+
+    /// <summary>連続失敗が閾値に達し、以降の呼び出しをすべて即座に打ち切って
+    /// いるかどうか。呼び出し元（PromptGenerator.ApplyLlmStep）はこれを見て、
+    /// 残りの候補をまとめてスキップする。</summary>
+    public bool CircuitOpen { get; private set; }
+
+    public LocalLlmTranslator(LocalLlmOptions options) : this(options, new HttpClientHandler()) { }
+
+    /// <summary>Test-only seam: lets tests substitute an in-memory
+    /// <see cref="HttpMessageHandler"/> for the real network stack, so
+    /// LocalLlmTranslator's own request-shaping logic (e.g. whether
+    /// reasoning_effort is included) can be verified without a real socket/
+    /// HttpListener — real sockets proved unreliable to spin up reliably inside
+    /// the xUnit test host in this project's environment (observed test-host
+    /// process crashes), and an injected handler sidesteps that class of
+    /// flakiness entirely, not just for these tests specifically.</summary>
+    public LocalLlmTranslator(LocalLlmOptions options, HttpMessageHandler handler)
     {
         _endpoint = options.Endpoint;
         _model = options.Model;
-        // 120s: generous relative to the ~2-3s/candidate observed against Ollama —
-        // this is a ceiling against a hung server, not a tuned expected latency.
-        _http = new HttpClient { Timeout = TimeSpan.FromSeconds(120) };
+        _reasoningEffort = options.ReasoningEffort;
+        // v0.58.4: this Timeout is now just a final backstop against a
+        // completely wedged connection — the timeout that actually matters is
+        // computed per request (see ComputeTimeout) and passed as a
+        // CancellationToken to PostAsJsonAsync, since a single HttpClient can't
+        // have a different Timeout per call.
+        _http = new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(10) };
         if (options.ApiKey.Length > 0)
             _http.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", options.ApiKey);
     }
 
+    private static TimeSpan ComputeTimeout(int promptLength) =>
+        TimeSpan.FromSeconds(Math.Max(MinimumTimeoutSeconds, promptLength * TimeoutSecondsPerChar));
+
     /// <summary>
     /// Sends <paramref name="promptText"/> as a single user-role message and
-    /// returns the assistant's raw response text (trimmed), or null if every
-    /// attempt failed — the caller treats null exactly like "this candidate
-    /// remains unresolved".
+    /// returns the assistant's raw response text (trimmed), or null if this
+    /// candidate/batch couldn't be resolved — the caller treats null exactly
+    /// like "this candidate remains unresolved".
     ///
-    /// v0.52.1a: retries up to <paramref name="maxAttempts"/> times (default 3)
-    /// on a failed CALL (network hiccup, malformed JSON, empty response, no
-    /// Japanese at all), re-sending the SAME prompt unchanged. Previously (up
-    /// through v0.49.2a) this also retried whenever the response contained ANY
-    /// stray English text, with a corrective follow-up prompt — that made sense
-    /// when a single candidate's answer was expected to be pure Japanese with
-    /// nothing else. It stopped making sense once <see cref="PromptGenerator.ApplyLlmStep"/>
-    /// started batching a whole plugin's candidates into one call (v0.52.1a):
-    /// the expected response format is now "English source&lt;TAB&gt;Japanese
-    /// translation" TSV lines, so the English source text is SUPPOSED to be
-    /// there on every line — the old stray-English check fired on exactly that
-    /// and burned 3 wasted retries on every batch, discarding otherwise-correct
-    /// responses (confirmed against real data: a batch response the model
-    /// answered correctly on the first try was retried twice more anyway, purely
-    /// because its own required "English source" column looked like leakage).
-    /// Line-level correctness (which candidates actually got a usable-looking
-    /// answer) is <see cref="PromptGenerator.ApplyLlmStep"/>'s job now, not this
-    /// method's.
+    /// v0.58.4: failures are split into two kinds, only one of which counts
+    /// toward <see cref="CircuitOpen"/> — see <see cref="CallOnce"/>'s remarks
+    /// for the reasoning (same split as <see cref="ClaudeCodeTranslator"/>: a
+    /// systemic problem like a dead/crashed server should trip the breaker; an
+    /// individual response happening to be unparsable/empty/non-Japanese should
+    /// not — retrying that blindly just re-asks the same question and gets the
+    /// same reproducible non-answer, wasting up to 3x the wait for nothing).
     /// </summary>
-    public string? TryTranslate(string promptText, out string error, int maxAttempts = 3)
+    public string? TryTranslate(string promptText, out string error)
     {
-        var lastError = "";
-        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        if (CircuitOpen)
         {
-            var response = CallOnce(promptText, out var callError);
-            if (response != null)
-            {
-                error = attempt == 1 ? "" : $"succeeded on attempt {attempt}/{maxAttempts} after retrying a failed call";
-                return response;
-            }
-            lastError = callError;
+            error = $"circuit breaker open ({ConsecutiveFailureThreshold}回連続の異常系失敗のため以降のローカルLLM呼び出しを打ち切り中)";
+            return null;
         }
 
-        error = lastError;
+        var (response, hardFailure, callError) = CallOnceWithHardRetry(promptText);
+
+        if (hardFailure)
+        {
+            _consecutiveFailures++;
+            if (_consecutiveFailures >= ConsecutiveFailureThreshold)
+                CircuitOpen = true;
+            error = callError;
+            return null;
+        }
+
+        if (response != null)
+        {
+            _consecutiveFailures = 0;
+            error = "";
+            return response;
+        }
+
+        // レスポンス処理の失敗——サーバー自体は正常に応答しているので系統的な
+        // 異常とは判断せず、サーキットブレーカーにはカウントしない。同一
+        // プロンプトでの自動リトライは行わず、そのまま未解決として返す
+        // （同じプロンプトを再送しても高い確率で同じ結果になるだけのため）。
+        error = callError;
         return null;
     }
 
-    /// <summary>ITextTranslator's 2-arg shape doesn't include maxAttempts — an
-    /// interface member can't be satisfied by a method with an extra parameter
-    /// even when it has a default, so this just forwards with the default.</summary>
-    string? ITextTranslator.TryTranslate(string promptText, out string error) => TryTranslate(promptText, out error);
-
-    /// <summary>One HTTP round-trip. Returns null on any failure (unreachable
-    /// server, timeout, malformed response, empty response, or a response with
-    /// no Japanese at all) — <see cref="TryTranslate"/> is the retry loop around
-    /// this.</summary>
-    private string? CallOnce(string promptText, out string error)
+    /// <summary>v0.58.4: <see cref="ClaudeCodeTranslator.CallOnce"/>と同じ
+    /// パターン——「異常系」の結果が返ってきた場合だけ、その場で最大
+    /// <see cref="HardFailureRetryAttempts"/>回まで同じプロンプトを再送する。
+    /// 成功、またはレスポンス処理の失敗に変わった時点で即座に打ち切り、それを
+    /// そのまま返す——このメソッドを抜けた時点で「まだ異常系のまま」だった
+    /// 場合だけが、呼び出し元のサーキットブレーカーのカウントに入る。</summary>
+    private (string? Text, bool HardFailure, string Error) CallOnceWithHardRetry(string promptText)
     {
-        error = "";
+        var result = CallOnce(promptText);
+        for (var attempt = 2; attempt <= HardFailureRetryAttempts && result.HardFailure; attempt++)
+            result = CallOnce(promptText);
+        return result;
+    }
+
+    /// <summary>
+    /// One HTTP round-trip. 戻り値タプルの<c>HardFailure</c>は、
+    /// この結果が<see cref="CircuitOpen"/>のカウントに入れるべき「異常系」かどうか
+    /// を呼び出し元へ伝える: サーバー未起動・タイムアウト・HTTPエラーステータス
+    /// （プロセス起動失敗・非ゼロ終了コードに相当）——これらは接続先そのものが
+    /// おかしい可能性を示すため、系統的な異常として扱う。対して「レスポンス処理の
+    /// 失敗」（JSONとしてパースできない・choices/message/content の形が予期しない・
+    /// 空・日本語に見えない）は、サーバー自体は正常応答しているので、その候補
+    /// だけがたまたま解決しづらかっただけと判断し、系統的な異常には含めない
+    /// （ClaudeCodeTranslator.CallOnceと同じ区別）。
+    /// </summary>
+    private (string? Text, bool HardFailure, string Error) CallOnce(string promptText)
+    {
+        var timeout = ComputeTimeout(promptText.Length);
         try
         {
-            var requestBody = new
+            // v0.58.1: reasoning_effort is only included when explicitly configured
+            // (--llm-local-reasoning-effort=/--llm-cloud-reasoning-effort=), not
+            // hardcoded — see LocalLlmOptions.ReasoningEffort's remarks for why this
+            // knob exists (a "thinking"-capable model can burn its whole completion
+            // token budget on an internal reasoning trace before ever writing the
+            // actual TSV answer, confirmed against Ollama's gemma4 on real batches:
+            // finish_reason "length" with content empty). A JsonObject (rather than an
+            // anonymous type) is used here specifically so the field can be omitted
+            // entirely rather than sent as an explicit null, preserving prior request
+            // shape/behavior for models and servers this isn't configured for.
+            var requestBody = new System.Text.Json.Nodes.JsonObject
             {
-                model = _model,
-                messages = new[] { new { role = "user", content = promptText } },
+                ["model"] = _model,
+                ["messages"] = new System.Text.Json.Nodes.JsonArray(
+                    new System.Text.Json.Nodes.JsonObject { ["role"] = "user", ["content"] = promptText }),
             };
+            if (_reasoningEffort != null)
+                requestBody["reasoning_effort"] = _reasoningEffort;
 
-            using var response = _http.PostAsJsonAsync(_endpoint, requestBody).GetAwaiter().GetResult();
+            using var cts = new CancellationTokenSource(timeout);
+            using var response = _http.PostAsJsonAsync(_endpoint, requestBody, cts.Token).GetAwaiter().GetResult();
             if (!response.IsSuccessStatusCode)
-            {
-                error = $"HTTP {(int)response.StatusCode} {response.ReasonPhrase}";
-                return null;
-            }
+                return (null, true, $"HTTP {(int)response.StatusCode} {response.ReasonPhrase}");
 
             var body = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-            using var doc = JsonDocument.Parse(body);
-            var text = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
+            string? text;
+            try
+            {
+                using var doc = JsonDocument.Parse(body);
+                text = doc.RootElement.TryGetProperty("choices", out var choicesEl)
+                    && choicesEl.ValueKind == JsonValueKind.Array && choicesEl.GetArrayLength() > 0
+                    && choicesEl[0].TryGetProperty("message", out var messageEl)
+                    && messageEl.TryGetProperty("content", out var contentEl)
+                    ? contentEl.GetString()
+                    : null;
+            }
+            catch (JsonException ex)
+            {
+                return (null, false, $"failed to parse response JSON: {ex.Message}");
+            }
+
             if (string.IsNullOrWhiteSpace(text))
-            {
-                error = "empty response";
-                return null;
-            }
+                return (null, false, "empty response");
 
-            var trimmed = text.Trim();
-            if (!LanguageDetector.ContainsJapanese(trimmed))
-            {
-                error = $"response doesn't look like Japanese: \"{trimmed}\"";
-                return null;
-            }
-
-            return trimmed;
+            // v0.58.5: 既知の課題26.関連——以前はここでバッチ応答全体（複数候補
+            // まとめて）に日本語が1文字も無ければバッチごと失敗にしていたが、
+            // これは粗すぎた。バニラSkyrim自身が意図的に翻訳していない文字列
+            // （$MageScriptFont等、マスター魔法書の秘術ページ。公式日本語版でも
+            // 未翻訳のまま確認済み）に対して、モデルが指示通り原文をそのまま
+            // 返してくること自体は、モデルとしては正しい振る舞いであり失敗
+            // ではない。「訳文に日本語が含まれるか」の判定は、個々の候補ごとに
+            // 意味を持つ話なので、バッチ全体レベルのここではなく、候補単位の
+            // マッチングを行うPromptGenerator.ApplyLlmStep側に移した。
+            return (text.Trim(), false, "");
+        }
+        catch (OperationCanceledException)
+        {
+            return (null, true, $"request timed out ({timeout.TotalSeconds:F0}s)");
         }
         catch (Exception ex)
         {
-            error = ex.GetType().Name + ": " + ex.Message;
-            return null;
+            return (null, true, ex.GetType().Name + ": " + ex.Message);
         }
     }
 }

@@ -287,11 +287,13 @@ public sealed class ClaudeCodeTranslator : ITextTranslator
             if (string.IsNullOrWhiteSpace(text))
                 return (null, false, "empty response");
 
-            var trimmed = text.Trim();
-            if (!LanguageDetector.ContainsJapanese(trimmed))
-                return (null, false, $"response doesn't look like Japanese: \"{trimmed}\"");
-
-            return (trimmed, false, "");
+            // v0.58.5: LocalLlmTranslator.CallOnceと同じ理由でここのゲートも撤去
+            // した——バッチ応答全体に日本語が無いことをバッチごとの失敗にするのは
+            // 粗すぎる（バニラSkyrim自身が意図的に翻訳していない文字列に、モデルが
+            // 指示通り原文をそのまま返すこと自体は失敗ではない）。「訳文に日本語が
+            // 含まれるか」は候補単位の話なので、PromptGenerator.ApplyLlmStep側で
+            // 判定する。
+            return (text.Trim(), false, "");
         }
         catch (Exception ex)
         {
