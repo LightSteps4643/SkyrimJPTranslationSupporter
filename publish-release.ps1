@@ -32,6 +32,9 @@
       翻訳ファイルを置く場所）は空のまま作成しておく。
     - ソースコード（*.cs/*.csproj）・DESIGN_NOTES.md等の開発用ドキュメントは
       publish出力に含まれない（dotnet publishはビルド成果物のみを出力するため）。
+    - v0.59.0: 配布フォルダと同じ場所に、フォルダ名と同名のzipファイル
+      （例: SkyrimJPTranslationSupporter-v0.59.0.zip）も作成する。Nexus Mods等
+      への配布はフォルダそのものではなくzip単位で行うため（ユーザー指示）。
 
 .PARAMETER OutputDir
     出力先フォルダ。省略時は ..\Releases\SkyrimJPTranslationSupporter-<バージョン>。
@@ -90,8 +93,16 @@ New-Item -ItemType Directory -Force -Path $importDir | Out-Null
 # v0.54.0: 謝辞・クレジット表記。エンドユーザーの目に触れる配布物に必ず含める。
 Copy-Item -Path (Join-Path $root "CREDITS.md") -Destination $OutputDir -Force
 
+# v0.59.0: 配布フォルダと同じ場所に、フォルダ名と同名のzipを作成する。
+$zipPath = "$OutputDir.zip"
+Write-Host "--- zip圧縮 ---"
+if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
+Compress-Archive -Path $OutputDir -DestinationPath $zipPath -CompressionLevel Optimal
+if (-not (Test-Path $zipPath)) { throw "zipの作成に失敗しました: $zipPath" }
+
 Write-Host ""
 Write-Host "完了: $OutputDir"
 Write-Host "  Skyrim_JP_Translation_Supporter.exe（直下） / SkyrimJPStringPatcher\SkyrimJPStringPatcher.exe（サブフォルダ） / Data/ / Translation/import/ を含む"
 Write-Host "  ソースコード・開発用ドキュメント（DESIGN_NOTES.md等）は含まれない"
 Write-Host "  起動は直下の「Skyrim_JP_Translation_Supporter.exe」から（CLIは通常直接使わない）"
+Write-Host "  zip: $zipPath"

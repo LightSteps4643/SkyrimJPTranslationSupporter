@@ -101,8 +101,9 @@ public sealed class AppSettings
     /// （こちらと<see cref="LlmCloudBatchCharLimit"/>）に分割した上で、既定値も
     /// `PromptGenerator.DefaultLocalLlmBatchCharLimit`（実機検証で決めた3000）に
     /// 変更した——⑥と違い従量課金が無いため大きくまとめる動機が薄い上、大きすぎる
-    /// バッチは思考系・非思考系どちらのモデルでも失敗率が上がることを実機確認した。</summary>
-    public int LlmLocalBatchCharLimit { get; set; } = 3_000;
+    /// バッチは思考系・非思考系どちらのモデルでも失敗率が上がることを実機確認した。
+    /// v0.59.0: GUI既定値のみ6000へ変更（ユーザー指示）。</summary>
+    public int LlmLocalBatchCharLimit { get; set; } = 6_000;
 
     /// <summary>v0.58.1: 上記<see cref="LlmLocalBatchCharLimit"/>参照。こちらは
     /// 生成AI翻訳（クラウド）向け——既定値は`PromptGenerator.DefaultLlmBatchCharLimit`
