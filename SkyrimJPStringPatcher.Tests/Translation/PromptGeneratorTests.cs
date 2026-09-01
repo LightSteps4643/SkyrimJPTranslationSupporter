@@ -525,6 +525,44 @@ public class PromptGeneratorTests
         }
     }
 
+    /// <summary>v0.59.0: real-machine investigation (gemma4:26b, Cloaks.esp)
+    /// found that a model sometimes wraps its JAPANESE answer in
+    /// &lt;SJPTS_TARGET&gt;...&lt;/SJPTS_TARGET&gt; — the same tag this project
+    /// uses to delimit the SOURCE text it sent, presumably over-generalizing
+    /// the prompt's own "Target: &lt;SJPTS_TARGET&gt;example text
+    /// &lt;/SJPTS_TARGET&gt;" example as "wrap your answer in this format too".
+    /// NormalizeBatchResponseSource already stripped this from the echoed
+    /// source column, but nothing stripped it from the Japanese answer
+    /// column, so the tags ended up saved verbatim in translations.tsv.</summary>
+    [Fact]
+    public void RunOne_LlmBatch_ModelWrapsJapaneseAnswerInTargetTags_TagsAreStripped()
+    {
+        const string plugin = "SjptsMarkerFallback.esp";
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var cwd = new CurrentDirectoryScope(root);
+            var outputDir = Path.Combine(root, "out_temp");
+            using var log = OpenTestLog(root);
+            var fakeLlm = FakeTextTranslator.Succeeding(
+                ("Sjpts Target Tag Wrapped Answer", "<SJPTS_TARGET>タグ付き訳</SJPTS_TARGET>"));
+
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm);
+
+            var pluginDir = Path.Combine(outputDir, "SjptsMarkerFallback");
+            var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
+
+            var (japanese, method) = translations["Sjpts Target Tag Wrapped Answer"];
+            Assert.Equal("TranslationLocalLlm", method);
+            Assert.Equal("タグ付き訳", japanese);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
     /// <summary>ApplyLlmStep splits a plugin's unresolved set into multiple
     /// sub-batch calls once the combined block text would exceed
     /// llmBatchCharLimit — real batches split by actual char volume on real
