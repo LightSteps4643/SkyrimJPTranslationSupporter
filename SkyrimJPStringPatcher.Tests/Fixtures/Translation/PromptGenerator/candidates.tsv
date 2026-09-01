@@ -9,9 +9,17 @@ FormId	WinningPlugin	RecordType	EnglishText	Index	EditorId	Context	StaleOriginal
 000813:SjptsResolutionMethods.esp	SjptsResolutionMethods.esp	WEAP FULL	Sjpts Multiline Candidate\nSecond Line	0
 000814:SjptsResolutionMethods.esp	SjptsResolutionMethods.esp	WEAP FULL	Sjpts Batch Candidate One	0
 000815:SjptsResolutionMethods.esp	SjptsResolutionMethods.esp	WEAP FULL	Sjpts Batch Candidate Two	0
+000816:SjptsMarkerFallback.esp	SjptsMarkerFallback.esp	BOOK CNAM	Sjpts Spurious Marker Candidate\nSecond Line	0
+000817:SjptsMarkerFallback.esp	SjptsMarkerFallback.esp	BOOK CNAM	Sjpts Legit Trailing Newline\n	0
 000820:SjptsMultiPluginA.esp	SjptsMultiPluginA.esp	WEAP FULL	Sjpts Multi A First	0
 000821:SjptsMultiPluginA.esp	SjptsMultiPluginA.esp	WEAP FULL	Sjpts Multi A Second	0
 000830:SjptsMultiPluginB.esp	SjptsMultiPluginB.esp	WEAP FULL	Sjpts Multi B Only	0
 000840:Sjpts Corvid Outfit.esp	Sjpts Corvid Outfit.esp	ARMO FULL	Windrose Rex Corvid Nemra Cloak	0		light armor, slot: body
 000841:Sjpts Corvid Outfit.esp	Sjpts Corvid Outfit.esp	ARMO FULL	Windrose Rex Corvid Nemra Cloak	1			Old Windrose Rex Corvid Nemra Cloak	以前の訳
 000842:Sjpts Corvid Outfit.esp	Sjpts Corvid Outfit.esp	NPC_ FULL	Rex	0
+000850:SjptsMatchingEdgeCases.esp	SjptsMatchingEdgeCases.esp	ARMO DESC	Sjpts Trailing Space Candidate 	0
+000851:SjptsMatchingEdgeCases.esp	SjptsMatchingEdgeCases.esp	ARMO DESC	"Sjpts Quoted Both Sides"	0
+000852:SjptsMatchingEdgeCases.esp	SjptsMatchingEdgeCases.esp	ARMO DESC	"Sjpts Leading Quote Only	0
+000853:SjptsMatchingEdgeCases.esp	SjptsMatchingEdgeCases.esp	ARMO DESC	Sjpts Trailing Quote Only"	0
+000856:SjptsMatchingEdgeCases.esp	SjptsMatchingEdgeCases.esp	ARMO DESC	Sjpts Plain No Quote Candidate	0
+000858:SjptsMatchingEdgeCases.esp	SjptsMatchingEdgeCases.esp	BOOK CNAM	Sjpts Scrambled Gibberish Candidate	0

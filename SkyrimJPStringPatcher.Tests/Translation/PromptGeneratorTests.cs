@@ -91,7 +91,7 @@ public class PromptGeneratorTests
             // behavior) — what must NOT happen is it appearing as its own
             // Target: line, i.e. something the AI is being asked to translate.
             var prompt = File.ReadAllText(Path.Combine(pluginDir, "prompt.txt"));
-            Assert.DoesNotContain("Target: \"Sjpts Test Sword\"", prompt);
+            Assert.DoesNotContain("Target: <SJPTS_TARGET>Sjpts Test Sword</SJPTS_TARGET>", prompt);
         }
         finally
         {
@@ -144,7 +144,58 @@ public class PromptGeneratorTests
             Assert.Equal(("LLMによる訳", "TranslationLocalLlm"), translations["Sjpts Llm Candidate"]);
 
             var prompt = File.ReadAllText(Path.Combine(pluginDir, "prompt.txt"));
-            Assert.DoesNotContain("Target: \"Sjpts Llm Candidate\"", prompt);
+            Assert.DoesNotContain("Target: <SJPTS_TARGET>Sjpts Llm Candidate</SJPTS_TARGET>", prompt);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>v0.58.5: a real bug found investigating why gemma4 batches
+    /// consisting entirely of vanilla Skyrim's own untranslated "arcane
+    /// script" spell-tome content (e.g. the $MageScriptFont flavor page —
+    /// scrambled, non-linguistic text that even the OFFICIAL Japanese release
+    /// leaves untranslated, confirmed by reading Skyrim.esm directly) always
+    /// failed outright: LocalLlmTranslator.CallOnce used to reject the WHOLE
+    /// batch response if it contained no Japanese anywhere, even though the
+    /// model answered in perfectly well-formed "English&lt;TAB&gt;Japanese" TSV —
+    /// it just had nothing translatable to put in the Japanese column, so it
+    /// echoed the source back (the model's own signal that this is genuinely
+    /// untranslatable, not a translation failure). That whole-batch gate is
+    /// gone; ApplyLlmStep now judges Japanese-content PER CANDIDATE and tags a
+    /// non-Japanese-but-successfully-matched result with methodTag+"NoJapanese"
+    /// (here "TranslationLocalLlmNoJapanese") instead of either discarding it
+    /// (wasting a retry that would just reproduce the same result) or silently
+    /// accepting it under the ordinary tag (risking a genuine failure looking
+    /// identical to a real translation) — a human can tell the two apart in
+    /// the review UI, the tool itself cannot.</summary>
+    [Fact]
+    public void RunOne_LlmBatch_ResponseHasNoJapanese_ResolvesWithDedicatedReviewTag()
+    {
+        const string plugin = "SjptsMatchingEdgeCases.esp";
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outputDir = Path.Combine(root, "out_temp");
+            using var log = OpenTestLog(root);
+            // The model answers in valid TSV shape, but the "translation" is
+            // just the source echoed back unchanged -- no Japanese anywhere.
+            var fakeLlm = FakeTextTranslator.Succeeding(
+                ("Sjpts Scrambled Gibberish Candidate", "Sjpts Scrambled Gibberish Candidate"));
+
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm);
+
+            Assert.Equal(1, fakeLlm.CallCount);
+            var pluginDir = Path.Combine(outputDir, "SjptsMatchingEdgeCases");
+            var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
+
+            // Resolved (not left unresolved -- no point retrying, it'll just
+            // reproduce the same answer), but tagged distinctly from a normal
+            // TranslationLocalLlm success so it surfaces for human review.
+            Assert.Equal(("Sjpts Scrambled Gibberish Candidate", "TranslationLocalLlmNoJapanese"),
+                translations["Sjpts Scrambled Gibberish Candidate"]);
         }
         finally
         {
@@ -395,6 +446,85 @@ public class PromptGeneratorTests
         }
     }
 
+    /// <summary>v0.58.6: real-machine investigation (gemma4:26b/gemma3:12b/
+    /// qwen2.5:14b-instruct, "Heretical Thoughts" in unofficial skyrim special
+    /// edition patch.esp) found that a model echoing back a multiline
+    /// candidate's source text reliably appends one spurious extra
+    /// MultilineBreakMarker right before the tab, even though the
+    /// translation itself is otherwise perfect — breaking the exact-text
+    /// match against matchKey every time, deterministically, regardless of
+    /// model. StripSpuriousBoundaryMarker's fallback dictionary exists to
+    /// resolve exactly this case without weakening the primary exact
+    /// match.</summary>
+    [Fact]
+    public void RunOne_LlmBatch_ModelAppendsSpuriousTrailingMarkerToSourceEcho_StillResolvesViaFallback()
+    {
+        const string plugin = "SjptsMarkerFallback.esp";
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var cwd = new CurrentDirectoryScope(root);
+            var outputDir = Path.Combine(root, "out_temp");
+            using var log = OpenTestLog(root);
+            // The echoed source has one extra "<SJPTS_BR>" tacked on at the
+            // very end -- the true matchKey (flattened) has no trailing
+            // marker at all. This is the exact shape observed on real gemma
+            // responses.
+            var fakeLlm = FakeTextTranslator.Succeeding(
+                ("Sjpts Spurious Marker Candidate<SJPTS_BR>Second Line<SJPTS_BR>", "スプリアスマーカー訳<SJPTS_BR>二行目訳"));
+
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm);
+
+            var pluginDir = Path.Combine(outputDir, "SjptsMarkerFallback");
+            var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
+
+            var (japanese, method) = translations["Sjpts Spurious Marker Candidate\nSecond Line"];
+            Assert.Equal("TranslationLocalLlm", method);
+            Assert.Equal("スプリアスマーカー訳\n二行目訳", japanese);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>Companion to the spurious-marker fallback test above: a
+    /// candidate whose ORIGINAL text legitimately ends with a real newline
+    /// (matchKey legitimately ends with MultilineBreakMarker after
+    /// flattening -- confirmed 315 such candidates exist in real load-order
+    /// data) must still match via the normal exact-match path when the model
+    /// echoes it back correctly, marker included. The fallback dictionary
+    /// must never interfere with this case.</summary>
+    [Fact]
+    public void RunOne_LlmBatch_CandidateLegitimatelyEndsWithMarker_MatchesExactlyRegardlessOfFallback()
+    {
+        const string plugin = "SjptsMarkerFallback.esp";
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var cwd = new CurrentDirectoryScope(root);
+            var outputDir = Path.Combine(root, "out_temp");
+            using var log = OpenTestLog(root);
+            var fakeLlm = FakeTextTranslator.Succeeding(
+                ("Sjpts Legit Trailing Newline<SJPTS_BR>", "正当な訳文<SJPTS_BR>"));
+
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm);
+
+            var pluginDir = Path.Combine(outputDir, "SjptsMarkerFallback");
+            var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
+
+            var (japanese, method) = translations["Sjpts Legit Trailing Newline\n"];
+            Assert.Equal("TranslationLocalLlm", method);
+            Assert.Equal("正当な訳文\n", japanese);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
     /// <summary>ApplyLlmStep splits a plugin's unresolved set into multiple
     /// sub-batch calls once the combined block text would exceed
     /// llmBatchCharLimit — real batches split by actual char volume on real
@@ -418,7 +548,7 @@ public class PromptGeneratorTests
                 ("Sjpts Batch Candidate Two", "バッチ候補二"));
 
             using (var log = OpenTestLog(root))
-                PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm, llmBatchCharLimit: 10);
+                PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm, llmLocalBatchCharLimit: 10);
 
             // 3 distinct unresolved texts reach step 5 here (multiline + the 2
             // batch candidates) -- with a 10-char limit each forces its own
@@ -568,6 +698,158 @@ public class PromptGeneratorTests
     /// order's own NPC_ FULL display name (v0.48.1's name hint), and a word
     /// ("Corvid") that also appears in the plugin's own filename (v0.48.1's
     /// brand hint).</summary>
+    /// <summary>v0.58.4: reproduces a real bug found against Cloaks_SMP_Patch.esp
+    /// (ARMO DESC flavor text often ships with a trailing space in the source
+    /// game data) — ApplyLlmStep's response parser (NormalizeBatchResponseSource)
+    /// always Trim()s the model's echoed English column before looking it up,
+    /// but the matchKey it looked the answer up BY was the raw, un-Trim()med
+    /// candidate text. A model naturally drops meaningless trailing whitespace
+    /// when it echoes the source back, so this candidate could NEVER match —
+    /// deterministically, on every single run, regardless of model quality —
+    /// until matchKey was also Trim()med at comparison time.</summary>
+    [Fact]
+    public void RunOne_LlmBatch_CandidateWithTrailingWhitespace_MatchesTrimmedEcho()
+    {
+        const string plugin = "SjptsMatchingEdgeCases.esp";
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outputDir = Path.Combine(root, "out_temp");
+            using var log = OpenTestLog(root);
+            // Simulates a real model's response: it echoes the source WITHOUT the
+            // candidate's own trailing space (models don't preserve meaningless
+            // trailing whitespace), which is exactly the mismatch that used to
+            // leave this candidate unresolved forever.
+            var fakeLlm = FakeTextTranslator.Succeeding(("Sjpts Trailing Space Candidate", "末尾空白の訳"));
+
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm);
+
+            var pluginDir = Path.Combine(outputDir, "SjptsMatchingEdgeCases");
+            var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
+
+            // The candidate's own key (with its trailing space, as it appears in
+            // the game data) must resolve -- the trailing space itself is NOT
+            // expected to be preserved in the Japanese translation (steps ①-④
+            // don't preserve it either; this is pre-existing, unrelated behavior).
+            Assert.Equal(("末尾空白の訳", "TranslationLocalLlm"), translations["Sjpts Trailing Space Candidate "]);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>v0.58.5: replaces the old boundary-quote-marker test suite
+    /// (v0.58.4's DoubleQuoteMarker/MarkBoundaryQuotes/StripOuterQuoteIndependently,
+    /// removed) now that BuildCandidateBlock wraps Target text in
+    /// &lt;SJPTS_TARGET&gt;...&lt;/SJPTS_TARGET&gt; tags instead of quotes — a
+    /// candidate whose own text starts and/or ends with a literal " (e.g.
+    /// dialogue like <c>"Do you take me for a fool?" she snapped.</c>) no
+    /// longer needs any special handling at all: its quotes are never
+    /// confused with the delimiter, so the model just echoes them back
+    /// unchanged as part of the matching key, exactly like any other
+    /// character. Confirmed against real gemma4 output (8/8 test cases
+    /// including this exact shape) before implementing.</summary>
+    [Fact]
+    public void RunOne_LlmBatch_CandidateWithBoundaryQuotes_ResolvesDirectly_NoSpecialHandlingNeeded()
+    {
+        const string plugin = "SjptsMatchingEdgeCases.esp";
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outputDir = Path.Combine(root, "out_temp");
+            using var log = OpenTestLog(root);
+            // The model echoes each candidate's own quotes back completely
+            // unchanged -- no marker, no tag, nothing but the literal text.
+            var fakeLlm = FakeTextTranslator.Succeeding(
+                ("\"Sjpts Quoted Both Sides\"", "「両側引用の訳」"),
+                ("\"Sjpts Leading Quote Only", "「先頭のみ引用の訳"),
+                ("Sjpts Trailing Quote Only\"", "末尾のみ引用の訳」"));
+
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm);
+
+            var pluginDir = Path.Combine(outputDir, "SjptsMatchingEdgeCases");
+            var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
+
+            Assert.Equal(("「両側引用の訳」", "TranslationLocalLlm"), translations["\"Sjpts Quoted Both Sides\""]);
+            Assert.Equal(("「先頭のみ引用の訳", "TranslationLocalLlm"), translations["\"Sjpts Leading Quote Only"]);
+            Assert.Equal(("末尾のみ引用の訳」", "TranslationLocalLlm"), translations["Sjpts Trailing Quote Only\""]);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>v0.58.5: StripSurroundingQuotes, restored to its original
+    /// simple symmetric form now that the boundary-quote-marker system is
+    /// gone, still handles a model that wraps its JAPANESE answer field in
+    /// quotes as an unrelated formatting habit (confirmed against real
+    /// Claude Code CLI output, independent of this project's own
+    /// &lt;SJPTS_TARGET&gt; delimiter choice). Deliberately NOT applied to the
+    /// English matching key any more (see NormalizeBatchResponseSource's
+    /// remarks) — the source column here is left unquoted by the fake so
+    /// this test isolates the Japanese-column behavior specifically.</summary>
+    [Fact]
+    public void RunOne_LlmBatch_ModelWrapsJapaneseAnswerInQuotes_IsStripped()
+    {
+        const string plugin = "SjptsMatchingEdgeCases.esp";
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outputDir = Path.Combine(root, "out_temp");
+            using var log = OpenTestLog(root);
+            var fakeLlm = FakeTextTranslator.Succeeding(
+                ("Sjpts Plain No Quote Candidate", "\"引用符無し候補の訳\""));
+
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm);
+
+            var pluginDir = Path.Combine(outputDir, "SjptsMatchingEdgeCases");
+            var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
+
+            Assert.Equal(("引用符無し候補の訳", "TranslationLocalLlm"), translations["Sjpts Plain No Quote Candidate"]);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>v0.58.5: defensive coverage for NormalizeBatchResponseSource's
+    /// &lt;SJPTS_TARGET&gt;/&lt;/SJPTS_TARGET&gt; stripping — not observed in
+    /// real gemma4 testing (the model always omitted the wrapper tags as
+    /// instructed), but the prompt can't force this from every possible
+    /// model/server, so a model that echoes the tags back anyway must still
+    /// match correctly rather than silently failing forever.</summary>
+    [Fact]
+    public void RunOne_LlmBatch_ModelEchoesWrapperTagsBackDespiteInstructions_StillMatches()
+    {
+        const string plugin = "SjptsMatchingEdgeCases.esp";
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outputDir = Path.Combine(root, "out_temp");
+            using var log = OpenTestLog(root);
+            var fakeLlm = FakeTextTranslator.Succeeding(
+                ("<SJPTS_TARGET>Sjpts Plain No Quote Candidate</SJPTS_TARGET>", "タグ付きで返された訳"));
+
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm);
+
+            var pluginDir = Path.Combine(outputDir, "SjptsMatchingEdgeCases");
+            var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
+
+            Assert.Equal(("タグ付きで返された訳", "TranslationLocalLlm"), translations["Sjpts Plain No Quote Candidate"]);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
     [Fact]
     public void RunOne_UnresolvedCandidateWithEveryPromptHint_WritesAllOptionalPromptLines()
     {
