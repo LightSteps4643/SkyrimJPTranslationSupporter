@@ -29,6 +29,16 @@ public sealed class AppSettings
     public string LlmEndpoint { get; set; } = "http://localhost:11434/v1/chat/completions";
     public string LlmModel { get; set; } = "gemma3:12b";
 
+    /// <summary>v0.58.1: 既定でtrue（＝送信する）。"thinking"対応モデル（Ollamaの
+    /// gemma4等）は、大きめのバッチだと思考トークンだけで生成上限に達し、実際の
+    /// 翻訳結果に一切到達できず失敗することが実機検証で確認された
+    /// （`reasoning_effort: "none"`を送ると解消し、副作用も確認されなかった）。
+    /// 非思考モデル（gemma3等）にはこのフィールド自体が無視されるだけで実害が
+    /// 無いことも実機確認済みのため、既定でONにしてある。オフにする（＝思考を
+    /// 有効なままにする）ユーザーには、SettingsForm側でその影響（未対応モデルは
+    /// 無効・対応モデルは大幅な時間増加の可能性）を警告する。</summary>
+    public bool LlmLocalReasoningOff { get; set; } = true;
+
     /// <summary>v0.52.1a: DPAPI-encrypted (see <see cref="SecretProtector"/>), NOT
     /// the plaintext key — this is one of two fields in this otherwise-plain-JSON
     /// file that are deliberately not human-readable. Step 5（ローカルLLM）用。
@@ -84,12 +94,20 @@ public sealed class AppSettings
     /// <summary>claude --model に渡すモデル名。空なら省略し、claude自身の既定モデルを使う。</summary>
     public string ClaudeCodeModel { get; set; } = "";
 
-    /// <summary>v0.53.0a: 「LLM一括翻訳: 1回あたりの文字数上限」（生成AI翻訳・ローカル
-    /// LLM翻訳共通、MainFormの`_numBatchCharLimit`）。従来はGUI上の値を変更しても
-    /// どこにも保存されず、次回起動時に既定値へ戻ってしまっていた不具合の修正——
-    /// 他の設定と同様この設定ファイルに永続化する。既定値はCLI側の
-    /// `PromptGenerator.DefaultLlmBatchCharLimit`と揃えてある。</summary>
-    public int LlmBatchCharLimit { get; set; } = 12_000;
+    /// <summary>v0.53.0a: 「1回あたりの文字数上限」（⑤ローカルLLM翻訳向け）。従来は
+    /// GUI上の値を変更してもどこにも保存されず、次回起動時に既定値へ戻ってしまって
+    /// いた不具合の修正——他の設定と同様この設定ファイルに永続化する。
+    /// v0.58.1: 生成AI翻訳・ローカルLLM翻訳共通の1項目だったものを、独立した2項目
+    /// （こちらと<see cref="LlmCloudBatchCharLimit"/>）に分割した上で、既定値も
+    /// `PromptGenerator.DefaultLocalLlmBatchCharLimit`（実機検証で決めた3000）に
+    /// 変更した——⑥と違い従量課金が無いため大きくまとめる動機が薄い上、大きすぎる
+    /// バッチは思考系・非思考系どちらのモデルでも失敗率が上がることを実機確認した。</summary>
+    public int LlmLocalBatchCharLimit { get; set; } = 3_000;
+
+    /// <summary>v0.58.1: 上記<see cref="LlmLocalBatchCharLimit"/>参照。こちらは
+    /// 生成AI翻訳（クラウド）向け——既定値は`PromptGenerator.DefaultLlmBatchCharLimit`
+    /// （12000）のまま変更していない。</summary>
+    public int LlmCloudBatchCharLimit { get; set; } = 12_000;
 
     private static string SettingsPath =>
         Path.Combine(AppContext.BaseDirectory, "gui_settings.json");

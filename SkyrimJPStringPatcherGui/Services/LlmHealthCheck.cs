@@ -24,7 +24,13 @@ public static class LlmHealthCheck
         if (string.IsNullOrWhiteSpace(model))
             return new CheckResult(false, "ローカルLLMモデル名が設定されていません。");
 
-        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+        // v0.58.4: 15秒だとコールドスタート（モデル未ロード状態からの初回応答）に
+        // 間に合わないことがあった（実機検証でgemma4:26bのコールドロードが約16秒
+        // かかるケースを確認）。ただし本質的にはコールドスタート対応が目的ではなく
+        // 「対応モデルからの応答を待つのに妥当な時間」の基準——モデルは事前に
+        // ロードしておくことを前提とする方針に切り替え（マニュアルで案内）、
+        // 接続確認自体はロード済みモデルへの短い応答を待つだけなので30秒とした。
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
         try
         {
             var requestBody = new
@@ -52,7 +58,7 @@ public static class LlmHealthCheck
         }
         catch (TaskCanceledException)
         {
-            return new CheckResult(false, $"サーバーへの接続がタイムアウトしました（15秒）。\nエンドポイント: {endpoint}\nサーバーが起動しているか確認してください。");
+            return new CheckResult(false, $"サーバーへの接続がタイムアウトしました（30秒）。\nエンドポイント: {endpoint}\nモデルを事前にロードしてあるか、サーバーが起動しているか確認してください。");
         }
         catch (HttpRequestException ex)
         {

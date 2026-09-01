@@ -19,7 +19,7 @@ namespace SkyrimJPStringPatcherGui;
 /// 副次効果として、ウィンドウが実質1つに統合されたことで、以前検討していた
 /// 「CLI実行中はウィンドウをまたいで排他制御する」ための共有ロック機構が丸ごと
 /// 不要になった——このウィンドウ自身のSetBusyだけで完結する。残るPseudoModalは
-/// SettingsForm・CloudAiSettingsForm・TranslationDetailFormという、純粋に
+/// SettingsForm・TranslationDetailFormという、純粋に
 /// 「開いている間だけこのウィンドウをロックしたい」一時的な子ウィンドウ用途のみ。
 ///
 /// "翻訳" and DSD generation are deliberately separate steps (not one combined
@@ -134,33 +134,58 @@ public sealed class MainForm : Form
     private readonly CheckBox _chkMeaning = new() { Text = "意味翻訳（品質中）", Checked = true, AutoSize = true };
     private readonly CheckBox _chkTranslit = new() { Text = "音訳分解（品質中）", Checked = true, AutoSize = true };
     private readonly CheckBox _chkNameFallback = new() { Text = "簡易名前解決（品質中～低）", Checked = true, AutoSize = true };
+    // v0.52.1a: ⑤ローカルLLM・⑥生成AI翻訳は独立したチェーン（CLI側もllm-local/
+    // llm-cloudの2つを独立に受け取れる）なので、両方同時にONで構わない——⑤で
+    // 解決できなかったものだけが⑥に回る。
+    // v0.58.1: 従来は同じ行に並べていたが、それぞれ独自の文字数上限（右隣）を
+    // 持たせるようになったため、行を分けた（ローカルLLMが上、生成AIが下）。
     private const string LlmCheckboxLabel = "Beta機能: ローカルLLM翻訳（品質中～低）";
     private readonly CheckBox _chkLlm = new() { Text = LlmCheckboxLabel, Checked = false, AutoSize = true };
 
-    // v0.52.1a: ローカルLLMとは別扱いの独立チェックボックス。「生成AI（クラウド）
-    // 連携設定」ウィンドウで選ばれている方式（Claude Code CLI／OpenAI互換API）を
-    // 使う。⑤ローカルLLM→⑥生成AI翻訳の順のチェーンとして動く独立ステップなので
-    // （CLI側もllm-local/llm-cloudの2つを独立に受け取れる）、両方同時にONで
-    // 構わない——⑤で解決できなかったものだけが⑥に回る。
     private const string CloudAiCheckboxLabel = "Beta機能: 生成AI翻訳（クラウド・品質中～低）";
     private readonly CheckBox _chkCloudAi = new() { Text = CloudAiCheckboxLabel, Checked = false, AutoSize = true };
 
-    // v0.52.1a: ⑤⑥共通——1回のLLM呼び出しにまとめる候補の合計文字数の上限
-    // （PromptGenerator.ApplyLlmStep参照、CLI側は--llm-batch-char-limit=）。
-    // 生成AIサービス・契約プランによって妥当な値が変わりうる（無料枠では既定値
-    // より小さくしたい等）ため、GUIからも変更できるようにしてある。GUIはCLIを
-    // サブプロセス起動するだけの薄い層でPromptGeneratorを直接参照できない
-    // （プロジェクト参照が無い）ため、既定値12000はCLI側と別々に保持している
-    // ——両方変えるときはPromptGenerator.DefaultLlmBatchCharLimitとここを揃える。
-    private const int DefaultLlmBatchCharLimit = 12_000;
-    private readonly Label _lblBatchCharLimit = new() { Text = "LLM一括翻訳: 1回あたりの文字数上限（生成AI翻訳・ローカルLLM翻訳共通）", AutoSize = true, Margin = new Padding(0, 6, 4, 0) };
-    private readonly NumericUpDown _numBatchCharLimit = new()
+    // v0.52.1a: 1回のLLM呼び出しにまとめる候補の合計文字数の上限（PromptGenerator.
+    // ApplyLlmStep参照、CLI側は--llm-local-batch-char-limit=/--llm-cloud-batch-
+    // char-limit=）。サーバー・モデルによって妥当な値が変わりうる（無料枠や
+    // 思考系ローカルLLMモデルでは既定値より小さくしたい等）ため、GUIからも
+    // 変更できるようにしてある。GUIはCLIをサブプロセス起動するだけの薄い層で
+    // PromptGeneratorを直接参照できない（プロジェクト参照が無い）ため、既定値は
+    // CLI側と別々に保持している——両方変えるときはPromptGenerator.
+    // DefaultLocalLlmBatchCharLimit/DefaultLlmBatchCharLimitとここを揃える。
+    // v0.58.1: 従来は⑤⑥共通の1項目・共通の既定値（12000）だったが、独立した
+    // 2項目に分割した上で、⑤（ローカルLLM）側の既定値も3000に変更した——実機
+    // 検証（`Cloaks_SMP_Patch.esp`、gemma3:12b・gemma4:26b）で、12000のままだと
+    // 大きすぎて失敗率が大幅に上がり、逆に小さくしすぎても解決件数は変わらず
+    // 実行時間だけ悪化することを確認済み（詳細はDESIGN_NOTES.md既知の課題27.）。
+    // ⑥（生成AI・クラウド）側は同じ実機検証をしていないため12000のまま変更していない。
+    private const int DefaultLlmLocalBatchCharLimit = 3_000;
+    private const int DefaultLlmCloudBatchCharLimit = 12_000;
+    // v0.58.1: 実測（同フォント・同DPIでのPreferredSize）でCheckBox=22px、
+    // Label=21px、NumericUpDown=23pxとほぼ揃っており、単独ではここまでの
+    // ズレは説明できなかった——Label/NumericUpDownだけにAnchor=Leftを設定し
+    // CheckBoxは既定（Top|Left）のままにしていた不統一が主因と判断し、
+    // Anchorは全コントロール既定のまま（明示指定しない）に揃えた。その上で
+    // 実測差分の半分程度（1px前後）だけ上マージンを微調整してある。
+    private readonly Label _lblLlmBatchCharLimit = new() { Text = "1回あたりの文字数上限", AutoSize = true, Margin = new Padding(8, 4, 4, 3) };
+    private readonly NumericUpDown _numLlmBatchCharLimit = new()
     {
         Minimum = 100,
         Maximum = 1_000_000,
         Increment = 1000,
-        Value = DefaultLlmBatchCharLimit,
+        Value = DefaultLlmLocalBatchCharLimit,
         Width = 90,
+        Margin = new Padding(3, 1, 3, 3),
+    };
+    private readonly Label _lblCloudAiBatchCharLimit = new() { Text = "1回あたりの文字数上限", AutoSize = true, Margin = new Padding(8, 4, 4, 3) };
+    private readonly NumericUpDown _numCloudAiBatchCharLimit = new()
+    {
+        Minimum = 100,
+        Maximum = 1_000_000,
+        Increment = 1000,
+        Value = DefaultLlmCloudBatchCharLimit,
+        Width = 90,
+        Margin = new Padding(3, 1, 3, 3),
     };
 
     // Width指定は付けない — v0.52.1a: BuildLayoutの最後でButtonLayout.UnifyWidthsが
@@ -192,6 +217,19 @@ public sealed class MainForm : Form
     /// silently lost when re-scanning after collecting more xTranslator files.</summary>
     private readonly HashSet<string> _deselectedPlugins = new(StringComparer.OrdinalIgnoreCase);
 
+    // v0.58.6: 既知の課題（v0.58.1で一度対処した「bottomパネルのAutoSize計算が
+    // 信頼できず、高さが実際の中身より大きい値のまま固定される」現象）が、
+    // 「詳細を確認」等の別ウィンドウを開閉した後や、CLI実行（翻訳実行等）の
+    // 完了後にも再発する、と実機で報告された。BuildLayout内のbottom.Layout
+    // イベントだけでは、これらの操作がbottomパネル自身のLayoutを必ずしも
+    // 誘発しないため補正が働かないタイミングがある——正確な再発トリガーを
+    // 特定できなかったため、代わりに「主要な操作の節目ごとに毎回補正し直す」
+    // という保険的な対応にした（RecalculateBottomHeight参照）。3つとも
+    // BuildLayoutで初期化される。
+    private TableLayoutPanel? _bottomPanel;
+    private TableLayoutPanel? _bottomOptionsPanel;
+    private TableLayoutPanel? _bottomActionsPanel;
+
     public MainForm()
     {
         Text = "Skyrim JP Translation Supporter";
@@ -205,6 +243,25 @@ public sealed class MainForm : Form
         Load += MainForm_Load;
         FormClosing += MainForm_FormClosing;
         _logWindow.CancelRequested += LogWindow_CancelRequested;
+
+        // v0.58.6: bottomパネル自身のLayoutイベントだけに頼らず、ウィンドウが
+        // 再アクティブ化された時（別ウィンドウを閉じて戻ってきた時を含む）・
+        // リサイズされた時にも高さを補正し直す。
+        Activated += (_, _) => RecalculateBottomHeight();
+        Resize += (_, _) => RecalculateBottomHeight();
+    }
+
+    /// <summary>bottomパネル（下部の①〜④/⑤/⑥チェックボックス列＋ボタン列）の
+    /// 高さを、実際に配置されたoptions/actionsの下端座標から直接計算して
+    /// 強制設定する——BuildLayout内のbottom.Layoutイベントハンドラと全く同じ
+    /// 計算式。複数のトリガーから安全に何度呼んでも副作用が無いよう、
+    /// 既に正しい値ならno-op（Layoutイベントの再入も自然に防がれる）。</summary>
+    private void RecalculateBottomHeight()
+    {
+        if (_bottomPanel == null || _bottomOptionsPanel == null || _bottomActionsPanel == null) return;
+        var desired = Math.Max(_bottomOptionsPanel.Bottom, _bottomActionsPanel.Bottom) + _bottomPanel.Padding.Bottom;
+        if (_bottomPanel.Height != desired)
+            _bottomPanel.Height = desired;
     }
 
     /// <summary>v0.53.0a: 「キャンセル」ボタンが押された（LogWindowから中継された）
@@ -248,7 +305,8 @@ public sealed class MainForm : Form
 
         _settings = AppSettings.Load();
         _productRoot = CliLocator.TryGetProductRoot();
-        _numBatchCharLimit.Value = Math.Clamp(_settings.LlmBatchCharLimit, (int)_numBatchCharLimit.Minimum, (int)_numBatchCharLimit.Maximum);
+        _numLlmBatchCharLimit.Value = Math.Clamp(_settings.LlmLocalBatchCharLimit, (int)_numLlmBatchCharLimit.Minimum, (int)_numLlmBatchCharLimit.Maximum);
+        _numCloudAiBatchCharLimit.Value = Math.Clamp(_settings.LlmCloudBatchCharLimit, (int)_numCloudAiBatchCharLimit.Minimum, (int)_numCloudAiBatchCharLimit.Maximum);
 
         // plugin_summary.txtがまだ無くても（一度もスキャンしていなくても）
         // LoadDataは空一覧として扱うので、常時ロードして問題ない。
@@ -300,14 +358,34 @@ public sealed class MainForm : Form
         _grid.CurrentCellDirtyStateChanged += Grid_CurrentCellDirtyStateChanged;
         _grid.CellValueChanged += (_, _) => UpdateSummaryLabel();
 
-        var bottom = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, Padding = new Padding(8), ColumnCount = 2 };
+        // v0.58.1: RowStyles/RowCountを明示してもbottomのAutoSize計算が
+        // 内容（options=183px・actions=180px）よりかなり大きい値（374px）に
+        // 固定されたまま変わらないことを実機で確認した——この環境の
+        // TableLayoutPanel（列0がPercentスタイル）のAutoSize計算がどこかで
+        // 信頼できないと判断し、AutoSizeには頼らず、実際に子要素を配置した後の
+        // 座標から高さを直接計算して強制的に設定する方式に切り替えた。
+        var bottom = new TableLayoutPanel { Dock = DockStyle.Bottom, AutoSize = false, Padding = new Padding(8), ColumnCount = 2, RowCount = 1 };
+        _bottomPanel = bottom;
         bottom.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         bottom.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        bottom.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-        // ①〜④は1行目、⑤⑥（クラウド生成AI・ローカルLLM）は2行目、⑤⑥共通の
-        // バッチ文字数上限は3行目 — 一目で「クラウド系の解決手段とその設定」という
-        // グループだと分かるように。
-        var options = new TableLayoutPanel { AutoSize = true, ColumnCount = 1, RowCount = 3 };
+        // v0.58.1: ①〜④（自動解決手法）・⑤ローカルLLM（＋その文字数上限）・
+        // ⑥生成AI翻訳（クラウド、＋その文字数上限）を3行に分けた。GroupBoxで
+        // 囲む案も試したが、この環境ではAutoSizeのGroupBoxに非Dockの子を
+        // 入れてもサイズが正しく縮まらない（タイトル欠落・大きな余白）という
+        // 問題が実機で確認されたため、枠なしの単純な行区切りに落ち着いた。
+        // ローカルLLM・生成AIの2行は横位置を互いに揃える必要はない（実測でも
+        // 高さの差はわずかで、無理に揃えようとしたのがかえってズレの原因に
+        // なっていた）。
+        // v0.58.1: 右のactions（ボタン列）が6行（うち1行は意図的な空き行）ある
+        // のに対し、こちらは元々3行しかなく、bottomの共有行高がactions側に
+        // 引っ張られる分だけ左側の下に空白ができていた（実機で確認済み）。
+        // 行の間に空き行を挟む案は実機で悪化が確認されたため、3つの内容行を
+        // まとめた後にまとめて3行分の空き行を追加する形にした（ユーザー指示）。
+        var options = new TableLayoutPanel { AutoSize = true, ColumnCount = 1, RowCount = 6 };
+        _bottomOptionsPanel = options;
+
         var optionsRow1 = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight };
         optionsRow1.Controls.Add(_chkVanillaCorpus);
         optionsRow1.Controls.Add(_chkMeaning);
@@ -315,26 +393,37 @@ public sealed class MainForm : Form
         optionsRow1.Controls.Add(_chkNameFallback);
         options.Controls.Add(optionsRow1, 0, 0);
 
-        // 生成AI（クラウド）→ローカルLLM の順で並べる。「この左にクラウド経由の
-        // 生成AIオプションを追加したい」という以前からの構想通りの配置。
-        var optionsRow2 = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, Margin = new Padding(0, 4, 0, 0) };
-        optionsRow2.Controls.Add(_chkCloudAi);
-        optionsRow2.Controls.Add(_chkLlm);
-        options.Controls.Add(optionsRow2, 0, 1);
+        var llmRow = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, Margin = new Padding(0, 3, 0, 0) };
+        llmRow.Controls.Add(_chkLlm);
+        llmRow.Controls.Add(_lblLlmBatchCharLimit);
+        llmRow.Controls.Add(_numLlmBatchCharLimit);
+        options.Controls.Add(llmRow, 0, 1);
         _chkLlm.CheckedChanged += ChkLlm_CheckedChanged;
+
+        var cloudAiRow = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, Margin = new Padding(0, 2, 0, 0) };
+        cloudAiRow.Controls.Add(_chkCloudAi);
+        cloudAiRow.Controls.Add(_lblCloudAiBatchCharLimit);
+        cloudAiRow.Controls.Add(_numCloudAiBatchCharLimit);
+        options.Controls.Add(cloudAiRow, 0, 2);
         _chkCloudAi.CheckedChanged += ChkCloudAi_CheckedChanged;
 
-        // v0.52.1a: 生成AI翻訳オプションのすぐ下に配置——⑤⑥どちらにも効く設定
-        // なので、片方だけの行に混ぜず独立した行にしてある。
-        var optionsRow3 = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, Margin = new Padding(0, 4, 0, 0) };
-        optionsRow3.Controls.Add(_lblBatchCharLimit);
-        optionsRow3.Controls.Add(_numBatchCharLimit);
-        options.Controls.Add(optionsRow3, 0, 2);
+        // actions.stageSpacerと同じ考え方（AutoSize=false・高さをボタン基準に
+        // 固定した空パネル）で、内容行3つの後にまとめて3行分の空きを追加する。
+        var optionsSpacerHeight = _btnReloadMo2.PreferredSize.Height;
+        options.Controls.Add(new Panel { AutoSize = false, Height = optionsSpacerHeight, Width = 1 }, 0, 3);
+        options.Controls.Add(new Panel { AutoSize = false, Height = optionsSpacerHeight, Width = 1 }, 0, 4);
+        options.Controls.Add(new Panel { AutoSize = false, Height = optionsSpacerHeight, Width = 1 }, 0, 5);
+
         // v0.53.0a: 変更を即座にAppSettingsへ反映・保存する——以前はGUI上でしか
         // 保持されず、次回起動時に既定値へ戻ってしまっていた不具合の修正。
-        _numBatchCharLimit.ValueChanged += (_, _) =>
+        _numLlmBatchCharLimit.ValueChanged += (_, _) =>
         {
-            _settings.LlmBatchCharLimit = (int)_numBatchCharLimit.Value;
+            _settings.LlmLocalBatchCharLimit = (int)_numLlmBatchCharLimit.Value;
+            _settings.Save();
+        };
+        _numCloudAiBatchCharLimit.ValueChanged += (_, _) =>
+        {
+            _settings.LlmCloudBatchCharLimit = (int)_numCloudAiBatchCharLimit.Value;
             _settings.Save();
         };
 
@@ -351,6 +440,7 @@ public sealed class MainForm : Form
         // 空き行を挟む——押し間違い防止と、破壊的な再初期化ステージと非破壊の
         // 翻訳ステージが別物であることを視覚的に示す狙い（ユーザー要望）。
         var actions = new TableLayoutPanel { AutoSize = true, ColumnCount = 2, RowCount = 6 };
+        _bottomActionsPanel = actions;
         actions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         actions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         for (var i = 0; i < 6; i++) actions.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -383,6 +473,14 @@ public sealed class MainForm : Form
         actions.Controls.Add(_btnGenerateDsd, 1, 5);
         ButtonLayout.UnifyWidths(new[] { _btnResetSelected, _btnRescan, _btnReloadMo2, _btnTranslate, _btnGenerateDsd });
         bottom.Controls.Add(actions, 1, 0);
+
+        // v0.58.1: AutoSizeに頼らず、実際に配置されたoptions/actionsの下端座標
+        // から高さを直接計算して強制設定する（上記コメント参照）。Layoutイベントに
+        // 掛けて、初回表示時・以降のレイアウト変更時どちらでも正しい値になるようにする。
+        // v0.58.6: 計算式そのものはRecalculateBottomHeightへ切り出した——ここでは
+        // それを呼ぶだけ（bottom.Height代入がこのLayoutイベント自身を再度誘発しても、
+        // RecalculateBottomHeight内のno-opガードで再入は自然に止まる）。
+        bottom.Layout += (_, _) => RecalculateBottomHeight();
 
         root.Controls.Add(bottom, 0, 2);
     }
@@ -770,6 +868,9 @@ public sealed class MainForm : Form
             flags.Add($"--llm-local-model={LlmModel}");
             if (!string.IsNullOrWhiteSpace(LlmEndpoint))
                 flags.Add($"--llm-local-endpoint={LlmEndpoint}");
+            // v0.58.1: 設定ウィンドウの「思考モードOFF」チェック（既定ON）に連動。
+            if (_settings.LlmLocalReasoningOff)
+                flags.Add("--llm-local-reasoning-effort=none");
         }
 
         if (_chkCloudAi.Checked)
@@ -800,9 +901,12 @@ public sealed class MainForm : Form
         }
 
         // 既定値と異なるときだけ渡す——不要なフラグでコマンドラインを汚さない。
-        var batchCharLimit = (int)_numBatchCharLimit.Value;
-        if (batchCharLimit != DefaultLlmBatchCharLimit)
-            flags.Add($"--llm-batch-char-limit={batchCharLimit}");
+        var llmBatchCharLimit = (int)_numLlmBatchCharLimit.Value;
+        if (llmBatchCharLimit != DefaultLlmLocalBatchCharLimit)
+            flags.Add($"--llm-local-batch-char-limit={llmBatchCharLimit}");
+        var cloudAiBatchCharLimit = (int)_numCloudAiBatchCharLimit.Value;
+        if (cloudAiBatchCharLimit != DefaultLlmCloudBatchCharLimit)
+            flags.Add($"--llm-cloud-batch-char-limit={cloudAiBatchCharLimit}");
 
         return flags;
     }
@@ -1069,7 +1173,12 @@ public sealed class MainForm : Form
         _chkNameFallback.Enabled = !busy;
         _chkLlm.Enabled = !busy;
         _chkCloudAi.Enabled = !busy;
-        _numBatchCharLimit.Enabled = !busy;
+        _numLlmBatchCharLimit.Enabled = !busy;
+        _numCloudAiBatchCharLimit.Enabled = !busy;
+        // v0.58.6: CLI実行（翻訳実行・再スキャン・初期化等）の完了直後にも
+        // bottomパネルの高さを補正し直す（RecalculateBottomHeightの他の
+        // 呼び出し元と同じ保険的対応）。
+        if (!busy) RecalculateBottomHeight();
     }
 
     private void AppendLog(string line) => _logWindow.AppendLine(line);
