@@ -133,7 +133,9 @@ public sealed class MainForm : Form
     private readonly CheckBox _chkVanillaCorpus = new() { Text = "バニラコーパス（常時適用）", Checked = true, Enabled = false, AutoSize = true };
     private readonly CheckBox _chkMeaning = new() { Text = "意味翻訳（品質中）", Checked = true, AutoSize = true };
     private readonly CheckBox _chkTranslit = new() { Text = "音訳分解（品質中）", Checked = true, AutoSize = true };
-    private readonly CheckBox _chkNameFallback = new() { Text = "簡易名前解決（品質中～低）", Checked = true, AutoSize = true };
+    // v0.59.0: 既定でOFFに変更（ユーザー指示）——当面はローカルLLM翻訳の方が
+    // 品質が高いため。
+    private readonly CheckBox _chkNameFallback = new() { Text = "簡易名前解決（品質中～低）", Checked = false, AutoSize = true };
     // v0.52.1a: ⑤ローカルLLM・⑥生成AI翻訳は独立したチェーン（CLI側もllm-local/
     // llm-cloudの2つを独立に受け取れる）なので、両方同時にONで構わない——⑤で
     // 解決できなかったものだけが⑥に回る。
