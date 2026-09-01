@@ -128,17 +128,19 @@ public sealed class RunLog : IDisposable
     /// <see cref="Section"/>/<see cref="Detail"/>'s own (ja, en) parameters.</summary>
     public RunLogLang Lang => _lang;
 
-    public void Dispose()
+    /// <summary>Shared by <see cref="Dispose"/> (the full report — every category)
+    /// and <see cref="WriteExclusionsFile"/> (a filtered subset). v0.44.3: sections
+    /// used to appear in whichever order their category was FIRST seen while
+    /// scanning candidates plugin-by-plugin — essentially arbitrary, and confusing
+    /// when it happened to print "4.NameFallbackTranslator" ahead of
+    /// "2.意味合成"/"3.音訳分解" even though every single candidate is still tried
+    /// ①→②→③→④ in that order underneath. Category labels already start with
+    /// their step number by convention (see PromptGenerator's "1."/"2."/"3."/"4."
+    /// prefixes) — sorting by the label itself makes the log's section order match
+    /// that reading order too.</summary>
+    private void AppendGroupedDetails(StringBuilder sb, Func<(string Category, string Item), bool> include)
     {
-        // v0.44.3: sections used to appear in whichever order their category was
-        // FIRST seen while scanning candidates plugin-by-plugin — essentially
-        // arbitrary, and confusing when it happened to print "4.NameFallback
-        // Translator" ahead of "2.意味合成"/"3.音訳分解" even though every single
-        // candidate is still tried ①→②→③→④ in that order underneath. Category
-        // labels already start with their step number by convention (see
-        // PromptGenerator's "1."/"2."/"3."/"4." prefixes) — sorting by the label
-        // itself makes the log's section order match that reading order too.
-        foreach (var group in _details.GroupBy(d => d.Category).OrderBy(g => g.Key, StringComparer.Ordinal))
+        foreach (var group in _details.Where(include).GroupBy(d => d.Category).OrderBy(g => g.Key, StringComparer.Ordinal))
         {
             var items = group.GroupBy(d => d.Item)
                 .Select(g => (Item: g.Key, Count: g.Count()))
@@ -146,13 +148,48 @@ public sealed class RunLog : IDisposable
                 .ThenBy(x => x.Item, StringComparer.Ordinal)
                 .ToList();
 
-            _body.AppendLine();
-            _body.AppendLine(_lang == RunLogLang.Ja
+            sb.AppendLine();
+            sb.AppendLine(_lang == RunLogLang.Ja
                 ? $"[{group.Key}] {group.Count()}件（うち異なる内容 {items.Count}種類）"
                 : $"[{group.Key}] {group.Count()} item(s) ({items.Count} distinct)");
             foreach (var (item, count) in items)
-                _body.AppendLine(count > 1 ? $"  ×{count}\t{item}" : $"      \t{item}");
+                sb.AppendLine(count > 1 ? $"  ×{count}\t{item}" : $"      \t{item}");
         }
+    }
+
+    /// <summary>v0.58.5: PickUpTarget限定で使う——「除外:」（英語ログなら"Excluded:"）
+    /// で始まるカテゴリだけを抜き出し、単独のテキストファイルとして書き出す。
+    /// この内容自体は既に<see cref="Dispose"/>が書く本体ログ（pickuptarget.log）
+    /// にも含まれているが、xTranslatorインポート件数等の他の統計情報に埋もれて
+    /// いて後から探しにくいため、除外理由だけを独立したファイルとしても
+    /// 出力する——「何が対象にならなかったか」を後から追いやすくするのが目的
+    /// （ユーザー要望）。プラグイン単位ではなく、この`RunLog`インスタンス
+    /// （＝実行1回分＝ロードオーダー全体）で1ファイルにまとめる。
+    /// 件数自体は多い（実測: フルロードオーダーで5000件超）が、同一内容は
+    /// AppendGroupedDetailsが既に集約してくれるため、実際のファイルの行数は
+    /// 数千行程度に収まる——十分実用的なサイズ。</summary>
+    public void WriteExclusionsFile(string path)
+    {
+        var exclusionPrefix = _lang == RunLogLang.Ja ? "除外" : "Excluded";
+        var sb = new StringBuilder();
+        sb.AppendLine("================================================================");
+        sb.AppendLine(_lang == RunLogLang.Ja
+            ? $" 除外された候補の一覧（{_startedAt:yyyy-MM-dd HH:mm:ss}実行分）"
+            : $" Excluded candidates ({_startedAt:yyyy-MM-dd HH:mm:ss} run)");
+        sb.AppendLine("================================================================");
+
+        AppendGroupedDetails(sb, d => d.Category.StartsWith(exclusionPrefix, StringComparison.Ordinal));
+
+        sb.AppendLine();
+        sb.AppendLine("================================================================");
+
+        File.WriteAllText(path, sb.ToString(), new UTF8Encoding(false));
+        Console.WriteLine($"Wrote exclusions log: {path}");
+    }
+
+    public void Dispose()
+    {
+        AppendGroupedDetails(_body, _ => true);
 
         _body.AppendLine();
         _body.AppendLine("================================================================");

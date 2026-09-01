@@ -60,25 +60,48 @@ args = args.Where(a => !a.StartsWith("--fast", StringComparison.OrdinalIgnoreCas
 var llmLocalEnabled = args.Any(a => a.Equals("--llm-local", StringComparison.OrdinalIgnoreCase));
 var llmLocalModelArg = args.FirstOrDefault(a => a.StartsWith("--llm-local-model=", StringComparison.OrdinalIgnoreCase));
 var llmLocalEndpointArg = args.FirstOrDefault(a => a.StartsWith("--llm-local-endpoint=", StringComparison.OrdinalIgnoreCase));
+// v0.58.1: opt-in escape hatch for "thinking"-capable models (e.g. Ollama's
+// gemma4) that can otherwise exhaust their whole completion token budget on an
+// internal reasoning trace before writing the actual answer — see
+// LocalLlmOptions.ReasoningEffort's remarks. Left unset by default (no field
+// sent) since most local-LLM users are on non-thinking models this doesn't
+// apply to.
+var llmLocalReasoningEffortArg = args.FirstOrDefault(a => a.StartsWith("--llm-local-reasoning-effort=", StringComparison.OrdinalIgnoreCase));
 
 var llmCloudEnabled = args.Any(a => a.Equals("--llm-cloud", StringComparison.OrdinalIgnoreCase));
 var llmCloudProviderArg = args.FirstOrDefault(a => a.StartsWith("--llm-cloud-provider=", StringComparison.OrdinalIgnoreCase));
 var llmCloudModelArg = args.FirstOrDefault(a => a.StartsWith("--llm-cloud-model=", StringComparison.OrdinalIgnoreCase));
 var llmCloudEndpointArg = args.FirstOrDefault(a => a.StartsWith("--llm-cloud-endpoint=", StringComparison.OrdinalIgnoreCase));
+var llmCloudReasoningEffortArg = args.FirstOrDefault(a => a.StartsWith("--llm-cloud-reasoning-effort=", StringComparison.OrdinalIgnoreCase));
 var claudeCodeExeArg = args.FirstOrDefault(a => a.StartsWith("--claude-code-exe=", StringComparison.OrdinalIgnoreCase));
 
 // v0.52.1a: ⑤・⑥はプラグイン単位でまとめて1回の呼び出しにする（バッチ化、
 // PromptGenerator.ApplyLlmStep参照）。1バッチあたりの上限を文字数で決めており、
 // 妥当な値は生成AIサービス・契約プランによって変わりうる（無料枠は既定値より
 // 小さくしたい等）ため、固定値にせずここで上書きできるようにしてある。
-var llmBatchCharLimitArg = args.FirstOrDefault(a => a.StartsWith("--llm-batch-char-limit=", StringComparison.OrdinalIgnoreCase));
-var llmBatchCharLimit = PromptGenerator.DefaultLlmBatchCharLimit;
-if (llmBatchCharLimitArg != null)
+// v0.58.1: ⑤ローカルLLMと⑥生成AI翻訳は別々のサーバー/モデルに向かう独立ステップ
+// なので、上限も別々に持たせる（以前は1つの--llm-batch-char-limit=を両方で
+// 共有していたが、思考系モデルとそうでないモデルでは妥当な上限が大きく異なりうる
+// ことが分かったため分離した）。
+var llmLocalBatchCharLimitArg = args.FirstOrDefault(a => a.StartsWith("--llm-local-batch-char-limit=", StringComparison.OrdinalIgnoreCase));
+var llmLocalBatchCharLimit = PromptGenerator.DefaultLocalLlmBatchCharLimit;
+if (llmLocalBatchCharLimitArg != null)
 {
-    var raw = llmBatchCharLimitArg["--llm-batch-char-limit=".Length..];
-    if (!int.TryParse(raw, out llmBatchCharLimit) || llmBatchCharLimit <= 0)
+    var raw = llmLocalBatchCharLimitArg["--llm-local-batch-char-limit=".Length..];
+    if (!int.TryParse(raw, out llmLocalBatchCharLimit) || llmLocalBatchCharLimit <= 0)
     {
-        Console.Error.WriteLine($"--llm-batch-char-limit=<正の整数> を指定してください（指定値: '{raw}'）。");
+        Console.Error.WriteLine($"--llm-local-batch-char-limit=<正の整数> を指定してください（指定値: '{raw}'）。");
+        return 1;
+    }
+}
+var llmCloudBatchCharLimitArg = args.FirstOrDefault(a => a.StartsWith("--llm-cloud-batch-char-limit=", StringComparison.OrdinalIgnoreCase));
+var llmCloudBatchCharLimit = PromptGenerator.DefaultLlmBatchCharLimit;
+if (llmCloudBatchCharLimitArg != null)
+{
+    var raw = llmCloudBatchCharLimitArg["--llm-cloud-batch-char-limit=".Length..];
+    if (!int.TryParse(raw, out llmCloudBatchCharLimit) || llmCloudBatchCharLimit <= 0)
+    {
+        Console.Error.WriteLine($"--llm-cloud-batch-char-limit=<正の整数> を指定してください（指定値: '{raw}'）。");
         return 1;
     }
 }
@@ -86,12 +109,15 @@ if (llmBatchCharLimitArg != null)
 args = args.Where(a => !a.Equals("--llm-local", StringComparison.OrdinalIgnoreCase)
                        && !a.StartsWith("--llm-local-model=", StringComparison.OrdinalIgnoreCase)
                        && !a.StartsWith("--llm-local-endpoint=", StringComparison.OrdinalIgnoreCase)
+                       && !a.StartsWith("--llm-local-reasoning-effort=", StringComparison.OrdinalIgnoreCase)
                        && !a.Equals("--llm-cloud", StringComparison.OrdinalIgnoreCase)
                        && !a.StartsWith("--llm-cloud-provider=", StringComparison.OrdinalIgnoreCase)
                        && !a.StartsWith("--llm-cloud-model=", StringComparison.OrdinalIgnoreCase)
                        && !a.StartsWith("--llm-cloud-endpoint=", StringComparison.OrdinalIgnoreCase)
+                       && !a.StartsWith("--llm-cloud-reasoning-effort=", StringComparison.OrdinalIgnoreCase)
                        && !a.StartsWith("--claude-code-exe=", StringComparison.OrdinalIgnoreCase)
-                       && !a.StartsWith("--llm-batch-char-limit=", StringComparison.OrdinalIgnoreCase)).ToArray();
+                       && !a.StartsWith("--llm-local-batch-char-limit=", StringComparison.OrdinalIgnoreCase)
+                       && !a.StartsWith("--llm-cloud-batch-char-limit=", StringComparison.OrdinalIgnoreCase)).ToArray();
 
 // v0.50.1a: GUI support — process several plugins in one process launch instead
 // of one-per-invocation (see PromptGenerator.RunMany's remarks: BuildContext's
@@ -131,9 +157,11 @@ if (llmLocalEnabled)
     // matches the ubiquitous *_API_KEY convention other CLI tools use for the
     // same reason.
     var llmLocalApiKey = Environment.GetEnvironmentVariable("SKYRIMJPSP_LLM_API_KEY") ?? "";
-    llmLocal = new LocalLlmTranslator(new LocalLlmOptions(llmLocalEndpoint, llmLocalModel, llmLocalApiKey));
+    var llmLocalReasoningEffort = llmLocalReasoningEffortArg?["--llm-local-reasoning-effort=".Length..];
+    llmLocal = new LocalLlmTranslator(new LocalLlmOptions(llmLocalEndpoint, llmLocalModel, llmLocalApiKey, llmLocalReasoningEffort));
     Console.WriteLine($"Step 5 (local LLM): ENABLED — endpoint={llmLocalEndpoint}, model={llmLocalModel}" +
-        (llmLocalApiKey.Length > 0 ? ", API key: provided (via SKYRIMJPSP_LLM_API_KEY)" : ""));
+        (llmLocalApiKey.Length > 0 ? ", API key: provided (via SKYRIMJPSP_LLM_API_KEY)" : "") +
+        (llmLocalReasoningEffort != null ? $", reasoning_effort={llmLocalReasoningEffort}" : ""));
 }
 
 ITextTranslator? llmCloud = null;
@@ -161,9 +189,11 @@ if (llmCloudEnabled)
         var llmCloudModel = llmCloudModelArg["--llm-cloud-model=".Length..];
         var llmCloudEndpoint = llmCloudEndpointArg["--llm-cloud-endpoint=".Length..];
         var llmCloudApiKey = Environment.GetEnvironmentVariable("SKYRIMJPSP_CLOUD_LLM_API_KEY") ?? "";
-        llmCloud = new LocalLlmTranslator(new LocalLlmOptions(llmCloudEndpoint, llmCloudModel, llmCloudApiKey));
+        var llmCloudReasoningEffort = llmCloudReasoningEffortArg?["--llm-cloud-reasoning-effort=".Length..];
+        llmCloud = new LocalLlmTranslator(new LocalLlmOptions(llmCloudEndpoint, llmCloudModel, llmCloudApiKey, llmCloudReasoningEffort));
         Console.WriteLine($"Step 6 (cloud AI): ENABLED — provider=HTTP, endpoint={llmCloudEndpoint}, model={llmCloudModel}" +
-            (llmCloudApiKey.Length > 0 ? ", API key: provided (via SKYRIMJPSP_CLOUD_LLM_API_KEY)" : ""));
+            (llmCloudApiKey.Length > 0 ? ", API key: provided (via SKYRIMJPSP_CLOUD_LLM_API_KEY)" : "") +
+            (llmCloudReasoningEffort != null ? $", reasoning_effort={llmCloudReasoningEffort}" : ""));
     }
 }
 
@@ -227,6 +257,11 @@ switch (args[0])
             trace.Info($"Resolving MO2 instance: {mo2Dir}");
             var result = PickUpTargetRunner.Run(mo2Dir, log, includeStale, trace, modsDirOverride, profileDirOverride, overwriteDirOverride);
             trace.Info($"Scan complete: {result.Candidates.Count} candidates, {result.Corpus.Count} corpus entries");
+
+            // v0.58.5: 何が翻訳対象にならなかったかを後から追いやすくするため、
+            // pickuptarget.log本体（他の統計情報と混在）とは別に、除外理由だけを
+            // 集めた単独のテキストファイルも書き出す（ユーザー要望）。
+            log.WriteExclusionsFile(Path.Combine("PickUpTarget", "excluded_candidates.txt"));
 
             var candidatesTxt = Path.Combine(outDir, "candidates.txt");
             var candidatesTsv = Path.Combine(outDir, "candidates.tsv");
@@ -336,16 +371,16 @@ switch (args[0])
                     .Where(l => l.Length > 0)
                     .ToList();
                 trace.Info($"Input: {candidatesTsv}, {corpusTsv} / targets: {targetPlugins.Count} plugin(s) from {pluginsFilePath} / step5 local LLM: {(llmLocal != null ? "enabled" : "disabled")} / step6 cloud AI: {(llmCloud != null ? "enabled" : "disabled")}");
-                PromptGenerator.RunMany(candidatesTsv, corpusTsv, DefaultImportDir, targetPlugins, outputDir, log, trace, llmLocal: llmLocal, llmCloud: llmCloud, stageOptions: stageOptions, discardUserEdits: discardUserEdits, llmBatchCharLimit: llmBatchCharLimit, cancelFlagPath: cancelFlagPath);
+                PromptGenerator.RunMany(candidatesTsv, corpusTsv, DefaultImportDir, targetPlugins, outputDir, log, trace, llmLocal: llmLocal, llmCloud: llmCloud, stageOptions: stageOptions, discardUserEdits: discardUserEdits, llmLocalBatchCharLimit: llmLocalBatchCharLimit, llmCloudBatchCharLimit: llmCloudBatchCharLimit, cancelFlagPath: cancelFlagPath);
                 LogCloudAiUsage(log, llmCloud);
                 return 0;
             }
 
             trace.Info($"Input: {candidatesTsv}, {corpusTsv} / target: {(targetPlugin ?? "--all")} / step5 local LLM: {(llmLocal != null ? "enabled" : "disabled")} / step6 cloud AI: {(llmCloud != null ? "enabled" : "disabled")}");
             if (targetPlugin == null || targetPlugin.Equals("--all", StringComparison.OrdinalIgnoreCase))
-                PromptGenerator.RunAll(candidatesTsv, corpusTsv, DefaultImportDir, outputDir, log, trace, llmLocal: llmLocal, llmCloud: llmCloud, stageOptions: stageOptions, discardUserEdits: discardUserEdits, llmBatchCharLimit: llmBatchCharLimit);
+                PromptGenerator.RunAll(candidatesTsv, corpusTsv, DefaultImportDir, outputDir, log, trace, llmLocal: llmLocal, llmCloud: llmCloud, stageOptions: stageOptions, discardUserEdits: discardUserEdits, llmLocalBatchCharLimit: llmLocalBatchCharLimit, llmCloudBatchCharLimit: llmCloudBatchCharLimit);
             else
-                PromptGenerator.RunOne(candidatesTsv, corpusTsv, DefaultImportDir, targetPlugin, outputDir, log, trace, llmLocal: llmLocal, llmCloud: llmCloud, stageOptions: stageOptions, discardUserEdits: discardUserEdits, llmBatchCharLimit: llmBatchCharLimit);
+                PromptGenerator.RunOne(candidatesTsv, corpusTsv, DefaultImportDir, targetPlugin, outputDir, log, trace, llmLocal: llmLocal, llmCloud: llmCloud, stageOptions: stageOptions, discardUserEdits: discardUserEdits, llmLocalBatchCharLimit: llmLocalBatchCharLimit, llmCloudBatchCharLimit: llmCloudBatchCharLimit);
             LogCloudAiUsage(log, llmCloud);
             return 0;
         }
@@ -488,6 +523,10 @@ static void PrintUsage()
     Console.WriteLine("      --llm-local-endpoint=<url> : 既定 http://localhost:11434/v1/chat/completions（Ollama）。");
     Console.WriteLine("              OpenAI互換の /v1/chat/completions を実装するサーバーなら他ツールでも可");
     Console.WriteLine("              （認証が必要な場合はSKYRIMJPSP_LLM_API_KEY環境変数でAPIキーを渡す）");
+    Console.WriteLine("      --llm-local-reasoning-effort=<none|low|medium|high> : \"思考\"対応モデル（Ollamaのgemma4等）向け。");
+    Console.WriteLine("              未指定（既定）だとフィールド自体を送らずサーバー/モデルの既定挙動に委ねる。思考系モデルは");
+    Console.WriteLine("              バッチ内容によっては思考だけで生成トークン上限に達し、実際の回答が空になることがある");
+    Console.WriteLine("              （実測で確認済み）ため、\"none\"を指定すると解消できる場合がある");
     Console.WriteLine("      --llm-cloud : 6.ステップ。5.（有効な場合はそこまで）で解決できなかった候補を、");
     Console.WriteLine("              クラウドの生成AIに渡す。既定は無効。--llm-localと独立に有効化でき、両方");
     Console.WriteLine("              有効なら5→6の順に試す（5で解決済みの候補は6には回さない）");
@@ -497,10 +536,15 @@ static void PrintUsage()
     Console.WriteLine("              認証が必要な場合はSKYRIMJPSP_CLOUD_LLM_API_KEY環境変数でAPIキーを渡す）");
     Console.WriteLine("      --llm-cloud-model=<name> : claudecodeでは省略可（claude自身の既定モデル）、httpでは必須");
     Console.WriteLine("      --llm-cloud-endpoint=<url> : httpのときのみ必須（例 https://api.openai.com/v1/chat/completions）");
+    Console.WriteLine("      --llm-cloud-reasoning-effort=<none|low|medium|high> : --llm-local-reasoning-effortと同じ（httpのときのみ意味を持つ）");
     Console.WriteLine("      --claude-code-exe=<path> : claudeコマンドの実行ファイルパス（既定 \"claude\"、PATH上のものを使用）");
-    Console.WriteLine("      --llm-batch-char-limit=<n> : 5./6.でLLMに1回でまとめて渡す候補の合計文字数の上限（既定 " + PromptGenerator.DefaultLlmBatchCharLimit + "）。");
-    Console.WriteLine("              超える場合は複数回の呼び出しに分割される。生成AIサービス・契約プランによって妥当な値が");
-    Console.WriteLine("              変わりうるため上書き可能（無料枠等ではより小さい値が必要な場合がある）");
+    Console.WriteLine("      --llm-local-batch-char-limit=<n> : 5.（ローカルLLM）でLLMに1回でまとめて渡す候補の合計文字数の上限");
+    Console.WriteLine("              （既定 " + PromptGenerator.DefaultLocalLlmBatchCharLimit + "）。超える場合は複数回の呼び出しに分割される。サーバー・モデルによって");
+    Console.WriteLine("              妥当な値が変わりうるため上書き可能——実機検証では、大きくしすぎると思考系モデルは");
+    Console.WriteLine("              思考だけでトークン上限に達し、非思考系モデルも出力が長くなりすぎて失敗しやすくなる");
+    Console.WriteLine("              ことを確認済み（⑥と違い従量課金が無いため、大きくまとめる動機自体が薄い）");
+    Console.WriteLine("      --llm-cloud-batch-char-limit=<n> : --llm-local-batch-char-limitと同じ（6.生成AI翻訳向け、既定 " + PromptGenerator.DefaultLlmBatchCharLimit + "）。");
+    Console.WriteLine("              生成AIサービス・契約プランによって妥当な値が変わりうる（無料枠等ではより小さい値が必要な場合がある）");
     Console.WriteLine("      --cancel-flag-path=<path> : --plugins-fileと併用時のみ有効。指定パスにファイルが存在する");
     Console.WriteLine("              状態を1プラグイン処理し終えるたびに確認し、あれば残りのプラグインを処理せず");
     Console.WriteLine("              そこで正常終了する（GUIの「キャンセル」ボタン用。プロセスを強制終了するのでは");

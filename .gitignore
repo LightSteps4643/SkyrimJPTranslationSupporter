@@ -5,10 +5,14 @@ obj/
 
 # 各ステージの実行時派生物（実行のたびに作り直される）
 PickUpTarget/out_temp/
+PickUpTarget/excluded_candidates.txt
 Translation/out_temp/
 Translation/bak/
 debug_out_temp/
 out/
+
+# 開発中の調査用スクラッチファイル
+tmp/
 
 # xTranslatorインポート用フォルダ（ユーザーが自分の翻訳ファイルを置く場所）
 Translation/import/*
