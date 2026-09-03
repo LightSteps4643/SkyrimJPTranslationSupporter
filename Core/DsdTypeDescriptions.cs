@@ -32,7 +32,11 @@ public static class DsdTypeDescriptions
     {
         ["ACTI RNAM"] = "the action prompt shown when looking at the object (a short verb like \"Examine\"/\"Take\")",
         ["FLOR RNAM"] = "the action prompt shown when looking at a plant/vein (a short verb like \"Harvest\")",
-        ["BOOK CNAM"] = "a book's body text (long-form; may contain formatting tags — leave tags untranslated, as-is)",
+        // v0.59.x (GitHub issue #2): DESC/CNAM were swapped here to match the
+        // fix in PickUpTarget/ExtraTranslatableFields.cs — DESC is the book's
+        // actual body (long-form), CNAM is its separate short description.
+        ["BOOK DESC"] = "a book's body text (long-form; may contain formatting tags — leave tags untranslated, as-is)",
+        ["BOOK CNAM"] = "a book's short description/blurb shown before reading it",
         ["DIAL FULL"] = "a dialogue topic heading (may contain an internal-management identifier)",
         ["GMST DATA"] = "generic UI text stored as a game setting",
         ["INFO NAM1"] = "an NPC's actual spoken dialogue line",

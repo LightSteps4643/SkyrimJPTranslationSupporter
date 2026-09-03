@@ -66,8 +66,8 @@ public class ExtraTranslatableFieldsTests
                 ("LSCR DESC", "A weathered old altar stands in the ruins."),
                 ("MGEF DNAM", "Deals frost damage over time."),
                 ("WOOP TNAM", "Fire Breath"),
-                ("BOOK DESC", "A dusty old tome."),
-                ("BOOK CNAM", "Once upon a time, in the land of Skyrim..."),
+                ("BOOK DESC", "Once upon a time, in the land of Skyrim..."),
+                ("BOOK CNAM", "A dusty old tome."),
                 ("AMMO DESC", "A finely crafted arrow."),
                 ("ARMO DESC", "Sturdy armor forged from iron."),
                 ("WEAP DESC", "A simple but reliable blade."),
@@ -86,6 +86,65 @@ public class ExtraTranslatableFieldsTests
                 var candidate = Assert.Single(result.Candidates, c => c.RecordType == dsdType);
                 Assert.Equal(text, candidate.CurrentText);
             }
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>
+    /// v0.59.x: GitHub issue #2 (kinchanramen) — BOOK's two DSD-mapped fields
+    /// were swapped from day one. Cross-checked against three independent
+    /// sources: (1) Mutagen's own record definition
+    /// (Mutagen.Bethesda.Skyrim/Records/Major Records/Book.xml on GitHub) —
+    /// &lt;String name="BookText" recordType="DESC" .../&gt; and
+    /// &lt;String name="Description" recordType="CNAM" .../&gt;; (2) DSD's own
+    /// documentation (docs/modules/ROOT/pages/index.adoc on
+    /// SkyHorizon3/SSE-Dynamic-String-Distributor) — lists "BOOK CNAM" among
+    /// its flat/short "no index required" fields, and its own worked example
+    /// for "type": "BOOK DESC" is a multi-paragraph in-character letter (long
+    /// body text); (3) the issue reporter's own real-data test. All three
+    /// agree: DESC = the book's actual body (Mutagen's BookText), CNAM = the
+    /// separate short description (Mutagen's Description) — the OPPOSITE of
+    /// what ExtraTranslatableFields.cs currently yields.
+    ///
+    /// This is a pure behavior/black-box test — it goes through
+    /// PickUpTargetRunner.Run exactly like the test above, asserting only
+    /// input (the fixture ESP's field values) vs. output (which DSD type
+    /// string each value ends up labeled as), with no reference to
+    /// ExtraTranslatableFields.cs's internals. It reuses the SAME fixture
+    /// (Fixtures/PickUpTarget/ExtraFieldsTest.esp) as the test above — no new
+    /// binary fixture needed, since that ESP's Book record already has
+    /// semantically-differentiated values in each field (a short
+    /// description-shaped sentence in Description, a long narrative-shaped
+    /// one in BookText — reverse-engineered from the test above's expected
+    /// values BEFORE this fix, back when they still encoded the swapped/buggy
+    /// mapping). Deliberately confirmed red against today's (pre-fix) code —
+    /// this test's own failure is the point: it demonstrates the wrong
+    /// behavior objectively, ahead of the fix, so the fix can be verified
+    /// against a test that was written and confirmed red BEFORE the change,
+    /// not authored to already fit it. Overlaps with the test above (now that
+    /// it's been corrected too) — kept as its own focused test since it
+    /// carries this issue's full evidence trail as a standalone doc comment.
+    /// </summary>
+    [Fact]
+    public void Run_ExtraFieldsFixture_BookDescIsTheBodyText_BookCnamIsTheShortDescription()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_extrafields_book_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var mo2Dir = BuildFakeMo2Instance(root);
+            using var log = RunLog.Open(Path.Combine(root, "PickUpTarget"), "PickUpTarget");
+
+            var result = PickUpTargetRunner.Run(mo2Dir, log);
+
+            var bookDesc = Assert.Single(result.Candidates, c => c.RecordType == "BOOK DESC");
+            var bookCnam = Assert.Single(result.Candidates, c => c.RecordType == "BOOK CNAM");
+
+            Assert.Equal("Once upon a time, in the land of Skyrim...", bookDesc.CurrentText);
+            Assert.Equal("A dusty old tome.", bookCnam.CurrentText);
         }
         finally
         {
