@@ -8,7 +8,8 @@ namespace SkyrimJPStringPatcher.Tests.Translation;
 /// folds it into the corpus as "imported" precedent. A past real incident
 /// (v0.33.0's motivation) had a missed step cut the auto-resolved count in
 /// half, so the matching key ((RecordType, EnglishText)), the Japanese-Dest
-/// validity check, the BOOK DESC/CNAM swap, and the newest-file-wins merge
+/// validity check, BOOK's DESC/CNAM record-type matching (see the no-swap
+/// test below — v0.59.x, GitHub issue #2), and the newest-file-wins merge
 /// order are all covered here directly against synthetic XML — there is no
 /// real sample XML checked into this repo to reference instead.
 /// </summary>
@@ -98,11 +99,17 @@ public class XTranslatorImporterTests
         }
     }
 
-    /// <summary>xTranslator's "BOOK:DESC" is this tool's "BOOK CNAM" and vice
-    /// versa — a real mislabel discovered importing Book Covers Skyrim.esp
-    /// (see the class's own remarks on SwapBookDescCnam).</summary>
+    /// <summary>v0.59.x (GitHub issue #2): a SwapBookDescCnam step used to live
+    /// in the importer, on the (incorrect) belief that xTranslator's "DESC"/
+    /// "CNAM" labels for BOOK were the opposite of this tool's own. They
+    /// weren't — xTranslator's labels already match Mutagen/DSD's real
+    /// subrecord signatures (confirmed against Mutagen's own Book.xml record
+    /// definition and DSD's own documentation); this tool's OWN
+    /// PickUpTarget/ExtraTranslatableFields.cs had BOOK DESC/CNAM swapped.
+    /// Now that the root mapping is fixed there, xTranslator's "BOOK:DESC"
+    /// must match this tool's "BOOK DESC" directly, with no swap.</summary>
     [Fact]
-    public void Import_BookDescRecordType_SwapsToBookCnamToMatchThisToolsCandidates()
+    public void Import_BookDescRecordType_MatchesBookDescDirectly_NoSwap()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_xtimport_{Guid.NewGuid():N}");
         var importDir = Path.Combine(root, "import");
@@ -110,16 +117,16 @@ public class XTranslatorImporterTests
         try
         {
             File.WriteAllText(Path.Combine(importDir, "TestMod.xml"),
-                BuildXml("TestMod.esp", ("BOOK:DESC", "A short blurb.", "短い説明文。")));
+                BuildXml("TestMod.esp", ("BOOK:DESC", "Once upon a time...", "むかしむかし……")));
 
-            // This tool's own candidate list calls the same field "BOOK CNAM" (see PickUpTarget/ExtraTranslatableFields.cs).
-            var candidates = new List<Candidate> { new("TestMod.esp", "0x001", "BOOK CNAM", "A short blurb.") };
+            // This tool's own candidate list calls the same field "BOOK DESC" too (see PickUpTarget/ExtraTranslatableFields.cs).
+            var candidates = new List<Candidate> { new("TestMod.esp", "0x001", "BOOK DESC", "Once upon a time...") };
             using var log = OpenTestLog(root);
 
             var result = XTranslatorImporter.Load(importDir, candidates, log);
 
             var entry = Assert.Single(result);
-            Assert.Equal("BOOK CNAM", entry.DsdType);
+            Assert.Equal("BOOK DESC", entry.DsdType);
         }
         finally
         {

@@ -243,31 +243,20 @@ public static class XTranslatorImporter
             if (string.IsNullOrWhiteSpace(rec) || string.IsNullOrEmpty(source) || string.IsNullOrEmpty(dest)) continue;
 
             // xTranslator's "BOOK:FULL" -> this tool's "BOOK FULL".
+            // v0.59.x (GitHub issue #2): a SwapBookDescCnam step used to live
+            // here, compensating for what was believed to be xTranslator
+            // labeling BOOK's DESC/CNAM the opposite way from this tool. That
+            // was backwards — xTranslator's DESC/CNAM already matched
+            // Mutagen/DSD's real subrecord signatures (BOOK DESC = the book's
+            // body, BOOK CNAM = its separate short description); this tool's
+            // OWN PickUpTarget/ExtraTranslatableFields.cs had them swapped.
+            // Now that the root mapping is fixed there, xTranslator's labels
+            // need no adjustment on import.
             var recordType = rec.Replace(':', ' ');
-            recordType = SwapBookDescCnam(recordType);
             entries.Add((recordType, source, dest));
         }
         return (plugin, entries);
     }
-
-    /// <summary>xTranslator and Mutagen/DSD disagree on which raw subrecord label
-    /// names the BOOK record's two text fields: what xTranslator calls "DESC" is
-    /// the book's actual readable content (long, prose), and what it calls "CNAM"
-    /// is the short pre-read hover blurb — the exact opposite of this tool's own
-    /// "BOOK DESC"/"BOOK CNAM" (see PickUpTarget/ExtraTranslatableFields.cs:
-    /// "BOOK DESC" -> book.Description, "BOOK CNAM" -> book.BookText, matching
-    /// DSD's own runtime type strings, verified against real gameplay). Found by
-    /// importing Book Covers Skyrim.esp's translation file: without this swap,
-    /// every long novel-length entry silently failed to match (they're tagged
-    /// "BOOK:DESC" in the XML but "BOOK CNAM" in this tool's candidates) while
-    /// only short blurbs matched — a systematic failure, not scattered misses,
-    /// since it's a fixed 1:1 field mislabel rather than per-entry drift.</summary>
-    private static string SwapBookDescCnam(string recordType) => recordType switch
-    {
-        "BOOK DESC" => "BOOK CNAM",
-        "BOOK CNAM" => "BOOK DESC",
-        _ => recordType,
-    };
 
     // (RecordType, EnglishText) equality must be exact (not culture-sensitive) — this
     // has to match what Mutagen actually read, not a fuzzy human-similarity notion.

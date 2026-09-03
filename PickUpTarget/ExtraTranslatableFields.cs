@@ -48,9 +48,20 @@ public static class ExtraTranslatableFields
             case IWordOfPowerGetter woop:
                 yield return ("WOOP TNAM", woop.Translation);
                 break;
+            // v0.59.x (GitHub issue #2): these were swapped from day one.
+            // Confirmed against Mutagen's own record definition
+            // (Mutagen.Bethesda.Skyrim/Records/Major Records/Book.xml:
+            // BookText has recordType="DESC", Description has
+            // recordType="CNAM") and against DSD's own documentation
+            // (docs/modules/ROOT/pages/index.adoc on
+            // SkyHorizon3/SSE-Dynamic-String-Distributor: "BOOK CNAM" is
+            // listed among its flat/short fields, and its own worked example
+            // for "BOOK DESC" is a multi-paragraph in-character letter).
+            // BOOK DESC = the book's actual body (BookText); BOOK CNAM = the
+            // separate short description (Description).
             case IBookGetter book:
-                yield return ("BOOK DESC", book.Description);
-                yield return ("BOOK CNAM", book.BookText);
+                yield return ("BOOK DESC", book.BookText);
+                yield return ("BOOK CNAM", book.Description);
                 break;
             case IAmmunitionGetter ammo:
                 yield return ("AMMO DESC", ammo.Description);
