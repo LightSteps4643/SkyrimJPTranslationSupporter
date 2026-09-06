@@ -1357,10 +1357,6 @@ public static class PromptGenerator
         if (glossary.Count > 0)
             sb.Append($"  Known translations for words in this candidate: {string.Join(", ", glossary.Select(g => $"{g.English}={g.Japanese}"))}\n");
 
-        var transliterationHint = AutoTranslator.SuggestTransliteration(first.CurrentText);
-        if (transliterationHint != null)
-            sb.Append($"  Machine transliteration (reference only, accuracy not guaranteed): \"{transliterationHint}\"\n");
-
         // v0.48.1: does this candidate's text embed one of this load order's own
         // NPC_ FULL display names? Closes a gap found in DIAL FULL/INFO NAM1: a
         // pet/character name used mid-sentence ("Go home, Scooby.") carries no

@@ -34,8 +34,11 @@ public sealed record AutoTranslationResult(string Japanese, string Method, strin
 /// 対象として残る。当初、自前の発音ルールベース音訳エンジン（<see cref="Transliterator"/>）も
 /// この自動確定パイプラインに含める予定だったが、実データで検証した結果（"Dead Passenger"→
 /// "デアド・パッセングエル" 等）品質が不十分で、無条件に自動確定するとゲーム内の訳文の質を
-/// 落とす懸念があった。そちらは自動確定せず、AIチャット向けプロンプト内の「参考（未確定・
-/// 要判断）」ヒントとしてのみ提示する（<see cref="SuggestTransliteration"/>）。一方、③の
+/// 落とす懸念があった。一時期はAIチャット向けプロンプト内の「参考（未確定・要判断）」ヒント
+/// としてのみ提示していたが（`SuggestTransliteration`）、2026-09-06にそのヒント自体も撤去した
+/// ——綴りベースの機械的な変換は発音とズレやすく、コーパスに実例が無い未知語ならLLM自身の
+/// 判断に委ねたほうが良い、既知語ならコーパス完全一致（①③④）で既に拾えている、という判断
+/// による（`Translation/PromptGenerator.cs`のBuildCandidateBlock参照）。一方、③の
 /// コーパス由来辞書は実在する正しい precedent の組み合わせでしかないため、自動確定して良い
 /// という判断をしている。
 ///
@@ -454,15 +457,6 @@ public sealed class AutoTranslator
 
         trace?.Trace($"Resolve \"{text}\": unresolved (falls through to AI-chat / NameFallbackTranslator)");
         return null;
-    }
-
-    /// <summary>Best-effort transliteration draft for AI-chat prompt hints only —
-    /// NOT auto-applied to the Japanese column (see class remarks for why). Returns
-    /// null unless the text looks like a short proper-noun phrase.</summary>
-    public static string? SuggestTransliteration(string englishText)
-    {
-        var text = englishText.Trim();
-        return LooksLikeProperNounPhrase(text) ? Transliterator.TransliterateName(text) : null;
     }
 
     /// <summary>Heuristic gate for auto-transliteration: short (1-3 word), Title Case,
