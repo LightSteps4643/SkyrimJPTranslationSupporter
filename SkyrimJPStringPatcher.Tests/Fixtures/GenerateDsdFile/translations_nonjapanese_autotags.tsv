@@ -1,0 +1,10 @@
+FormId	WinningPlugin	RecordType	EnglishText	Japanese	Notes	Index	EditorId
+00000001:TagsMod.esp	TagsMod.esp	WEAP FULL	Iron Dagger Corpus	Iron Dagger Corpus	AutoCorpus	0
+00000002:TagsMod.esp	TagsMod.esp	ARMO FULL	Steel Shield Dsd	Steel Shield Dsd	AutoCorpusDsd	0
+00000003:TagsMod.esp	TagsMod.esp	SPEL FULL	Fireball Imported	Fireball Imported	AutoCorpusImported	0
+00000004:TagsMod.esp	TagsMod.esp	BOOK DESC	Ancient Tome Reference	Ancient Tome Reference	AutoCorpusReferenceTaiyaku	0
+00000005:TagsMod.esp	TagsMod.esp	SHOU FULL	Frost Breath Meaning	Frost Breath Meaning	AutoCorpusMeaning	0
+00000006:TagsMod.esp	TagsMod.esp	MISC FULL	Silver Ingot Translit	Silver Ingot Translit	AutoCorpusTransliterate	0
+00000007:TagsMod.esp	TagsMod.esp	NPC_ FULL	John Namefallback	John Namefallback	TranslationNameFallback	0
+00000008:TagsMod.esp	TagsMod.esp	QUST FULL	Dragon Quest Precedent	Dragon Quest Precedent	AutoCrossModPrecedent	0
+00000009:TagsMod.esp	TagsMod.esp	GMST DATA	pts	pts	AutoCorpusOverride	0	sSomeSetting2

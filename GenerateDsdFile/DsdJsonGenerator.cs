@@ -56,9 +56,8 @@ public static class DsdJsonGenerator
         }
 
         var entriesByPlugin = new Dictionary<string, List<DsdEntry>>();
-        var notJapaneseWarnings = 0;
         var badFormIdWarnings = 0;
-        var modifiedByUserNonJapaneseNotices = 0;
+        var nonJapaneseNotices = 0;
 
         foreach (var row in translated)
         {
@@ -92,27 +91,34 @@ public static class DsdJsonGenerator
             // 段階でも機械的には区別できないため、除外（＝原文のまま画面に
             // 残る）でも無警告の受理でもなく、ユーザーが後から見分けられる形で
             // DSDへ出力する。
-            var isNoJapaneseReviewTag = row.Notes.EndsWith("NoJapanese", StringComparison.Ordinal);
-
-            if (!LanguageDetector.ContainsJapanese(row.Japanese) && row.Notes is not ("AutoCorpusOverride" or "ModifiedByUser") && !isNoJapaneseReviewTag)
-            {
-                notJapaneseWarnings++;
-                if (notJapaneseWarnings <= 20)
-                    Console.Error.WriteLine($"[warn] '{row.FormId}' Japanese column doesn't look like Japanese — skipping: \"{row.Japanese}\"");
-                log.Detail("除外: Japanese列に日本語が含まれていない（訳し忘れ・貼り付けミスの可能性）",
-                    "Excluded: the Japanese column doesn't contain Japanese (possibly a missed translation or a paste mistake)",
-                    $"{row.FormId} [{row.RecordType}] \"{row.EnglishText}\" → \"{row.Japanese}\"");
-                trace?.Trace($"Exclude {row.FormId} [{row.RecordType}]: Japanese column doesn't look like Japanese (\"{row.Japanese}\")");
-                continue;
-            }
-
-            if (!LanguageDetector.ContainsJapanese(row.Japanese) && (row.Notes == "ModifiedByUser" || isNoJapaneseReviewTag))
+            //
+            // 2026-09-06: ①〜④（AutoCorpus/AutoCorpusDsd/AutoCorpusImported/
+            // AutoCorpusReferenceTaiyaku/AutoCorpusMeaning/AutoCorpusTransliterate/
+            // TranslationNameFallback）とAutoCrossModPrecedentも、上記と同じ
+            // 「除外せず情報ログのみ」の扱いに統一した。②③④は構造上、部分的な
+            // 非日本語混在を返す経路が無い（全部解決 or 未解決のオールオア
+            // ナッシング）ため、非日本語になり得るのは人間が編集した用語集
+            // （Data/mod_glossary/*.tsv・Data/name_glossary.tsv）に誤りが
+            // 混入した場合のみ——ModifiedByUserと同じ「人間の責任範疇」。
+            // ①系（AutoCorpus/AutoCorpusDsd/AutoCorpusImported/
+            // AutoCorpusReferenceTaiyaku/AutoCrossModPrecedent）も、ツール自身の
+            // 生成物ではなく外部の人間が作った翻訳データ（実データ・既存DSD・
+            // xTranslatorインポート・対訳リファレンス）そのものという点で
+            // AutoCorpusOverrideと同じ性質を持つため、意図的な非日本語値
+            // （"OK"→"OK"等）を正当に含みうる。
+            // 除外して黙って消してしまうより、警告ログで見えるようにした上で
+            // 出力を継続するほうが安全側——唯一の例外はAutoCorpusOverride
+            // （`Data/phrase_overrides.tsv`という人手管理の対訳表からの
+            // 完全一致）で、これは非日本語値が出ること自体が仕様として
+            // 織り込み済みのため、警告ログすら出さない完全サイレント扱いを
+            // 維持する。
+            if (!LanguageDetector.ContainsJapanese(row.Japanese) && row.Notes != "AutoCorpusOverride")
             {
                 // v0.55.2: promoted to a console [warn] too (previously log-file-
                 // only) — a user who ran generatedsdfile and never opened
                 // generatedsdfile.log had no way to notice this at all.
-                modifiedByUserNonJapaneseNotices++;
-                if (modifiedByUserNonJapaneseNotices <= 20)
+                nonJapaneseNotices++;
+                if (nonJapaneseNotices <= 20)
                     Console.Error.WriteLine($"[warn] '{row.FormId}' translation doesn't look like Japanese — keeping as-is (not excluded): \"{row.Japanese}\"");
                 log.Detail("情報: 訳文に日本語が含まれていないが、そのまま出力する（意図的な可能性があるため除外しない）",
                     "Note: a translation doesn't contain Japanese — included as-is (not excluded, since this may be intentional)",
@@ -151,10 +157,9 @@ public static class DsdJsonGenerator
             });
         }
 
-        if (notJapaneseWarnings > 20) Console.Error.WriteLine($"[warn] ...and {notJapaneseWarnings - 20} more non-Japanese rows skipped");
         if (badFormIdWarnings > 20) Console.Error.WriteLine($"[warn] ...and {badFormIdWarnings - 20} more unparseable FormId rows skipped");
-        if (modifiedByUserNonJapaneseNotices > 20) Console.Error.WriteLine($"[warn] ...and {modifiedByUserNonJapaneseNotices - 20} more non-Japanese rows kept as-is");
-        trace?.Debug($"Conversion done: {entriesByPlugin.Values.Sum(l => l.Count)} entries / excluded: non-Japanese {notJapaneseWarnings} bad-FormId {badFormIdWarnings}");
+        if (nonJapaneseNotices > 20) Console.Error.WriteLine($"[warn] ...and {nonJapaneseNotices - 20} more non-Japanese rows kept as-is");
+        trace?.Debug($"Conversion done: {entriesByPlugin.Values.Sum(l => l.Count)} entries / excluded: bad-FormId {badFormIdWarnings}");
 
         trace?.Info($"Write start: {outputDir} ({entriesByPlugin.Count} plugin(s))");
         DsdWriter.WriteAll(outputDir, entriesByPlugin, trace, outputTimestamp);
@@ -167,9 +172,9 @@ public static class DsdJsonGenerator
         log.Line($"出力したDSDエントリ: {totalWritten}", $"DSD entries written: {totalWritten}");
         log.Line($"出力先プラグインフォルダ数: {entriesByPlugin.Count}", $"Output plugin folders: {entriesByPlugin.Count}");
         log.Line($"出力先: {outputDir}", $"Output path: {outputDir}");
-        if (modifiedByUserNonJapaneseNotices > 0)
-            log.Line($"日本語以外の訳文のまま出力（手動編集、または⑤⑥が翻訳不要と判断した候補）: {modifiedByUserNonJapaneseNotices}件（除外はしていない。詳細は下記セクション）",
-                $"Rows output as-is despite not containing Japanese (a manual edit, or a ⑤/⑥ candidate judged untranslatable): {modifiedByUserNonJapaneseNotices} (not excluded — see the section below for details)");
+        if (nonJapaneseNotices > 0)
+            log.Line($"日本語以外の訳文のまま出力（自動解決手法・手動編集のいずれか、または⑤⑥が翻訳不要と判断した候補）: {nonJapaneseNotices}件（除外はしていない。詳細は下記セクション）",
+                $"Rows output as-is despite not containing Japanese (an auto-resolution method, a manual edit, or a ⑤/⑥ candidate judged untranslatable): {nonJapaneseNotices} (not excluded — see the section below for details)");
         log.Line("※出力された各エントリの内容は、出力先の .json を参照",
             "* See the output .json for each entry's actual content");
 

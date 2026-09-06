@@ -33,16 +33,22 @@ public class DsdJsonGeneratorTests
     /// TranslationDetailForm, e.g. keeping a proper noun like "Bob" as-is,
     /// deserves the same trust as a curated override, not a second-guess); a
     /// translated row whose Japanese column isn't actually Japanese AND carries
-    /// no resolution-method/ModifiedByUser tag at all (異常系). Note this last
-    /// case can't actually arise through this tool's own pipeline — WriteTranslationTemplate
-    /// only ever fills the Japanese column together with a Notes tag (the
-    /// resolution method, or ModifiedByUser) — so a blank-Notes row with
-    /// Japanese text implies the .tsv was hand-edited outside the tool
-    /// entirely; that's exactly the untrusted case this check is a safety net
-    /// for. An unparseable FormId (異常系, a corrupted row) is also covered.
-    /// A non-zero Index (正常系 — DSD's indexed types, e.g. a quest objective)
-    /// confirms it passes through untouched, not silently reset to 0.
-    /// Two different winning plugins split the output across two files.</summary>
+    /// no resolution-method/ModifiedByUser tag at all (準正常系 — 2026-09-06: no
+    /// longer excluded either, since the exclusion branch was removed entirely
+    /// in favor of the same informational-note treatment ModifiedByUser/
+    /// *NoJapanese already get; see Run_NonJapaneseAutoResolutionTags_
+    /// ShouldBeIncludedWithNoteNotExcluded for the tag-by-tag coverage). This
+    /// row's blank Notes still can't actually arise through this tool's own
+    /// pipeline — WriteTranslationTemplate only ever fills the Japanese column
+    /// together with a Notes tag — so it implies the .tsv was hand-edited
+    /// outside the tool; it's kept here as a characterization of that
+    /// "unknown/blank tag" edge case, not as an exclusion guard anymore. An
+    /// unparseable FormId (異常系, a corrupted row) is still excluded, since
+    /// that's a structurally different problem (can't be written to a plugin
+    /// folder at all, not a content-trust question). A non-zero Index
+    /// (正常系 — DSD's indexed types, e.g. a quest objective) confirms it
+    /// passes through untouched, not silently reset to 0. Two different
+    /// winning plugins split the output across two files.</summary>
     [Fact]
     public void Run_BasicFixture_WritesExpectedEntriesPerPlugin_SkipsBlankAndInvalidRows()
     {
@@ -92,7 +98,13 @@ public class DsdJsonGeneratorTests
     /// v0.55.2: found via real usage — a user who ran generatedsdfile.exe
     /// directly never opens generatedsdfile.log, so a log-file-only note went
     /// completely unnoticed. Promoted to a console [warn] line too, so it's
-    /// visible without opening the log.</summary>
+    /// visible without opening the log.
+    ///
+    /// 2026-09-06: the exclusion branch was removed entirely, so the fixture's
+    /// other non-Japanese row (00011111:TestMod.esp, blank Notes) now ALSO
+    /// gets this same informational-note treatment instead of being excluded
+    /// — hence 2 notes, 0 exclusions, where this test previously expected
+    /// 1 and 1.</summary>
     [Fact]
     public void Run_ModifiedByUserNonJapanese_LogsANoteInsteadOfExcluding()
     {
@@ -114,15 +126,17 @@ public class DsdJsonGeneratorTests
                 Console.SetError(originalError);
             }
 
-            Assert.Equal(1, log.DetailCount(
+            Assert.Equal(2, log.DetailCount(
                 "情報: 訳文に日本語が含まれていないが、そのまま出力する（意図的な可能性があるため除外しない）",
                 "Note: a translation doesn't contain Japanese — included as-is (not excluded, since this may be intentional)"));
             Assert.Contains("[warn] '00099999:TestMod.esp' translation doesn't look like Japanese — keeping as-is (not excluded): \"Bob\"",
                 capturedError.ToString());
+            Assert.Contains("[warn] '00011111:TestMod.esp' translation doesn't look like Japanese — keeping as-is (not excluded): \"NotJapaneseOops\"",
+                capturedError.ToString());
 
-            // The untrusted (no-tag) non-Japanese row must still go through the
-            // real exclusion path, not get swept into this same note category.
-            Assert.Equal(1, log.DetailCount(
+            // The exclusion branch no longer exists — no non-Japanese row goes
+            // through it anymore, regardless of Notes tag.
+            Assert.Equal(0, log.DetailCount(
                 "除外: Japanese列に日本語が含まれていない（訳し忘れ・貼り付けミスの可能性）",
                 "Excluded: the Japanese column doesn't contain Japanese (possibly a missed translation or a paste mistake)"));
         }
@@ -184,6 +198,92 @@ public class DsdJsonGeneratorTests
                 "除外: Japanese列に日本語が含まれていない（訳し忘れ・貼り付けミスの可能性）",
                 "Excluded: the Japanese column doesn't contain Japanese (possibly a missed translation or a paste mistake)"));
             Assert.Contains("[warn] '000ABCDE:TestMod.esp' translation doesn't look like Japanese — keeping as-is (not excluded)", capturedError.ToString());
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>2026-09-06 TODO investigation (management repo's
+    /// todo/active.md): ①②③④ (and AutoCrossModPrecedent, once implemented) are
+    /// ALL either structurally incapable of returning partial non-Japanese
+    /// output (②③④ — see design/translation_resolution_chain.md's all-or-
+    /// nothing invariant) or, like AutoCorpusOverride, back themselves with
+    /// human-authored external translation data (AutoCorpus/AutoCorpusDsd/
+    /// AutoCorpusImported/AutoCorpusReferenceTaiyaku — real DSD files,
+    /// xTranslator imports, a bilingual reference table) where a legitimately
+    /// non-Japanese value is exactly as plausible as it is for
+    /// AutoCorpusOverride's curated "pts"->"pts". Current behavior instead
+    /// EXCLUDES all of these from DSD output (silently dropping a real,
+    /// intentional entry) whenever the sole non-Japanese-safe channel — a typo
+    /// in a human-edited glossary (Data/mod_glossary/*.tsv,
+    /// Data/name_glossary.tsv) — happens to fire. This test documents that
+    /// CURRENT (undesired) behavior as a RED characterization: every one of
+    /// these tags should end up INCLUDED with an informational note (the same
+    /// treatment ModifiedByUser/*NoJapanese already get), not excluded. It is
+    /// expected to FAIL until DsdJsonGenerator's exclusion branch is removed
+    /// in favor of widening the info-note branch's condition.
+    /// AutoCorpusOverride itself (row 9 in the fixture) is included as a
+    /// regression guard: it must stay fully silent — no exclusion AND no info
+    /// log — exactly as before, since that curated-exemption behavior isn't
+    /// changing.</summary>
+    [Fact]
+    public void Run_NonJapaneseAutoResolutionTags_ShouldBeIncludedWithNoteNotExcluded()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_dsd_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outDir = Path.Combine(root, "out");
+            using var log = OpenTestLog(root);
+
+            var originalError = Console.Error;
+            var capturedError = new StringWriter();
+            Console.SetError(capturedError);
+            try
+            {
+                DsdJsonGenerator.Run(FixturePath("translations_nonjapanese_autotags.tsv"), outDir, log, outputTimestamp: TestTimestamp);
+            }
+            finally
+            {
+                Console.SetError(originalError);
+            }
+
+            var dsdPath = Path.Combine(outDir, "SKSE", "Plugins", "DynamicStringDistributor", "TagsMod.esp", TestOutputFileName);
+            Assert.True(File.Exists(dsdPath), "TagsMod.esp's DSD output should exist even though every candidate row is non-Japanese.");
+            var json = File.ReadAllText(dsdPath);
+
+            var taggedNonJapaneseValues = new[]
+            {
+                "Iron Dagger Corpus",       // AutoCorpus
+                "Steel Shield Dsd",         // AutoCorpusDsd
+                "Fireball Imported",        // AutoCorpusImported
+                "Ancient Tome Reference",   // AutoCorpusReferenceTaiyaku
+                "Frost Breath Meaning",     // AutoCorpusMeaning
+                "Silver Ingot Translit",    // AutoCorpusTransliterate
+                "John Namefallback",        // TranslationNameFallback
+                "Dragon Quest Precedent",   // AutoCrossModPrecedent
+            };
+            foreach (var value in taggedNonJapaneseValues)
+                Assert.Contains(value, json);
+
+            // AutoCorpusOverride's "pts" must also still be included (unchanged).
+            Assert.Contains("pts", json);
+
+            // None of the 8 auto-resolution-tagged rows should have gone through
+            // the exclusion path.
+            Assert.Equal(0, log.DetailCount(
+                "除外: Japanese列に日本語が含まれていない（訳し忘れ・貼り付けミスの可能性）",
+                "Excluded: the Japanese column doesn't contain Japanese (possibly a missed translation or a paste mistake)"));
+
+            // Each should instead carry the same informational note ModifiedByUser/*NoJapanese get.
+            Assert.Equal(8, log.DetailCount(
+                "情報: 訳文に日本語が含まれていないが、そのまま出力する（意図的な可能性があるため除外しない）",
+                "Note: a translation doesn't contain Japanese — included as-is (not excluded, since this may be intentional)"));
+
+            // AutoCorpusOverride stays fully silent — no [warn] line for "pts" at all.
+            Assert.DoesNotContain("'00000009:TagsMod.esp'", capturedError.ToString());
         }
         finally
         {
