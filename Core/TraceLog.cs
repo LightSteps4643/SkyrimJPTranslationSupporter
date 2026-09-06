@@ -49,7 +49,7 @@ public sealed class TraceLog : IDisposable
         var path = Path.Combine(stageFolder, $"{stageName.ToLowerInvariant()}.trace.log");
         var writer = new StreamWriter(path, append: false, new UTF8Encoding(false)) { AutoFlush = true };
         var log = new TraceLog(writer, minLevel ?? ResolveMinLevel());
-        log.Info($"=== {stageName} start ({BuildVersion.Current}, level={log._minLevel}) ===");
+        log.Info($"=== {stageName} start (level={log._minLevel}) ===");
         return log;
     }
 

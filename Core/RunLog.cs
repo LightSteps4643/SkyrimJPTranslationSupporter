@@ -33,7 +33,7 @@ public sealed class RunLog : IDisposable
     private readonly List<(string Category, string Item)> _details = new();
     private readonly DateTime _startedAt = DateTime.Now;
 
-    private RunLog(string path, string stageName, string version, RunLogLang lang)
+    private RunLog(string path, string stageName, RunLogLang lang)
     {
         _path = path;
         _lang = lang;
@@ -42,7 +42,6 @@ public sealed class RunLog : IDisposable
             ? $" SkyrimJPStringPatcher — {stageName} 実行ログ"
             : $" SkyrimJPStringPatcher — {stageName} run log");
         _body.AppendLine(lang == RunLogLang.Ja ? $" 日時: {_startedAt:yyyy-MM-dd HH:mm:ss}" : $" Date: {_startedAt:yyyy-MM-dd HH:mm:ss}");
-        _body.AppendLine(lang == RunLogLang.Ja ? $" バージョン: {version}" : $" Version: {version}");
         _body.AppendLine("================================================================");
     }
 
@@ -58,7 +57,7 @@ public sealed class RunLog : IDisposable
     {
         Directory.CreateDirectory(stageFolder);
         var path = Path.Combine(stageFolder, $"{stageName.ToLowerInvariant()}.log");
-        return new RunLog(path, stageName, BuildVersion.Current, ResolveLang());
+        return new RunLog(path, stageName, ResolveLang());
     }
 
     private static RunLogLang ResolveLang()
@@ -201,12 +200,4 @@ public sealed class RunLog : IDisposable
         File.WriteAllText(_path, _body.ToString(), new UTF8Encoding(false));
         Console.WriteLine($"Wrote log: {_path}");
     }
-}
-
-/// <summary>Single place the version string lives, so every log says which build
-/// produced it (the folder-per-version workflow makes that the key fact when
-/// comparing two runs' logs).</summary>
-public static class BuildVersion
-{
-    public const string Current = "v0.58.0";
 }
