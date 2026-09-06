@@ -877,18 +877,35 @@ public static class PromptGenerator
                         var noJapaneseTag = methodTag + "NoJapanese";
                         answers[group.Key] = new AutoTranslationResult(japanese, noJapaneseTag, "");
                         trace?.Warning($"{stepLabelEn} [{plugin}] \"{group.Key}\": response parsed but contains no Japanese — saved as \"{noJapaneseTag}\" for review");
-                        log.Detail($"{stepNumber}.{stepLabelJa}: 応答は得られたが訳文に日本語が含まれない（翻訳不要な文字列か、翻訳失敗かは要レビュー）",
+                        // 2026-09-06: 従来はlog.Detailのみ（translation.logには残るが
+                        // 実行ログウィンドウにはリアルタイムで出ない）だった。他の
+                        // 未解決パターン（バッチ失敗・サーキットブレーカー・解釈不能な
+                        // レスポンス）と同様、その場で見えないと気づきにくいため
+                        // DetailAndReportへ変更した。
+                        log.DetailAndReport($"{stepNumber}.{stepLabelJa}: 応答は得られたが訳文に日本語が含まれない（翻訳不要な文字列か、翻訳失敗かは要レビュー）",
                             $"{stepNumber}. {stepLabelEn}: response parsed but the translation contains no Japanese (needs review — may be untranslatable content, or a genuine translation failure)",
-                            $"[{plugin}]  \"{group.Key}\" → \"{japanese}\"");
+                            $"[{plugin}]  \"{group.Key}\" → \"{japanese}\"",
+                            $"[{plugin}] {stepLabelEn}: 応答に訳文が含まれていましたが日本語ではなかったため、要レビューとして保存しました \"{group.Key}\" → \"{japanese}\"");
                     }
                 }
                 else
                 {
-                    trace?.Warning($"{stepLabelEn} skip [{plugin}] \"{group.Key}\": not found in batch response");
-                    log.DetailAndReport($"{stepNumber}.{stepLabelJa}で解決できなかった候補（バッチ応答に見つからず）",
-                        $"{stepNumber}. {stepLabelEn} could not resolve this candidate (missing from batch response)",
+                    // 2026-09-06: 以前は「not found in batch response」という
+                    // 事実だけを伝えていたが、これでは「モデルが単に省略した」
+                    // 「タブ区切り形式そのものを守らなかった」「原文を書き換えて
+                    // 返した」等、複数のあり得る原因のどれなのか実行ログ
+                    // ウィンドウを見ただけでは分からなかった（ユーザー指摘）。
+                    // 生の応答本文をそのまま出す案も検討したが、「スキップに
+                    // 至る条件はコード上ほぼ固定（このelse分岐に来る時点で、
+                    // ツールが解釈できる形で該当候補を突き合わせられなかった、
+                    // という一点に尽きる）」という指摘を受け、原因ごとに分岐
+                    // させるのではなく、この分岐に来た時点の共通の理由を
+                    // 人間向けの1文で言い切ることにした。
+                    trace?.Warning($"{stepLabelEn} skip [{plugin}] \"{group.Key}\": model's response wasn't in a format this tool could interpret");
+                    log.DetailAndReport($"{stepNumber}.{stepLabelJa}で解決できなかった候補（モデルの応答形式を解釈できず）",
+                        $"{stepNumber}. {stepLabelEn} could not resolve this candidate (model's response wasn't in an interpretable format)",
                         $"[{plugin}]  \"{group.Key}\"",
-                        $"[{plugin}] {stepLabelEn} skip \"{group.Key}\": not found in batch response");
+                        $"[{plugin}] {stepLabelEn}: モデルがツールで解釈可能なフォーマットでないレスポンスを返したため、スキップしました \"{group.Key}\"");
                 }
             }
 

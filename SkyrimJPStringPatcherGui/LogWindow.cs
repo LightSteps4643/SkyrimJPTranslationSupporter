@@ -39,6 +39,15 @@ public sealed class LogWindow : Form
     // ボタン名からも分かるようにしておく。
     private readonly Button _btnCancel = new() { Text = "翻訳処理キャンセル", AutoSize = true, Enabled = false, Margin = new Padding(6, 3, 6, 3) };
 
+    // v0.60.0: 翻訳実行中の進捗表示（プラグイン単位、未翻訳文字数ベース）。
+    // MainForm.RunCliAsyncが"translation"実行時のみ値を渡す——他のCLI呼び出し
+    // （pickuptarget/generatedsdfile）では非表示のまま。厳密な100%到達は保証
+    // しない（失敗した文字数も分子に含めてしまうし、②③④のような一瞬で終わる
+    // 手法と⑤⑥のように時間のかかる手法が混在する）——「全体のどのあたりまで
+    // 進んだか」がざっくり分かれば十分、という要件（ユーザーとの合意）。
+    private readonly ProgressBar _progressBar = new() { Width = 200, Minimum = 0, Maximum = 1000, Visible = false, Margin = new Padding(6, 3, 6, 3) };
+    private readonly Label _lblProgressPercent = new() { AutoSize = true, Visible = false, Margin = new Padding(0, 6, 6, 3) };
+
     // v0.53.0a: ステータス文字列（_lblStatus）は実行中の内容によって長さが大きく
     // 変わる（例:「実行中: translation ... --plugins-file=... --llm-batch-char-limit=...」）。
     // 以前はLeftToRightで横に並べていたため、文字列が長いとボタンが画面外へ押し出されたり
@@ -76,8 +85,23 @@ public sealed class LogWindow : Form
         Height = 500;
         StartPosition = FormStartPosition.CenterScreen;
 
+        // v0.60.0: キャンセルボタンと進捗表示を同じ行に横並びさせるため、
+        // その2つ（＋進捗バー・パーセント表示）だけをネストしたLeftToRightの
+        // パネルにまとめる——_topPanel自体はTopDownのまま（ステータス行の
+        // 「下」の固定行、という既存レイアウトを崩さない）。
+        var actionsRow = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.LeftToRight,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            WrapContents = false,
+        };
+        actionsRow.Controls.Add(_btnCancel);
+        actionsRow.Controls.Add(_progressBar);
+        actionsRow.Controls.Add(_lblProgressPercent);
+
         _topPanel.Controls.Add(_lblStatus);
-        _topPanel.Controls.Add(_btnCancel);
+        _topPanel.Controls.Add(actionsRow);
         Controls.Add(_txtLog);
         Controls.Add(_topPanel);
 
@@ -90,6 +114,14 @@ public sealed class LogWindow : Form
         };
     }
 
+    /// <summary>v0.60.0: prefixes each non-blank line with a "[HH:mm:ss] "
+    /// timestamp — a user watching a long run had no way to tell how much
+    /// time had passed between two log lines (e.g. how long a stuck-looking
+    /// LLM batch call had actually been running). An empty line is passed
+    /// through untouched (no "[HH:mm:ss] " on its own) — see MainForm's
+    /// RunCliAsync, which appends one blank line after every CLI invocation
+    /// finishes, purely as a visual separator between operations; stamping
+    /// that separator too would just be clutter.</summary>
     public void AppendLine(string line)
     {
         if (IsDisposed) return;
@@ -98,7 +130,8 @@ public sealed class LogWindow : Form
             _txtLog.BeginInvoke(() => AppendLine(line));
             return;
         }
-        _txtLog.AppendText(line + Environment.NewLine);
+        var prefixed = line.Length == 0 ? line : $"[{DateTime.Now:HH:mm:ss}] {line}";
+        _txtLog.AppendText(prefixed + Environment.NewLine);
     }
 
     public void SetStatus(string text)
@@ -110,6 +143,31 @@ public sealed class LogWindow : Form
             return;
         }
         _lblStatus.Text = text;
+    }
+
+    /// <summary>v0.60.0: 翻訳実行中の進捗（0.0〜1.0）を表示する。nullを渡すと
+    /// 非表示に戻す——"translation"以外のCLI呼び出しや、実行完了後はこちら。
+    /// 値は`Math.Clamp`で0〜1に丸めるので、呼び出し側が多少ズレた値（分子が
+    /// 分母を超える等）を渡しても表示が壊れることはない。</summary>
+    public void SetProgress(double? fraction)
+    {
+        if (IsDisposed) return;
+        if (_progressBar.InvokeRequired)
+        {
+            _progressBar.BeginInvoke(() => SetProgress(fraction));
+            return;
+        }
+        if (fraction is null)
+        {
+            _progressBar.Visible = false;
+            _lblProgressPercent.Visible = false;
+            return;
+        }
+        var clamped = Math.Clamp(fraction.Value, 0, 1);
+        _progressBar.Value = (int)Math.Round(clamped * _progressBar.Maximum);
+        _lblProgressPercent.Text = $"{clamped:P0}";
+        _progressBar.Visible = true;
+        _lblProgressPercent.Visible = true;
     }
 
     /// <summary>MainFormがSetBusy(true/false)と連動して呼ぶ——「押せる＝対象の実行が

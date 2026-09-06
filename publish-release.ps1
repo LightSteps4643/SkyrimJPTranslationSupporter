@@ -56,12 +56,28 @@ param(
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
 
+Push-Location $root
+$gitVersion = (git describe --tags 2>$null)
+Pop-Location
+if ([string]::IsNullOrWhiteSpace($gitVersion)) { $gitVersion = "unversioned" }
+
 if ([string]::IsNullOrWhiteSpace($OutputDir)) {
-    Push-Location $root
-    $gitVersion = (git describe --tags 2>$null)
-    Pop-Location
-    if ([string]::IsNullOrWhiteSpace($gitVersion)) { $gitVersion = "unversioned" }
     $OutputDir = Join-Path (Join-Path (Split-Path -Parent $root) "Releases") "SkyrimJPTranslationSupporter-$gitVersion"
+}
+
+# v0.60.0: exe内に埋め込むバージョン（ウィンドウタイトル表示用）。MSBuildの
+# Versionプロパティは "Major.Minor.Patch[-prerelease]" 形式を要求するため、
+# タグが無い("unversioned")場合や、gitが使えない場合はそのまま渡すとpublish
+# 自体が失敗する（実機で確認済み: 'unversioned'はNuGetのバージョンパーサーに
+# 拒否される）。gitタグから何コミットか進んだ状態（例: v0.59.4-3-gabc1234）は
+# 問題なく通ることも確認済みなので、ここでは「vX.Y.Zで始まっているか」だけを
+# 緩くチェックし、それ以外は-p:Versionを渡さず.NET SDKの既定値（1.0.0）に
+# フォールバックする（表示が味気なくなるだけで、publish自体は失敗しない）。
+$assemblyVersionArgs = @()
+if ($gitVersion -match '^v(\d+\.\d+\.\d+)') {
+    $assemblyVersionArgs = @("-p:Version=$($gitVersion.TrimStart('v'))")
+} else {
+    Write-Host "警告: gitタグの形式が想定と異なるため（'$gitVersion'）、exeへのバージョン埋め込みをスキップします。"
 }
 $cliOutputDir = Join-Path $OutputDir "SkyrimJPStringPatcher"
 
@@ -84,6 +100,7 @@ Write-Host "--- GUI (SkyrimJPStringPatcherGui) を publish ---"
 dotnet publish (Join-Path $root "SkyrimJPStringPatcherGui\SkyrimJPStringPatcherGui.csproj") `
     -c Release -r win-x64 --self-contained true `
     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+    @assemblyVersionArgs `
     -o $OutputDir
 if ($LASTEXITCODE -ne 0) { throw "GUIのpublishに失敗しました（exit code $LASTEXITCODE）" }
 

@@ -235,7 +235,7 @@ public sealed class MainForm : Form
 
     public MainForm()
     {
-        Text = "Skyrim JP Translation Supporter";
+        Text = Services.AppVersion.FormatWindowTitle("Skyrim JP Translation Supporter", System.Reflection.Assembly.GetExecutingAssembly().GetName().Version);
         Width = 1150;
         Height = 850;
         StartPosition = FormStartPosition.CenterScreen;
@@ -984,7 +984,12 @@ public sealed class MainForm : Form
     /// 反映する。これは対象プラグイン全ての translations.tsv を①バニラコーパス
     /// のみの状態へ書き戻す破壊的操作（ModifiedByUser行を含め全て）——⑤⑥の生成AI・
     /// ローカルLLM翻訳結果もここで消えるため、「翻訳状況を初期化」等と同様に
-    /// 実行前に確認する。</summary>
+    /// 実行前に確認する。
+    /// v0.60.0: バックアップ直後、pickuptarget再実行前にTranslation/out_temp
+    /// 全体を削除する（TranslationOutTempCleaner）——今回のスキャンで候補が
+    /// 無くなったプラグインの古いフォルダが削除されずに残り続け、プラグイン
+    /// 一覧（LoadData）に実態と合わない古い未翻訳件数が表示され続ける問題への
+    /// 対応。</summary>
     private async void BtnReloadMo2_Click(object? sender, EventArgs e)
     {
         if (string.IsNullOrWhiteSpace(Mo2Dir) || !Directory.Exists(Mo2Dir))
@@ -996,7 +1001,8 @@ public sealed class MainForm : Form
         var confirm = MessageBox.Show(this,
             "MO2を再読込し、翻訳状況を初期化します。\n" +
             "全プラグインの翻訳結果（手動での編集・生成AI/ローカルLLMでの翻訳結果を含む）を\n" +
-            "すべて消去し、初期状態に戻します。元に戻せません。よろしいですか？\n\n" +
+            "すべて消去し、初期状態に戻します。よろしいですか？\n" +
+            "（実行前の状態はTranslation\\bak\\に自動でバックアップされます）\n\n" +
             "（既存の翻訳結果を消さずに現在の状況を見るだけなら「再スキャン（読み取りのみ）」を使ってください）",
             "MO2再読込＆初期化", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
         if (confirm != DialogResult.OK) return;
@@ -1009,6 +1015,13 @@ public sealed class MainForm : Form
             ? Directory.GetDirectories(existingOutTempDir).Select(Path.GetFileName).OfType<string>()
             : Enumerable.Empty<string>();
         TranslationBackup.Backup(ProductRoot, allPluginFolderNames);
+
+        // v0.60.0: バックアップ済みなので、ここでTranslation/out_temp全体を
+        // 削除しておく——今回のスキャンで候補が無くなったプラグイン（既存DSDで
+        // 新たにカバーされた・ロードオーダーから外れた等）の古いフォルダが
+        // 削除されずに残り続け、この後のLoadDataでプラグイン一覧に古い（実態と
+        // 合わない）未翻訳件数がいつまでも表示され続けてしまう問題への対応。
+        TranslationOutTempCleaner.Clear(existingOutTempDir);
 
         // Remember the current selection before the table gets rebuilt.
         _deselectedPlugins.Clear();
@@ -1077,7 +1090,13 @@ public sealed class MainForm : Form
             await File.WriteAllLinesAsync(pluginsFilePath, selectedPlugins);
             var args = new List<string> { "translation", "PickUpTarget/out_temp", "Translation/out_temp", $"--plugins-file={pluginsFilePath}", $"--cancel-flag-path={_activeCancelFlagPath}" };
             args.AddRange(BuildOptionFlags());
-            if (!await RunCliAsync(args)) return;
+            // v0.60.0: 実行ログウィンドウの進捗バー用——選択プラグインそれぞれの
+            // 未翻訳文字数（ベース画面の一覧で既に計算済み、_rows参照）。
+            var pluginCharCounts = selectedPlugins.ToDictionary(
+                p => p,
+                p => _rows.FirstOrDefault(r => r.Plugin.Equals(p, StringComparison.OrdinalIgnoreCase))?.UntranslatedChars ?? 0L,
+                StringComparer.OrdinalIgnoreCase);
+            if (!await RunCliAsync(args, pluginCharCounts)) return;
 
             _translationExecuted = true;
             RefreshRowsFromTranslations(selectedPlugins);
@@ -1192,7 +1211,21 @@ public sealed class MainForm : Form
     /// Every action in this GUI funnels through here — see DESIGN_NOTES.md's GUI
     /// architecture note: the GUI's only responsibilities are argument-building,
     /// log relay, and this kind of pre-flight error checking.</summary>
-    internal async Task<bool> RunCliAsync(IReadOnlyList<string> arguments)
+    /// <param name="pluginCharsForProgress">v0.60.0: plugin -> its pre-scan
+    /// untranslated-char-count (from `_rows`, computed before this run even
+    /// starts). Only "翻訳実行" (BtnTranslate_Click) passes this — pickuptarget/
+    /// generatedsdfile leave it null, so the log window's progress bar simply
+    /// never appears for those. When provided, each "Target: {plugin} (...)"
+    /// line (see TranslationProgressParser) adds that plugin's already-known
+    /// char count to a running total, shown as a fraction of the selection's
+    /// full total. Deliberately approximate — a failed candidate's chars still
+    /// count as "processed" once its plugin finishes, and the percentage isn't
+    /// guaranteed to land on exactly 100% — because the actual requirement is
+    /// just "roughly how far along, and how much is left", not an exact
+    /// accounting (per-plugin granularity was an explicit choice: ⑤⑥ batch
+    /// multiple candidates per LLM call, so per-candidate granularity wouldn't
+    /// line up with the real unit of work anyway).</param>
+    internal async Task<bool> RunCliAsync(IReadOnlyList<string> arguments, IReadOnlyDictionary<string, long>? pluginCharsForProgress = null)
     {
         if (_productRoot == null)
         {
@@ -1231,9 +1264,19 @@ public sealed class MainForm : Form
         string? issuesLine = null;
         string? issuesPluginsLine = null;
         string? lastErrorLine = null;
+        var progressTotalChars = pluginCharsForProgress?.Values.Sum() ?? 0;
+        var progressDoneChars = 0L;
+        if (progressTotalChars > 0) _logWindow.SetProgress(0);
         void OnOutputLine(string line)
         {
             AppendLog(line);
+            if (pluginCharsForProgress != null && progressTotalChars > 0
+                && Services.TranslationProgressParser.TryParsePluginCompleted(line, out var completedPlugin)
+                && pluginCharsForProgress.TryGetValue(completedPlugin, out var chars))
+            {
+                progressDoneChars += chars;
+                _logWindow.SetProgress((double)progressDoneChars / progressTotalChars);
+            }
             // より長い方のプレフィックスを先にチェックする——
             // "##SJPTS_ISSUES_PLUGINS##"は"##SJPTS_ISSUES##"では始まらないため
             // 実際は衝突しないが、念のため意図を明確にする順序にしてある。
@@ -1285,6 +1328,13 @@ public sealed class MainForm : Form
             _currentRunCts = null;
             SetBusy(false);
             SetStatus("準備完了");
+            if (progressTotalChars > 0) _logWindow.SetProgress(null);
+            // v0.60.0: 空行を1つ挟んで区切りにする——実行ログウィンドウは
+            // 複数のCLI呼び出し（MO2再読込＆初期化はpickuptarget+translationの
+            // 2回、翻訳実行→続けてDSDファイル生成、等）の出力が続けて流れ込むため、
+            // どこからどこまでが1回の操作の出力かが分かりにくいという指摘への対応。
+            // 空行自体にはタイムスタンプを付けない（LogWindow.AppendLine参照）。
+            AppendLog("");
         }
     }
 

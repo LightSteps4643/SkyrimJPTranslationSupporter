@@ -185,7 +185,17 @@ public class PromptGeneratorTests
             var fakeLlm = FakeTextTranslator.Succeeding(
                 ("Sjpts Scrambled Gibberish Candidate", "Sjpts Scrambled Gibberish Candidate"));
 
-            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm);
+            var originalOut = Console.Out;
+            var capturedOut = new StringWriter();
+            Console.SetOut(capturedOut);
+            try
+            {
+                PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm);
+            }
+            finally
+            {
+                Console.SetOut(originalOut);
+            }
 
             Assert.Equal(1, fakeLlm.CallCount);
             var pluginDir = Path.Combine(outputDir, "SjptsMatchingEdgeCases");
@@ -196,6 +206,15 @@ public class PromptGeneratorTests
             // TranslationLocalLlm success so it surfaces for human review.
             Assert.Equal(("Sjpts Scrambled Gibberish Candidate", "TranslationLocalLlmNoJapanese"),
                 translations["Sjpts Scrambled Gibberish Candidate"]);
+
+            // 2026-09-06: this used to be log.Detail-only (translation.log
+            // only, invisible in the GUI's real-time log window, which just
+            // relays this process's Console output) — a user watching a long
+            // run had no way to notice a candidate got flagged for review
+            // until after the whole run finished. Now DetailAndReport also
+            // echoes it to Console immediately, same as the other ⑤⑥
+            // unresolved/needs-review paths.
+            Assert.Contains("要レビューとして保存しました", capturedOut.ToString());
         }
         finally
         {
@@ -400,6 +419,58 @@ public class PromptGeneratorTests
             Assert.Contains("2.意味合成: 無効化（--no-meaning）", logText);
             Assert.Contains("3.音訳分解: 無効化（--no-translit）", logText);
             Assert.Contains("4.NameFallbackTranslator: 無効化（--no-namefallback）", logText);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>2026-09-06: a candidate the model's batch response simply
+    /// never answers (omitted entirely -- FakeTextTranslator.Succeeding()
+    /// with no matching pair returns an empty, still-non-null response) must
+    /// stay unresolved AND explain why in the console output the GUI's
+    /// real-time log window relays -- previously this branch only said "not
+    /// found in batch response" without any human-readable reason, which a
+    /// user flagged as unhelpful ("just says it was skipped, not why"). The
+    /// agreed fix: since every path into this branch boils down to the same
+    /// root cause (the tool couldn't match the model's response to this
+    /// candidate in an interpretable way), one clear sentence covers it
+    /// rather than trying to sub-classify the underlying model behavior.</summary>
+    [Fact]
+    public void RunOne_LlmBatch_CandidateOmittedFromResponse_StaysUnresolvedAndExplainsWhyOnConsole()
+    {
+        const string plugin = "SjptsLlmSkipReasons.esp";
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outputDir = Path.Combine(root, "out_temp");
+            using var log = OpenTestLog(root);
+            // No answers at all -- the fake still returns a (non-null, empty)
+            // response, exactly like a model that ignored this candidate.
+            var fakeLlm = FakeTextTranslator.Succeeding();
+
+            var originalOut = Console.Out;
+            var capturedOut = new StringWriter();
+            Console.SetOut(capturedOut);
+            try
+            {
+                PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm);
+            }
+            finally
+            {
+                Console.SetOut(originalOut);
+            }
+
+            var pluginDir = Path.Combine(outputDir, "SjptsLlmSkipReasons");
+            var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
+
+            // Left unresolved (no tag, blank Japanese) -- unlike the
+            // NoJapanese case above, the tool never got an answer to store at all.
+            Assert.Equal(("", ""), translations["Sjpts Omitted By Model Candidate"]);
+
+            Assert.Contains("モデルがツールで解釈可能なフォーマットでないレスポンスを返したため、スキップしました", capturedOut.ToString());
         }
         finally
         {
