@@ -96,6 +96,9 @@ public static class ExtraTranslatableFields
             case INpcGetter npc:
                 yield return ("NPC_ SHRT", npc.ShortName);
                 break;
+            case IActorValueInformationGetter avif:
+                yield return ("AVIF DESC", avif.Description);
+                break;
         }
     }
 }

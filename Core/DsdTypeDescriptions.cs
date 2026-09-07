@@ -61,6 +61,7 @@ public static class DsdTypeDescriptions
         ["ALCH"] = "a potion/food item",
         ["AMMO"] = "an arrow/bolt",
         ["ARMO"] = "a piece of armor/clothing",
+        ["AVIF"] = "a game skill (e.g. Smithing, Destruction, Speech)",
         ["BOOK"] = "a book/scroll",
         ["CELL"] = "an interior area",
         ["CONT"] = "a container",

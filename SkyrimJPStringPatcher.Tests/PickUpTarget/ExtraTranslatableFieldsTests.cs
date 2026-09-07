@@ -1,3 +1,6 @@
+using Mutagen.Bethesda;
+using Mutagen.Bethesda.Plugins;
+using Mutagen.Bethesda.Skyrim;
 using SkyrimJPStringPatcher.Core;
 using SkyrimJPStringPatcher.PickUpTarget;
 
@@ -145,6 +148,59 @@ public class ExtraTranslatableFieldsTests
 
             Assert.Equal("Once upon a time, in the land of Skyrim...", bookDesc.CurrentText);
             Assert.Equal("A dusty old tome.", bookCnam.CurrentText);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>
+    /// 2026-09-07: AVIF DESC (a skill's description, e.g. Smithing/Destruction)
+    /// was found missing from ExtraTranslatableFields.cs's type switch entirely
+    /// -- confirmed via a from-source MECE audit against DSD's own
+    /// getTranslationType() (see design/dsd_internals.md) that AVIF DESC is a
+    /// real, DSD-supported kRuntime1 type (verified in-game via a manual DSD
+    /// JSON override), so this was a pure scan-side gap, not a DSD limitation.
+    /// Uses its own throwaway SkyrimMod-built fixture (same pattern as
+    /// Integration/PickUpTargetToTranslationScenarioTests.cs) rather than
+    /// extending the shared binary ExtraFieldsTest.esp fixture, since that
+    /// fixture's original generator script isn't kept in the repo.
+    /// </summary>
+    [Fact]
+    public void Run_AvifRecord_ProducesAnAvifDescCandidate()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_avifdesc_{Guid.NewGuid():N}");
+        var mo2Dir = Path.Combine(root, "mo2");
+        var modDir = Path.Combine(mo2Dir, "mods", "TestMod");
+        var profileDir = Path.Combine(mo2Dir, "profiles", "Default");
+        Directory.CreateDirectory(modDir);
+        Directory.CreateDirectory(profileDir);
+        Directory.CreateDirectory(Path.Combine(mo2Dir, "overwrite"));
+        try
+        {
+            const string plugin = "SjptsAvifDescTarget.esp";
+            const string englishText = "The art of creating and improving weapons and armor from raw materials.";
+            var modKey = ModKey.FromNameAndExtension(plugin);
+            var mod = new SkyrimMod(modKey, SkyrimRelease.SkyrimSE);
+            var avif = mod.ActorValueInformation.AddNew();
+            avif.EditorID = "SjptsAvifDescSkill";
+            avif.Name = "Smithing";
+            avif.Description = englishText;
+            mod.WriteToBinary(Path.Combine(modDir, plugin));
+
+            File.WriteAllText(Path.Combine(mo2Dir, "ModOrganizer.ini"),
+                "[General]\r\n" +
+                $"gamePath=@ByteArray({AppContext.BaseDirectory})\r\n" +
+                "selected_profile=@ByteArray(Default)\r\n");
+            File.WriteAllText(Path.Combine(profileDir, "modlist.txt"), "+TestMod\r\n");
+            File.WriteAllText(Path.Combine(profileDir, "plugins.txt"), $"*{plugin}\r\n");
+
+            using var log = RunLog.Open(Path.Combine(root, "PickUpTarget"), "PickUpTarget");
+            var result = PickUpTargetRunner.Run(mo2Dir, log);
+
+            var candidate = Assert.Single(result.Candidates, c => c.RecordType == "AVIF DESC");
+            Assert.Equal(englishText, candidate.CurrentText);
         }
         finally
         {
