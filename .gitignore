@@ -14,6 +14,11 @@ out/
 # 開発中の調査用スクラッチファイル
 tmp/
 
+# MOD単位の用語集（ファイル名がユーザーの導入MOD名そのものになるため、
+# 個人の導入MODリストの流出を避ける目的で追跡しない。ツールが雛形を自動生成、
+# 人が日本語列を埋める資産だが、公開リポジトリでは追跡しない方針とした）
+Data/mod_glossary/*.tsv
+
 # xTranslatorインポート用フォルダ（ユーザーが自分の翻訳ファイルを置く場所）
 Translation/import/*
 !Translation/import/.gitkeep
