@@ -6,8 +6,9 @@
     通常の `dotnet build` は開発用の bin/Debug 配下に出力するだけで、このスクリプトの
     対象ではない。リリースを作るときだけ、このスクリプトを個別に実行する。
 
-    - CLI（SkyrimJPStringPatcher.csproj）とGUI（SkyrimJPStringPatcherGui.csproj）を、
-      どちらも自己完結型（--self-contained true、win-x64。.NETランタイムの事前
+    - CLI（SkyrimJPStringPatcher.csproj）・SJPTS_InterfaceText（SJPTS_InterfaceText.csproj、
+      Interface\Translations翻訳用の別CLI）・GUI（SkyrimJPStringPatcherGui.csproj）の
+      3つを、どれも自己完結型（--self-contained true、win-x64。.NETランタイムの事前
       インストール不要）で publish する。
     - v0.54.2: 単一ファイル発行（-p:PublishSingleFile=true）も併用する。Nexus Modsの
       検疫（quarantine）対策——自己完結型配布は大量のランタイムDLL（実測485個の
@@ -22,6 +23,8 @@
       ことで、ランチャー（.bat/.lnk）を挟まず直接ダブルクリックで起動できる。
       CLIを別フォルダへ分けているのは、ユーザーが誤って直接実行してしまう混乱を
       避けるため（CLIは通常GUI経由でのみ使う）。
+    - 2026-09-12: SJPTS_InterfaceTextも同じ理由で `SJPTS_InterfaceText` サブフォルダへ
+      分ける（InterfaceTextCliLocator.TryAutoDetect が期待する配置と一致させる）。
       【重要】同じフォルダに両方を自己完結型でpublishすると、それぞれが依存する
       ランタイムDLL（例: System.Text.Encoding.CodePages）のバージョンが食い違う場合に
       後から publish した方が前の必須ファイルを上書きし、実行時エラーになることを
@@ -30,6 +33,8 @@
     - Data/ フォルダは各csprojのContent項目により publish 時に自動でコピーされる。
     - Translation/import/（xTranslator用インポートフォルダ、ユーザーが自分の
       翻訳ファイルを置く場所）は空のまま作成しておく。
+    - InterfaceText/Translation/import/（SJPTS_InterfaceText側のインポートフォルダ、
+      $Key&lt;TAB&gt;Text形式の*_japanese.txtを置く場所）も同様に空のまま作成しておく。
     - ソースコード（*.cs/*.csproj）・DESIGN_NOTES.md等の開発用ドキュメントは
       publish出力に含まれない（dotnet publishはビルド成果物のみを出力するため）。
     - v0.59.0: 配布フォルダと同じ場所に、フォルダ名と同名のzipファイル
@@ -80,6 +85,7 @@ if ($gitVersion -match '^v(\d+\.\d+\.\d+)') {
     Write-Host "警告: gitタグの形式が想定と異なるため（'$gitVersion'）、exeへのバージョン埋め込みをスキップします。"
 }
 $cliOutputDir = Join-Path $OutputDir "SkyrimJPStringPatcher"
+$interfaceTextOutputDir = Join-Path $OutputDir "SJPTS_InterfaceText"
 
 Write-Host "出力先: $OutputDir"
 if (Test-Path $OutputDir) {
@@ -88,6 +94,7 @@ if (Test-Path $OutputDir) {
 }
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 New-Item -ItemType Directory -Force -Path $cliOutputDir | Out-Null
+New-Item -ItemType Directory -Force -Path $interfaceTextOutputDir | Out-Null
 
 Write-Host "--- CLI (SkyrimJPStringPatcher) を publish ---"
 dotnet publish (Join-Path $root "SkyrimJPStringPatcher.csproj") `
@@ -95,6 +102,13 @@ dotnet publish (Join-Path $root "SkyrimJPStringPatcher.csproj") `
     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
     -o $cliOutputDir
 if ($LASTEXITCODE -ne 0) { throw "CLIのpublishに失敗しました（exit code $LASTEXITCODE）" }
+
+Write-Host "--- CLI (SJPTS_InterfaceText) を publish ---"
+dotnet publish (Join-Path $root "SJPTS_InterfaceText\SJPTS_InterfaceText.csproj") `
+    -c Release -r win-x64 --self-contained true `
+    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+    -o $interfaceTextOutputDir
+if ($LASTEXITCODE -ne 0) { throw "SJPTS_InterfaceTextのpublishに失敗しました（exit code $LASTEXITCODE）" }
 
 Write-Host "--- GUI (SkyrimJPStringPatcherGui) を publish ---"
 dotnet publish (Join-Path $root "SkyrimJPStringPatcherGui\SkyrimJPStringPatcherGui.csproj") `
@@ -106,6 +120,9 @@ if ($LASTEXITCODE -ne 0) { throw "GUIのpublishに失敗しました（exit code
 
 $importDir = Join-Path $OutputDir "Translation\import"
 New-Item -ItemType Directory -Force -Path $importDir | Out-Null
+
+$interfaceTextImportDir = Join-Path $OutputDir "InterfaceText\Translation\import"
+New-Item -ItemType Directory -Force -Path $interfaceTextImportDir | Out-Null
 
 # v0.54.0: 謝辞・クレジット表記。エンドユーザーの目に触れる配布物に必ず含める。
 Copy-Item -Path (Join-Path $root "CREDITS.md") -Destination $OutputDir -Force
@@ -119,7 +136,8 @@ if (-not (Test-Path $zipPath)) { throw "zipの作成に失敗しました: $zipP
 
 Write-Host ""
 Write-Host "完了: $OutputDir"
-Write-Host "  Skyrim_JP_Translation_Supporter.exe（直下） / SkyrimJPStringPatcher\SkyrimJPStringPatcher.exe（サブフォルダ） / Data/ / Translation/import/ を含む"
+Write-Host "  Skyrim_JP_Translation_Supporter.exe（直下） / SkyrimJPStringPatcher\SkyrimJPStringPatcher.exe（サブフォルダ） /"
+Write-Host "  SJPTS_InterfaceText\SJPTS_InterfaceText.exe（サブフォルダ） / Data/ / Translation/import/ / InterfaceText/Translation/import/ を含む"
 Write-Host "  ソースコード・開発用ドキュメント（DESIGN_NOTES.md等）は含まれない"
 Write-Host "  起動は直下の「Skyrim_JP_Translation_Supporter.exe」から（CLIは通常直接使わない）"
 Write-Host "  zip: $zipPath"

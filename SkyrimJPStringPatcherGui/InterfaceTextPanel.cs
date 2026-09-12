@@ -42,55 +42,34 @@ namespace SkyrimJPStringPatcherGui;
 /// dictionary setup once per selected plugin (up to 175 times); RunMany does
 /// that setup once regardless of how many plugins are selected.
 /// </summary>
-public sealed class MainForm : Form
+public sealed class InterfaceTextPanel : Form
 {
     // --- CLI実行基盤（旧ベース画面から） ---
-    private readonly LogWindow _logWindow = new();
-    // v0.52.1a: 自前のボタン行（FlowLayoutPanel/TableLayoutPanelの組み合わせ）は
-    // 幅の確定タイミングでレイアウトが崩れやすく（実際に「設定」ボタンの位置が
-    // おかしくなる・「ログ」ボタンが消える不具合が起きた）、上部に不要な余白も
-    // 生まれていた。標準のMenuStripに置き換えることで、両方まとめて解消する。
-    private readonly MenuStrip _menuStrip = new();
-    private readonly ToolStripMenuItem _menuSettings = new("設定");
-    private readonly ToolStripMenuItem _menuLog = new("ログ");
+    // 実行ログウィンドウはMainForm側と共有する（1つのアプリに1つだけ表示する
+    // ため）——コンストラクタで受け取る。自前で new しない。
+    private readonly LogWindow _logWindow;
 
-    private AppSettings _settings = new();
+    // AppSettingsもMainForm側のインスタンスをコンストラクタ経由で共有する
+    // （LogWindowと同じ理由）。MainForm自身は_settingsフィールドをMainForm_Load
+    // （コンストラクタより後）でAppSettings.Load()により丸ごと差し替えるため、
+    // オブジェクト参照をコンストラクタ時点でそのまま受け取ると、差し替え後の
+    // 最新インスタンスを見失う（既知の課題：AppSettings staleness）。そのため
+    // 値そのものではなく、呼ぶたびにMainFormの「今の」_settingsを返すデリゲート
+    // (Func&lt;AppSettings&gt;) を受け取る。
+    private readonly Func<AppSettings> _getSettings;
     private string? _productRoot;
-    // 「Interface翻訳」タブ本体——LogWindow/AppSettings読み込み後にShow()する
-    // 必要があるためフィールドで保持する（BuildLayoutとMainForm_Loadをまたぐ）。
-    private InterfaceTextPanel? _interfaceTextPanel;
 
-    internal AppSettings Settings => _settings;
+    internal AppSettings Settings => _getSettings();
     internal string ProductRoot => _productRoot ?? throw new InvalidOperationException("Product root not resolved.");
-    internal string Mo2Dir => _settings.Mo2InstanceDir;
-
-    /// <summary>v0.57.0: "pickuptarget" args for the current MO2 dir, with the
-    /// optional mods/profile/overwrite path overrides appended when set.
-    /// v0.57.3: SettingsForm used to have its own "MO2フォルダをロード" call
-    /// site here too, but it only ran pickuptarget (never translation), so
-    /// clicking it never actually updated this window's own plugin list
-    /// (which reads Translation/out_temp, not PickUpTarget/out_temp) — a
-    /// button that visibly did nothing, confirmed as dead weight and removed.
-    /// This is now this window's own sole call site (below).</summary>
-    internal string[] BuildPickupTargetArgs(string mo2Dir)
-    {
-        var args = new List<string> { "pickuptarget", mo2Dir };
-        if (!string.IsNullOrWhiteSpace(_settings.Mo2ModsDirOverride))
-            args.Add($"--mods-dir={_settings.Mo2ModsDirOverride}");
-        if (!string.IsNullOrWhiteSpace(_settings.Mo2ProfileDirOverride))
-            args.Add($"--profile-dir={_settings.Mo2ProfileDirOverride}");
-        if (!string.IsNullOrWhiteSpace(_settings.Mo2OverwriteDirOverride))
-            args.Add($"--overwrite-dir={_settings.Mo2OverwriteDirOverride}");
-        return args.ToArray();
-    }
-    internal string LlmEndpoint => _settings.LlmEndpoint;
-    internal string LlmModel => _settings.LlmModel;
-    internal string LlmApiKey => _settings.LlmApiKey;
-    internal bool UseClaudeCodeCli => _settings.UseClaudeCodeCli;
-    internal string ClaudeCodeExePath => _settings.ClaudeCodeExePath;
-    internal string ClaudeCodeModel => _settings.ClaudeCodeModel;
-    internal string CloudAiEndpoint => _settings.CloudAiEndpoint;
-    internal string CloudAiApiKey => _settings.CloudAiApiKey;
+    internal string Mo2Dir => _getSettings().Mo2InstanceDir;
+    internal string LlmEndpoint => _getSettings().LlmEndpoint;
+    internal string LlmModel => _getSettings().LlmModel;
+    internal string LlmApiKey => _getSettings().LlmApiKey;
+    internal bool UseClaudeCodeCli => _getSettings().UseClaudeCodeCli;
+    internal string ClaudeCodeExePath => _getSettings().ClaudeCodeExePath;
+    internal string ClaudeCodeModel => _getSettings().ClaudeCodeModel;
+    internal string CloudAiEndpoint => _getSettings().CloudAiEndpoint;
+    internal string CloudAiApiKey => _getSettings().CloudAiApiKey;
 
     /// <summary>A CLI subprocess launched via RunCliAsync doesn't stop just
     /// because the GUI window closes — without this, closing mid-run leaves
@@ -133,12 +112,6 @@ public sealed class MainForm : Form
     private readonly Button _btnSelectAll = new() { Text = "すべて選択", AutoSize = true };
     private readonly Button _btnSelectNone = new() { Text = "すべて解除", AutoSize = true };
 
-    private readonly CheckBox _chkVanillaCorpus = new() { Text = "バニラコーパス（常時適用）", Checked = true, Enabled = false, AutoSize = true };
-    private readonly CheckBox _chkMeaning = new() { Text = "意味翻訳（品質中）", Checked = true, AutoSize = true };
-    private readonly CheckBox _chkTranslit = new() { Text = "音訳分解（品質中）", Checked = true, AutoSize = true };
-    // v0.59.0: 既定でOFFに変更（ユーザー指示）——当面はローカルLLM翻訳の方が
-    // 品質が高いため。
-    private readonly CheckBox _chkNameFallback = new() { Text = "簡易名前解決（品質中～低）", Checked = false, AutoSize = true };
     // v0.52.1a: ⑤ローカルLLM・⑥生成AI翻訳は独立したチェーン（CLI側もllm-local/
     // llm-cloudの2つを独立に受け取れる）なので、両方同時にONで構わない——⑤で
     // 解決できなかったものだけが⑥に回る。
@@ -196,32 +169,22 @@ public sealed class MainForm : Form
 
     // Width指定は付けない — v0.52.1a: BuildLayoutの最後でButtonLayout.UnifyWidthsが
     // 実際の文言の幅を測って一律に揃えるため、ここで決め打ちすると測定前に上書きされる。
-    private readonly Button _btnResetSelected = new() { Text = "選択プラグインを一括初期化", AutoSize = true };
-    // v0.52.1a: 「再スキャン」は読み取り専用に変更——Translation/out_temp配下の
-    // translations.tsvを直接スキャンするだけで、CLIは一切呼ばない（既存の
-    // 翻訳結果を壊さない）。新規プラグインの取り込み・コーパス更新の反映には
-    // pickuptarget＋translationの実行が必要なため、それは別ボタン
-    // （_btnReloadMo2、破壊的操作なので確認ダイアログ付き）に分離した。
-    private readonly Button _btnRescan = new() { Text = "再スキャン（読み取りのみ）", AutoSize = true };
-    private readonly Button _btnReloadMo2 = new() { Text = "MO2再読込＆初期化", AutoSize = true };
+    private readonly Button _btnReloadMo2 = new() { Text = "MO2対象Interfaceフォルダ読込み＆初期化", AutoSize = true };
+    private readonly Button _btnOpenImportFolder = new() { Text = "importフォルダを開く", AutoSize = true };
     private readonly Button _btnTranslate = new() { Text = "翻訳実行", AutoSize = true };
-    private readonly Button _btnGenerateDsd = new() { Text = "DSDファイル生成", AutoSize = true };
-    // v0.54.2（既知の課題22.）: 設定画面には既にimport/outフォルダを開く導線が
-    // あるが、ベース画面からも直接開けるようにする——2つとも主要アクション
-    // ボタンではないため、UnifyWidthsの幅統一対象には含めない。
-    private readonly Button _btnOpenImportFolder = new() { Text = "xTranslator翻訳XMLインポートフォルダを開く", AutoSize = true };
-    private readonly Button _btnOpenOutFolder = new() { Text = "DSD出力フォルダを開く", AutoSize = true };
+    private readonly Button _btnGenerateDsd = new() { Text = "翻訳ファイル出力", AutoSize = true };
+    private readonly Button _btnOpenOutFolder = new() { Text = "翻訳ファイル出力フォルダを開く", AutoSize = true };
 
     /// <summary>True once "翻訳実行" has completed successfully at least once in
-    /// this window — drives the warning if "DSDファイル生成" is pressed first
+    /// this window — drives the warning if "翻訳ファイル出力" is pressed first
     /// (untranslated candidates would otherwise silently ship in English).</summary>
     private bool _translationExecuted;
     private readonly Label _lblSummary = new() { AutoSize = true };
 
-    /// <summary>Plugins the user has unchecked — remembered across "再スキャン"
-    /// reloads (which rebuild the whole table) so an intentional exclusion isn't
-    /// silently lost when re-scanning after collecting more xTranslator files.</summary>
-    private readonly HashSet<string> _deselectedPlugins = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Mods the user has unchecked — remembered across MOD一覧の再構築
+    /// (「MO2対象Interfaceフォルダ読込み＆初期化」等) so an intentional exclusion
+    /// isn't silently lost.</summary>
+    private readonly HashSet<string> _deselectedMods = new(StringComparer.OrdinalIgnoreCase);
 
     // v0.58.6: 既知の課題（v0.58.1で一度対処した「bottomパネルのAutoSize計算が
     // 信頼できず、高さが実際の中身より大きい値のまま固定される」現象）が、
@@ -236,8 +199,10 @@ public sealed class MainForm : Form
     private TableLayoutPanel? _bottomOptionsPanel;
     private TableLayoutPanel? _bottomActionsPanel;
 
-    public MainForm()
+    public InterfaceTextPanel(LogWindow logWindow, Func<AppSettings> getSettings)
     {
+        _logWindow = logWindow;
+        _getSettings = getSettings;
         Text = Services.AppVersion.FormatWindowTitle("Skyrim JP Translation Supporter", System.Reflection.Assembly.GetExecutingAssembly().GetName().Version);
         Width = 1150;
         Height = 850;
@@ -246,6 +211,7 @@ public sealed class MainForm : Form
         BuildLayout();
         BuildGridColumns();
         InitTableColumns();
+
         Load += MainForm_Load;
         FormClosing += MainForm_FormClosing;
         _logWindow.CancelRequested += LogWindow_CancelRequested;
@@ -281,9 +247,9 @@ public sealed class MainForm : Form
 
         var result = MessageBox.Show(_logWindow,
             "処理を中断しますか？\n\n" +
-            "・すぐには止まりません。現在処理中のプラグインの完了を待ってから停止します。\n" +
+            "・すぐには止まりません。現在処理中のMODの完了を待ってから停止します。\n" +
             "・既に生成AI（クラウド）へ送信済みの呼び出し分の課金は取り消せません。\n" +
-            "・それ以降の未処理プラグインは翻訳されないまま残りますが、\n" +
+            "・それ以降の未処理MODは翻訳されないまま残りますが、\n" +
             "　次回「翻訳実行」で続きから再開できます（完了済み分は再翻訳されません）。",
             "処理の中断", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
         if (result != DialogResult.Yes) return;
@@ -303,20 +269,13 @@ public sealed class MainForm : Form
 
     private void MainForm_Load(object? sender, EventArgs e)
     {
-        // メインウィンドウのすぐ右隣にログウィンドウを開く（両方CenterScreenだと
-        // 完全に重なってしまうため、位置をずらす）。
-        _logWindow.StartPosition = FormStartPosition.Manual;
-        _logWindow.Location = new Point(Left + Width + 10, Top);
-        _logWindow.Show();
+        // ログウィンドウの表示・位置決めはMainForm側が行う（共有インスタンス、
+        // 1つのアプリに1つだけ表示するため）——ここでは何もしない。
 
-        _settings = AppSettings.Load();
+        // AppSettingsはMainForm側と共有（_getSettings）——ここで自前にLoad()しない。
         _productRoot = CliLocator.TryGetProductRoot();
-        _numLlmBatchCharLimit.Value = Math.Clamp(_settings.LlmLocalBatchCharLimit, (int)_numLlmBatchCharLimit.Minimum, (int)_numLlmBatchCharLimit.Maximum);
-        _numCloudAiBatchCharLimit.Value = Math.Clamp(_settings.LlmCloudBatchCharLimit, (int)_numCloudAiBatchCharLimit.Minimum, (int)_numCloudAiBatchCharLimit.Maximum);
-
-        // _settings読み込み後に呼ぶ（BuildLayout内のコメント参照）——先に呼ぶと
-        // InterfaceTextPanel自身のLoadが差し替え前の_settingsを見てしまう。
-        _interfaceTextPanel?.Show();
+        _numLlmBatchCharLimit.Value = Math.Clamp(_getSettings().LlmLocalBatchCharLimit, (int)_numLlmBatchCharLimit.Minimum, (int)_numLlmBatchCharLimit.Maximum);
+        _numCloudAiBatchCharLimit.Value = Math.Clamp(_getSettings().LlmCloudBatchCharLimit, (int)_numCloudAiBatchCharLimit.Minimum, (int)_numCloudAiBatchCharLimit.Maximum);
 
         // plugin_summary.txtがまだ無くても（一度もスキャンしていなくても）
         // LoadDataは空一覧として扱うので、常時ロードして問題ない。
@@ -325,15 +284,9 @@ public sealed class MainForm : Form
 
     private void BuildLayout()
     {
-        // v0.52.1a: 「設定」「ログ」はドロップダウン項目を持たない単純な
-        // メニュー項目——クリックすると即座にそれぞれのウィンドウを開く、
-        // アプリによくあるメニューバー形式。MenuStripは自前のDock=Top行を
-        // 作るより確実に上部に収まり、余分な余白も生まれない。
-        _menuSettings.Click += (_, _) => OpenSettings();
-        _menuLog.Click += (_, _) => _logWindow.ShowAndActivate();
-        _menuStrip.Items.Add(_menuSettings);
-        _menuStrip.Items.Add(_menuLog);
-        MainMenuStrip = _menuStrip;
+        // 「設定」「ログ」はMainForm側の共有MenuStripに任せる——このタブ自身は
+        // メニューを持たない（v0.52.1aで一度自前のMenuStripを持たせていたが、
+        // TabControlに載せると「設定 ログ」が二重に表示されてしまうため削除した）。
 
         // 3 rows: 説明文＋すべて選択/解除 → 表 → 下部パネル.
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
@@ -341,37 +294,7 @@ public sealed class MainForm : Form
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-        // 2026-09-11: design/gui_architecture.md — 既存の中身（root）は一切
-        // 変更せず、TabPageで包むだけ。新タブ（InterfaceTextPanel、
-        // design/interface_translations.md）を並べて切り替えられるようにする。
-        // 「設定」「ログ」（下のMenuStrip）は両タブ共通のまま、重複させない。
-        var tabControl = new TabControl { Dock = DockStyle.Fill };
-        var tabGameText = new TabPage("プラグイン翻訳");
-        tabGameText.Controls.Add(root);
-        var tabInterfaceText = new TabPage("Interface翻訳(β機能)");
-        // InterfaceTextPanelはMainForm.cs自身をコピーして作ったのでForm型のまま
-        // ——トップレベルウィンドウとしては使わず、TopLevel=falseで子コントロール化
-        // してTabPageへ埋め込む（WinForms標準のForm埋め込み手法）。
-        // 実行ログウィンドウ・AppSettingsはどちらもMainForm自身のインスタンスを
-        // 共有する（1つのアプリに1つだけ表示・1箇所だけに保存するため）。
-        // AppSettingsは値ではなくFunc&lt;AppSettings&gt;で渡す——_settingsは
-        // MainForm_Load（このBuildLayoutの後）でAppSettings.Load()により丸ごと
-        // 差し替わるため、ここで値渡しすると差し替え前の古いインスタンスを
-        // 掴んだままになる（既知の課題）。
-        // .Show()もここでは呼ばない——呼ぶとInterfaceTextPanel自身のLoadが
-        // このBuildLayout実行中（＝MainForm_Loadより前、_settings差し替え前）に
-        // 発火してしまい、文字数上限の初期表示が古い既定値のままになる。
-        // MainForm_Loadで_settings読み込み後に呼ぶ（下記参照）。
-        _interfaceTextPanel = new InterfaceTextPanel(_logWindow, () => _settings) { TopLevel = false, FormBorderStyle = FormBorderStyle.None, Dock = DockStyle.Fill };
-        tabInterfaceText.Controls.Add(_interfaceTextPanel);
-        tabControl.TabPages.Add(tabGameText);
-        tabControl.TabPages.Add(tabInterfaceText);
-
-        // WinFormsのDock処理順の慣例通り、Dock=FillのtabControlをDock=Topの
-        // MenuStripより先にControlsへ追加する（先に追加した方が背面に回り、
-        // 後から追加したTop/Bottom/Left/Right側が自分の分だけ領域を確保する）。
-        Controls.Add(tabControl);
-        Controls.Add(_menuStrip);
+        Controls.Add(root);
 
         var top = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(8) };
 
@@ -414,100 +337,81 @@ public sealed class MainForm : Form
         // ローカルLLM・生成AIの2行は横位置を互いに揃える必要はない（実測でも
         // 高さの差はわずかで、無理に揃えようとしたのがかえってズレの原因に
         // なっていた）。
-        // v0.58.1: 右のactions（ボタン列）が6行（うち1行は意図的な空き行）ある
-        // のに対し、こちらは元々3行しかなく、bottomの共有行高がactions側に
-        // 引っ張られる分だけ左側の下に空白ができていた（実機で確認済み）。
-        // 行の間に空き行を挟む案は実機で悪化が確認されたため、3つの内容行を
-        // まとめた後にまとめて3行分の空き行を追加する形にした（ユーザー指示）。
-        var options = new TableLayoutPanel { AutoSize = true, ColumnCount = 1, RowCount = 6 };
+        // actions（ボタン列）側が3行（MO2対象Interfaceフォルダ読込み＆初期化／
+        // 翻訳実行／出力フォルダを開く＋翻訳ファイル出力）なのに対し、こちらは
+        // 内容行が2行（ローカルLLM／生成AI）しかなく、bottomの共有行高が
+        // actions側に引っ張られる分だけ左側の下に空白ができる（ESP側と同じ
+        // 現象、RecalculateBottomHeight参照）。actionsの行数に合わせて
+        // 空き行を1行だけ追加する。
+        var options = new TableLayoutPanel { AutoSize = true, ColumnCount = 1, RowCount = 3 };
         _bottomOptionsPanel = options;
-
-        var optionsRow1 = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight };
-        optionsRow1.Controls.Add(_chkVanillaCorpus);
-        optionsRow1.Controls.Add(_chkMeaning);
-        optionsRow1.Controls.Add(_chkTranslit);
-        optionsRow1.Controls.Add(_chkNameFallback);
-        options.Controls.Add(optionsRow1, 0, 0);
 
         var llmRow = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, Margin = new Padding(0, 3, 0, 0) };
         llmRow.Controls.Add(_chkLlm);
         llmRow.Controls.Add(_lblLlmBatchCharLimit);
         llmRow.Controls.Add(_numLlmBatchCharLimit);
-        options.Controls.Add(llmRow, 0, 1);
+        options.Controls.Add(llmRow, 0, 0);
         _chkLlm.CheckedChanged += ChkLlm_CheckedChanged;
 
         var cloudAiRow = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, Margin = new Padding(0, 2, 0, 0) };
         cloudAiRow.Controls.Add(_chkCloudAi);
         cloudAiRow.Controls.Add(_lblCloudAiBatchCharLimit);
         cloudAiRow.Controls.Add(_numCloudAiBatchCharLimit);
-        options.Controls.Add(cloudAiRow, 0, 2);
+        options.Controls.Add(cloudAiRow, 0, 1);
         _chkCloudAi.CheckedChanged += ChkCloudAi_CheckedChanged;
 
-        // actions.stageSpacerと同じ考え方（AutoSize=false・高さをボタン基準に
-        // 固定した空パネル）で、内容行3つの後にまとめて3行分の空きを追加する。
+        // ボタン基準の高さに固定した空パネルで1行分だけ埋める（actions側の
+        // 行数=3に合わせる）。
         var optionsSpacerHeight = _btnReloadMo2.PreferredSize.Height;
-        options.Controls.Add(new Panel { AutoSize = false, Height = optionsSpacerHeight, Width = 1 }, 0, 3);
-        options.Controls.Add(new Panel { AutoSize = false, Height = optionsSpacerHeight, Width = 1 }, 0, 4);
-        options.Controls.Add(new Panel { AutoSize = false, Height = optionsSpacerHeight, Width = 1 }, 0, 5);
+        options.Controls.Add(new Panel { AutoSize = false, Height = optionsSpacerHeight, Width = 1 }, 0, 2);
 
         // v0.53.0a: 変更を即座にAppSettingsへ反映・保存する——以前はGUI上でしか
         // 保持されず、次回起動時に既定値へ戻ってしまっていた不具合の修正。
         _numLlmBatchCharLimit.ValueChanged += (_, _) =>
         {
-            _settings.LlmLocalBatchCharLimit = (int)_numLlmBatchCharLimit.Value;
-            _settings.Save();
+            var settings = _getSettings();
+            settings.LlmLocalBatchCharLimit = (int)_numLlmBatchCharLimit.Value;
+            settings.Save();
         };
         _numCloudAiBatchCharLimit.ValueChanged += (_, _) =>
         {
-            _settings.LlmCloudBatchCharLimit = (int)_numCloudAiBatchCharLimit.Value;
-            _settings.Save();
+            var settings = _getSettings();
+            settings.LlmCloudBatchCharLimit = (int)_numCloudAiBatchCharLimit.Value;
+            settings.Save();
         };
 
         bottom.Controls.Add(options, 0, 0);
 
-        // Stacked top-to-bottom: 選択プラグインを一括初期化 → 再スキャン（読み取りのみ）
-        // → MO2再読込＆初期化 → 翻訳実行 → DSDファイル生成. v0.54.2（既知の課題22.）:
-        // 「左隣に開くボタン」を、入れ子のFlowLayoutPanelではなく5行×2列の
-        // TableLayoutPanelで実現する——FlowLayoutPanelを入れ子にすると、各行の
-        // 幅がまちまちになり左端が揃わず見た目が崩れた（実機で確認済み）。
-        // グリッドなら列0（開くボタン、3・4行目のみ）と列1（主要アクション、
-        // 全5行）が自然に整列する。
-        // v0.55.0a: 「MO2再読込＆初期化」と「翻訳実行」の間に、ボタン1つ分程度の
-        // 空き行を挟む——押し間違い防止と、破壊的な再初期化ステージと非破壊の
-        // 翻訳ステージが別物であることを視覚的に示す狙い（ユーザー要望）。
-        var actions = new TableLayoutPanel { AutoSize = true, ColumnCount = 2, RowCount = 6 };
+        // Stacked top-to-bottom: MO2対象Interfaceフォルダ読込み＆初期化 →
+        // 翻訳実行 → 翻訳ファイル出力. 「左隣に開くボタン」を、入れ子の
+        // FlowLayoutPanelではなく3行×2列のTableLayoutPanelで実現する——
+        // FlowLayoutPanelを入れ子にすると、各行の幅がまちまちになり左端が
+        // 揃わず見た目が崩れた（実機で確認済み、ESP側の同種レイアウトと同じ理由）。
+        var actions = new TableLayoutPanel { AutoSize = true, ColumnCount = 2, RowCount = 3 };
         _bottomActionsPanel = actions;
         actions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         actions.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        for (var i = 0; i < 6; i++) actions.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        _btnResetSelected.Click += BtnResetSelected_Click;
-        _btnTranslate.Click += BtnTranslate_Click;
-        _btnRescan.Click += BtnRescan_Click;
+        for (var i = 0; i < 3; i++) actions.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         _btnReloadMo2.Click += BtnReloadMo2_Click;
+        _btnOpenImportFolder.Click += (_, _) => FolderOpener.OpenOrWarn(this, InterfaceTextImportDir);
+        _btnTranslate.Click += BtnTranslate_Click;
         _btnGenerateDsd.Click += BtnGenerateDsd_Click;
-        _btnOpenImportFolder.Click += (_, _) => FolderOpener.OpenOrWarn(this, Path.Combine(ProductRoot, "Translation", "import"));
-        _btnOpenOutFolder.Click += (_, _) => FolderOpener.OpenOrWarn(this, Path.Combine(ProductRoot, "out"));
-        _btnResetSelected.Margin = new Padding(3, 3, 3, 3);
-        _btnRescan.Margin = new Padding(3, 3, 3, 3);
+        _btnOpenOutFolder.Click += (_, _) => FolderOpener.OpenOrWarn(this, InterfaceTextOutDir);
         _btnReloadMo2.Margin = new Padding(3, 3, 3, 3);
+        _btnOpenImportFolder.Margin = new Padding(3, 3, 3, 3);
         _btnTranslate.Margin = new Padding(3, 3, 3, 3);
         _btnGenerateDsd.Margin = new Padding(3, 3, 3, 3);
-        _btnOpenImportFolder.Margin = new Padding(3, 3, 3, 3);
         _btnOpenOutFolder.Margin = new Padding(3, 3, 3, 3);
         // 列0はAutoSizeで content 幅ぴったりになるはずだが、念のため右揃えに
         // ピン留めして列1（既存ボタン列）にぴったり隣接させる。
         _btnOpenImportFolder.Anchor = AnchorStyles.Right;
         _btnOpenOutFolder.Anchor = AnchorStyles.Right;
-        actions.Controls.Add(_btnResetSelected, 1, 0);
-        actions.Controls.Add(_btnRescan, 1, 1);
-        actions.Controls.Add(_btnOpenImportFolder, 0, 2);
-        actions.Controls.Add(_btnReloadMo2, 1, 2);
-        var stageSpacer = new Panel { AutoSize = false, Height = _btnReloadMo2.PreferredSize.Height, Width = 1 };
-        actions.Controls.Add(stageSpacer, 1, 3);
-        actions.Controls.Add(_btnTranslate, 1, 4);
-        actions.Controls.Add(_btnOpenOutFolder, 0, 5);
-        actions.Controls.Add(_btnGenerateDsd, 1, 5);
-        ButtonLayout.UnifyWidths(new[] { _btnResetSelected, _btnRescan, _btnReloadMo2, _btnTranslate, _btnGenerateDsd });
+        actions.Controls.Add(_btnReloadMo2, 1, 0);
+        actions.Controls.Add(_btnOpenImportFolder, 0, 1);
+        actions.Controls.Add(_btnTranslate, 1, 1);
+        actions.Controls.Add(_btnOpenOutFolder, 0, 2);
+        actions.Controls.Add(_btnGenerateDsd, 1, 2);
+        ButtonLayout.UnifyWidths(new[] { _btnReloadMo2, _btnTranslate, _btnGenerateDsd });
         bottom.Controls.Add(actions, 1, 0);
 
         // v0.58.1: AutoSizeに頼らず、実際に配置されたoptions/actionsの下端座標
@@ -521,16 +425,20 @@ public sealed class MainForm : Form
         root.Controls.Add(bottom, 0, 2);
     }
 
-    private void OpenSettings()
-    {
-        var form = new SettingsForm(this);
-        PseudoModal.Show(form, this);
-    }
 
     private void BuildGridColumns()
     {
         _grid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "選択", HeaderText = "選択", DataPropertyName = "選択", Width = 50 });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "プラグイン", HeaderText = "プラグイン", DataPropertyName = "プラグイン", ReadOnly = true, AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
+        // 2026-09-12: 「MOD名」は表示専用（VFSでこのファイルを実際に提供した
+        // MODフォルダ名、mod_folder_name.txt由来）——内部の識別子（作業フォルダ名・
+        // --mods-file=・最終出力ファイル名）は常にTarget（*_english.txtのファイル名
+        // 由来）を使う。ファイル名≠MOD名のケース（実例: "aaa_english.txt"を
+        // 同梱する「Oblivion Interaction Icons DSD 1.4.3 patch」）があるため、
+        // 表示とロジックで別々の値を持つ必要がある。Targetは非表示列として
+        // グリッドに保持する（DataGridViewのセルとして参照できるようにするため、
+        // _tableだけでなく_grid.Columnsにも追加し、Visible=falseで隠す）。
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Target", DataPropertyName = "Target", Visible = false });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "MOD名", HeaderText = "MOD名", DataPropertyName = "MOD名", ReadOnly = true, AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "全体件数", HeaderText = "全体件数", DataPropertyName = "全体件数", ReadOnly = true });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "未翻訳件数", HeaderText = "未翻訳件数", DataPropertyName = "未翻訳件数", ReadOnly = true });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "翻訳率(件数)", HeaderText = "翻訳率(件数)", DataPropertyName = "翻訳率(件数)", ReadOnly = true });
@@ -551,36 +459,40 @@ public sealed class MainForm : Form
             Text = "翻訳状況を初期化",
             UseColumnTextForButtonValue = true,
             Width = 130,
+            // TODO(次のステップ): CLI呼び出し先をSJPTS_InterfaceText側に揃えるまでは
+            // 誤動作（ESP用CLIを呼んでしまう）を防ぐため無効化しておく。
+            ReadOnly = true,
         });
         _grid.CellContentClick += Grid_CellContentClick;
     }
 
-    /// <summary>Opens Translation/out_temp/&lt;plugin&gt;/translations.tsv — the CLI's
-    /// own per-candidate output — in a read-only viewer. Only meaningful after a
-    /// scan (or translate) has actually written that plugin's folder; otherwise
-    /// says so instead of showing an empty grid with no explanation.</summary>
+    /// <summary>Opens the mod's interface_translations.tsv (SJPTS_InterfaceText's own
+    /// per-mod output) in a read-only/editable viewer. Only meaningful after
+    /// `detect` has actually written that mod's folder; otherwise says so
+    /// instead of showing an empty grid with no explanation.</summary>
     private async void Grid_CellContentClick(object? sender, DataGridViewCellEventArgs e)
     {
         if (e.RowIndex < 0) return;
         var columnName = _grid.Columns[e.ColumnIndex].Name;
         if (columnName != DetailColumnName && columnName != ResetColumnName) return;
 
-        var plugin = (string)_grid.Rows[e.RowIndex].Cells["プラグイン"].Value!;
+        var target = (string)_grid.Rows[e.RowIndex].Cells["Target"].Value!;
+        var displayModName = (string)_grid.Rows[e.RowIndex].Cells["MOD名"].Value!;
 
         if (columnName == ResetColumnName)
         {
-            await ResetPlugin(plugin);
+            await ResetMod(target);
             return;
         }
 
-        var path = Path.Combine(ProductRoot, "Translation", "out_temp", PluginFolderName.From(plugin), "translations.tsv");
+        var path = Path.Combine(InterfaceTextWorkDir, target, "interface_translations.tsv");
         if (!File.Exists(path))
         {
-            MessageBox.Show(this, $"まだこのプラグインの翻訳結果がありません:\n{path}\n先に「MO2再読込＆初期化」または「翻訳実行」を行ってください。",
+            MessageBox.Show(this, $"まだこのMODの翻訳結果がありません:\n{path}\n先に「MO2対象Interfaceフォルダ読込み＆初期化」を行ってください。",
                 "ファイルが見つかりません", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
-        var detail = new TranslationDetailForm(plugin, path, onSaved: () => RefreshRowsFromTranslations(new[] { plugin }));
+        var detail = new InterfaceTextDetailForm(displayModName, path, onSaved: () => RefreshRowsFromTranslations(new[] { target }));
         // 擬似モーダル — 開いている間はこのウィンドウをロックする（ファイルを
         // 直接編集する操作なので、MO2再読込＆初期化等が走って同じファイルを
         // 上書きされると困る）。ウィンドウが1つに統合されたため、ロック先は
@@ -588,13 +500,13 @@ public sealed class MainForm : Form
         PseudoModal.Show(detail, this);
     }
 
-    /// <summary>「翻訳状況を初期化」— resets ONE plugin back to the same ①のみ
-    /// baseline as a fresh scan (--no-meaning/--no-translit/--no-namefallback),
-    /// and discards any "ModifiedByUser" rows for it (--discard-user-edits) —
-    /// the per-plugin equivalent of "as if I had just scanned and never touched
-    /// this plugin at all."</summary>
-    private async Task ResetPlugin(string plugin)
+    /// <summary>「翻訳状況を初期化」— TODO(次のステップ): 現在はグリッドの
+    /// ReadOnly=trueにより実際には呼ばれない（ボタン配線はまだ着手していない）。
+    /// ESP版のResetPluginを踏襲した形だけ残してあるが、中身はSJPTS_InterfaceText
+    /// 側のCLI呼び出しに置き換える必要がある。</summary>
+    private async Task ResetMod(string mod)
     {
+        var plugin = mod;
         var confirm = MessageBox.Show(this,
             $"「{plugin}」の翻訳状況を初期化します。\n" +
             "このプラグインの翻訳結果（手動での編集を含む）をすべて消去し、初期状態に戻します。\n" +
@@ -602,6 +514,10 @@ public sealed class MainForm : Form
             "翻訳状況を初期化", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
         if (confirm != DialogResult.OK) return;
 
+        // TODO(次のステップ): このメソッド自体がESP版ResetPluginの未変換のまま
+        // （グリッドの「初期化」列はReadOnly=trueで実際には呼ばれない）——
+        // SJPTS_InterfaceText側のCLI呼び出しに置き換える際、バックアップ先も
+        // InterfaceTextWorkDir/"interface_translations.tsv"に揃えること。
         TranslationBackup.Backup(Path.Combine(ProductRoot, "Translation", "out_temp"), new[] { PluginFolderName.From(plugin) }, "translations.tsv");
 
         SetBusy(true);
@@ -618,45 +534,6 @@ public sealed class MainForm : Form
         }
     }
 
-    /// <summary>「選択プラグインを一括初期化」— same reset as the per-row button,
-    /// but for every currently-checked（選択）plugin in one CLI invocation via
-    /// --plugins-file (see PromptGenerator.RunMany's remarks). Check "すべて選択"
-    /// first to reset the entire load order at once.</summary>
-    private async void BtnResetSelected_Click(object? sender, EventArgs e)
-    {
-        var selectedPlugins = GetSelectedPlugins();
-        if (selectedPlugins.Count == 0)
-        {
-            MessageBox.Show(this, "初期化するプラグインを少なくとも1つ選択してください。", "入力エラー", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-
-        var confirm = MessageBox.Show(this,
-            $"選択中の{selectedPlugins.Count}プラグインの翻訳状況を初期化します。\n" +
-            "対象プラグインの翻訳結果（手動での編集を含む）をすべて消去し、初期状態に戻します。\n" +
-            "元に戻せません。よろしいですか？",
-            "選択プラグインを一括初期化", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
-        if (confirm != DialogResult.OK) return;
-
-        TranslationBackup.Backup(Path.Combine(ProductRoot, "Translation", "out_temp"), selectedPlugins.Select(PluginFolderName.From), "translations.tsv");
-
-        SetBusy(true);
-        var pluginsFilePath = Path.Combine(Path.GetTempPath(), $"sjpts_reset_{Guid.NewGuid():N}.txt");
-        try
-        {
-            await File.WriteAllLinesAsync(pluginsFilePath, selectedPlugins);
-            var args = new[] { "translation", "PickUpTarget/out_temp", "Translation/out_temp", $"--plugins-file={pluginsFilePath}",
-                "--no-meaning", "--no-translit", "--no-namefallback", "--discard-user-edits" };
-            if (!await RunCliAsync(args)) return;
-            RefreshRowsFromTranslations(selectedPlugins);
-        }
-        finally
-        {
-            SetBusy(false);
-            try { File.Delete(pluginsFilePath); } catch { /* best-effort cleanup */ }
-        }
-    }
-
     /// <summary>Checkbox cells only commit to the bound DataTable when the cell
     /// loses focus — force an immediate commit on toggle so selection state and
     /// the summary count stay accurate right away (the standard WinForms pattern
@@ -669,37 +546,45 @@ public sealed class MainForm : Form
 
     private List<Row> _rows = new();
 
-    private sealed record Row(string Plugin, int Total, int Untranslated, double Ratio, long UntranslatedChars, double CharsRatio);
+    /// <param name="ModName">表示専用——このファイルを実際に提供したMODフォルダ名
+    /// （mod_folder_name.txt由来）。</param>
+    /// <param name="Target">内部識別子——*_english.txtのファイル名由来。作業フォルダ名・
+    /// --mods-file=・最終出力ファイル名（&lt;Target&gt;_japanese.txt）はすべてこちらを使う。
+    /// ModNameとTargetは一致しないことがある（例: "aaa_english.txt"を同梱する
+    /// 「Oblivion Interaction Icons DSD 1.4.3 patch」）。</param>
+    private sealed record Row(string ModName, string Target, int Total, int Untranslated, double Ratio, long UntranslatedChars, double CharsRatio);
+
+    /// <summary>SJPTS_InterfaceText（別CLI）が書き出す中間ファイルの置き場所。
+    /// ESP側の`Translation/out_temp`と対称になるよう`InterfaceText/Translation/
+    /// out_temp/&lt;MOD名&gt;/interface_translations.tsv`（Key/English/Japanese/
+    /// Resolvedの4列）＋`interfacetext.log`＋`prompt_batch*.txt`をまとめる
+    /// （design/interface_translations.md、2026-09-12のフォルダ構成整理参照）。
+    /// PickUpTarget相当のフォルダは無い——この処理の候補収集（VFSスキャン）は
+    /// 軽量でMOD単位で完結するため、独立した中間成果物にする実益が無いと判断した。</summary>
+    private string InterfaceTextWorkDir => Path.Combine(ProductRoot, "InterfaceText", "Translation", "out_temp");
+
+    /// <summary>ユーザーが用意した*_japanese.txt（このツール自身が読み書きする
+    /// $Key&lt;TAB&gt;Text形式そのもの——ESP側のTranslation/import、xTranslator
+    /// XML形式とは別物）の置き場所。`detect`実行時、MOD自身のロードオーダーが
+    /// 持つ_japanese.txtより優先される（Program.cs/DetectOneMod参照）。</summary>
+    private string InterfaceTextImportDir => Path.Combine(ProductRoot, "InterfaceText", "Translation", "import");
+
+    /// <summary>最終的にマージされた*_japanese.txtの出力先。ESP側の`out/`とは
+    /// 別系統（旧設計では共用していたが、生成物の場所が分かりにくいとの指摘で
+    /// 分離した）——`InterfaceText/GenerateTranslationFile/out/`。</summary>
+    private string InterfaceTextOutDir => Path.Combine(ProductRoot, "InterfaceText", "GenerateTranslationFile", "out");
 
     /// <summary>「再スキャン（読み取りのみ）」ボタンにも、起動直後の初期表示にも
-    /// 使う共通の読み込み処理。
-    ///
-    /// v0.52.1a: `Translation/out_temp/&lt;plugin&gt;/translations.tsv`を直接
-    /// スキャンして組み立てる（`plugin_summary.txt`はもう使わない）。以前は
-    /// `translation --all`実行時にだけ書かれる`plugin_summary.txt`（＝直近の
-    /// スキャン時点のスナップショット）に依存していたが、それだと「CLIで
-    /// 生成AI翻訳した後、GUIを開いただけ」のケースで数字が古いまま（あるいは
-    /// 一度もスキャンしていなければ空）になり、最新状況を見るには当時の
-    /// 「再スキャン」（今の「MO2再読込＆初期化」相当）を押すしかなく、それが
-    /// 翻訳結果を消してしまう、という本末転倒な状況になっていた。
-    /// translations.tsv自体が各プラグインの全候補（未翻訳含む）を常に持って
-    /// いるため、これを直接読めば実処理（＝reset）を一切挟まずに現状を正確に
-    /// 表示できる。該当フォルダが無ければ（起動直後・何もまだ実行していない）
-    /// 空一覧になるだけなので、常時呼んで問題ない。</summary>
-    /// <summary>v0.53.0a: `_table`の列は一度だけ作る——以前は`LoadData()`が呼ばれる
-    /// たびに（「再スキャン」を押すたび、起動時等）`_table.Columns.Clear()`で
-    /// 列を丸ごと作り直していたが、その間ずっと`_grid.DataSource`はこの`_table`に
-    /// バインドされたままだった。DataGridViewの列ヘッダクリックによる既定のソートを
-    /// 一度でも使うと、そのソート用にDataTable内部が保持する`Index`（RBTree実装）が
-    /// 直後の`Columns.Clear()`で参照先の列を失い、次の`Rows.Add()`で
-    /// `System.Data.Index`内部の`NullReferenceException`が発生していた
-    /// （実機で報告・原因特定済み）。列自体はどのタイミングで呼んでも同じ7列なので、
-    /// 列の構築だけをコンストラクタで一度きり行い、`LoadData()`は行の入れ替えだけに
-    /// 限定することで、バインド済みの`_table`に対して列を触らないようにした。</summary>
+    /// 使う共通の読み込み処理。<see cref="InterfaceTextWorkDir"/>配下の各MODフォルダの
+    /// interface_translations.tsvを直接読んで組み立てる——ESP側のScanTranslationsOutTemp
+    /// と同じ考え方（スナップショットではなく実ファイルを毎回読む）。該当フォルダが
+    /// 無ければ（まだ一度もdetectを実行していない）空一覧になるだけなので、
+    /// 常時呼んで問題ない。</summary>
     private void InitTableColumns()
     {
         _table.Columns.Add("選択", typeof(bool));
-        _table.Columns.Add("プラグイン", typeof(string));
+        _table.Columns.Add("Target", typeof(string));
+        _table.Columns.Add("MOD名", typeof(string));
         _table.Columns.Add("全体件数", typeof(int));
         _table.Columns.Add("未翻訳件数", typeof(int));
         _table.Columns.Add("翻訳率(件数)", typeof(string));
@@ -709,14 +594,14 @@ public sealed class MainForm : Form
 
     private void LoadData()
     {
-        _rows = ScanTranslationsOutTemp();
+        _rows = ScanInterfaceTranslations();
 
         _table.Rows.Clear();
 
         foreach (var r in _rows)
         {
-            var selected = !_deselectedPlugins.Contains(r.Plugin);
-            _table.Rows.Add(selected, r.Plugin, r.Total, r.Untranslated, $"{r.Ratio:F1}%", r.UntranslatedChars, $"{r.CharsRatio:F1}%");
+            var selected = !_deselectedMods.Contains(r.Target);
+            _table.Rows.Add(selected, r.Target, r.ModName, r.Total, r.Untranslated, $"{r.Ratio:F1}%", r.UntranslatedChars, $"{r.CharsRatio:F1}%");
         }
 
         _grid.DataSource = _table;
@@ -728,26 +613,16 @@ public sealed class MainForm : Form
 
     private void UpdateSummaryLabel()
     {
-        // v0.52.1a: まだ一度もスキャンしていない（＝plugin_summary.txtが存在
-        // しない）状態でこのウィンドウが開かれることがありうる（起動直後）。
-        // その場合は「0件」という数字だけを見せるより、次に何をすればいいかを
-        // 案内する——ただし、DSDファイル生成自体はスキャン不要（out_temp配下の
-        // 実ファイルを直接読むため）なので、それも明記しておく。
         if (_rows.Count == 0)
         {
-            _lblSummary.Text = "まだ翻訳データがありません。「MO2再読込＆初期化」を押すと、MODの一覧を読み込んで翻訳作業を開始できます。\n" +
-                "すでに翻訳ファイルを用意している場合は、そのまま「DSDファイル生成」を行うこともできます。\n" +
-                "「再スキャン（読み取りのみ）」は今ある翻訳結果を確認するだけです。";
+            _lblSummary.Text = "まだ翻訳データがありません。「MO2対象Interfaceフォルダ読込み＆初期化」を押すと、MODの一覧を読み込んで翻訳作業を開始できます。";
             return;
         }
 
         var selectedCount = _table.Rows.Cast<DataRow>().Count(r => r["選択"] is true);
         var totalUntranslated = _rows.Sum(r => r.Untranslated);
         var totalUntranslatedChars = _rows.Sum(r => r.UntranslatedChars);
-        _lblSummary.Text = $"{_rows.Count}プラグイン中 {selectedCount}件選択中 ／ 全体の未翻訳 {totalUntranslated}件・{totalUntranslatedChars:N0}字" +
-            "　（背景色が濃いほど未翻訳文字数が多いプラグイン）\n" +
-            "未翻訳文字数が多い場合、翻訳負荷を軽減するため、別途翻訳ファイルを準備する等の対応を検討してください。\n" +
-            "※翻訳対象を含むプラグインのみ表示（対象が1件も無いプラグインは一覧に出ません）";
+        _lblSummary.Text = $"{_rows.Count}MOD中 {selectedCount}件選択中 ／ 全体の未翻訳 {totalUntranslated}件・{totalUntranslatedChars:N0}字";
     }
 
     private void SetAllSelected(bool selected)
@@ -757,30 +632,29 @@ public sealed class MainForm : Form
         UpdateSummaryLabel();
     }
 
+    /// <summary>戻り値は内部識別子（Target）のリスト——CLIの--mods-file=・
+    /// RefreshRowsFromTranslations等、内部処理に渡すのはこちら（MOD名の表示名ではない）。</summary>
     private List<string> GetSelectedPlugins() =>
-        _table.Rows.Cast<DataRow>().Where(r => r["選択"] is true).Select(r => (string)r["プラグイン"]).ToList();
+        _table.Rows.Cast<DataRow>().Where(r => r["選択"] is true).Select(r => (string)r["Target"]).ToList();
 
-    /// <summary>Updates the grid's 未翻訳件数/文字数 for just the given plugins by
-    /// re-reading their own translations.tsv (the CLI's real output) — not by
-    /// re-scanning. "翻訳実行" (RunMany) never writes plugin_summary.txt (that's a
-    /// --all-only file, see RunMany's remarks), so this is how the grid learns
-    /// what just happened without a full "再スキャン" round-trip (which would also
-    /// reset everything back to the ①-only baseline).</summary>
-    private void RefreshRowsFromTranslations(IEnumerable<string> plugins)
+    /// <summary>Updates the grid's 未翻訳件数/文字数 for just the given mods by
+    /// re-reading their own interface_translations.tsv.</summary>
+    /// <param name="targets">内部識別子（Target）のリスト——表示名ではない。</param>
+    private void RefreshRowsFromTranslations(IEnumerable<string> targets)
     {
-        foreach (var plugin in plugins)
+        foreach (var target in targets)
         {
-            var path = Path.Combine(ProductRoot, "Translation", "out_temp", PluginFolderName.From(plugin), "translations.tsv");
-            var rows = TsvReader.Read(path);
+            var path = Path.Combine(InterfaceTextWorkDir, target, "interface_translations.tsv");
+            var rows = ReadInterfaceTranslationsTsv(path);
             if (rows.Count == 0) continue;
 
             var (total, untranslatedCount, ratio, untranslatedChars, charsRatio) = ComputeStats(rows);
 
-            var index = _rows.FindIndex(r => r.Plugin.Equals(plugin, StringComparison.OrdinalIgnoreCase));
+            var index = _rows.FindIndex(r => r.Target.Equals(target, StringComparison.OrdinalIgnoreCase));
             if (index < 0) continue;
             _rows[index] = _rows[index] with { Total = total, Untranslated = untranslatedCount, Ratio = ratio, UntranslatedChars = untranslatedChars, CharsRatio = charsRatio };
 
-            var dataRow = _table.Rows.Cast<DataRow>().FirstOrDefault(r => (string)r["プラグイン"] == plugin);
+            var dataRow = _table.Rows.Cast<DataRow>().FirstOrDefault(r => (string)r["Target"] == target);
             if (dataRow == null) continue;
             dataRow["全体件数"] = total;
             dataRow["未翻訳件数"] = untranslatedCount;
@@ -794,84 +668,67 @@ public sealed class MainForm : Form
         UpdateSummaryLabel();
     }
 
-    /// <summary>v0.53.0: 指定プラグインのtranslations.tsvを読み、Notes列が
-    /// <paramref name="methodTag"/>（"TranslationCloudLlm"／"TranslationLocalLlm"）
-    /// と一致する行数を数える——「⑤/⑥を有効にしたのに1件も解決できなかった」を
-    /// 検知するために使う（BtnTranslate_Click参照）。</summary>
-    private int CountResolvedByMethod(IEnumerable<string> plugins, string methodTag)
-    {
-        var count = 0;
-        foreach (var plugin in plugins)
-        {
-            var path = Path.Combine(ProductRoot, "Translation", "out_temp", PluginFolderName.From(plugin), "translations.tsv");
-            var rows = TsvReader.Read(path);
-            count += rows.Count(r => r.GetValueOrDefault("Notes", "") == methodTag);
-        }
-        return count;
-    }
-
-    /// <summary>v0.52.1a: `Translation/out_temp`直下の各プラグインフォルダの
-    /// translations.tsvを直接読んでグリッドの行を組み立てる——CLIが実際に
-    /// 書き出した現物のファイルなので、`plugin_summary.txt`のような
-    /// スキャン時点のスナップショットと違い、実行手段（GUI・CLI直接どちらで
-    /// 翻訳したか）に関わらず常に現状と一致する。</summary>
-    private List<Row> ScanTranslationsOutTemp()
+    /// <summary><see cref="InterfaceTextWorkDir"/>直下の各MODフォルダのinterface_translations.tsv
+    /// を直接読んでグリッドの行を組み立てる。</summary>
+    private List<Row> ScanInterfaceTranslations()
     {
         var rows = new List<Row>();
-        var translationOutTempDir = Path.Combine(ProductRoot, "Translation", "out_temp");
-        if (!Directory.Exists(translationOutTempDir)) return rows;
+        if (!Directory.Exists(InterfaceTextWorkDir)) return rows;
 
-        foreach (var pluginDir in Directory.GetDirectories(translationOutTempDir))
+        foreach (var modDir in Directory.GetDirectories(InterfaceTextWorkDir))
         {
-            var tsvPath = Path.Combine(pluginDir, "translations.tsv");
-            var tsvRows = TsvReader.Read(tsvPath);
-            if (tsvRows.Count == 0) continue;
+            // 2026-09-12: 0件（英語ソースのパース失敗等でkeyが1つも取れなかった
+            // MOD）も除外せず一覧に出す——除外すると、out_tempには実在するのに
+            // 一覧には出ない、という不整合が生じる（実データ調査で発見）。
+            var tsvPath = Path.Combine(modDir, "interface_translations.tsv");
+            var tsvRows = ReadInterfaceTranslationsTsv(tsvPath);
 
-            // フォルダ名はサニタイズされている場合がある（PluginFolderName.From
-            // 参照）ため、実際のプラグイン名はファイルの中身（WinningPlugin列）
-            // から取る方が確実。
-            var plugin = tsvRows[0].GetValueOrDefault("WinningPlugin", Path.GetFileName(pluginDir));
+            var target = Path.GetFileName(modDir);
+            // mod_folder_name.txt（detect/Program.csが書く、実際にこのファイルを
+            // 提供したMODフォルダ名）が無ければTargetをそのまま表示名として使う
+            // ——古いdetect実行結果との後方互換、またはファイルが何らかの理由で
+            // 欠けていた場合のフォールバック。
+            var modFolderNamePath = Path.Combine(modDir, "mod_folder_name.txt");
+            var displayModName = File.Exists(modFolderNamePath) ? File.ReadAllText(modFolderNamePath).Trim() : target;
+            if (displayModName.Length == 0) displayModName = target;
+
             var (total, untranslatedCount, ratio, untranslatedChars, charsRatio) = ComputeStats(tsvRows);
-            rows.Add(new Row(plugin, total, untranslatedCount, ratio, untranslatedChars, charsRatio));
+            rows.Add(new Row(displayModName, target, total, untranslatedCount, ratio, untranslatedChars, charsRatio));
         }
 
         return rows.OrderByDescending(r => r.UntranslatedChars).ToList();
     }
 
-    private static (int Total, int Untranslated, double Ratio, long UntranslatedChars, double CharsRatio) ComputeStats(
-        List<Dictionary<string, string>> rows)
+    /// <summary>SJPTS_InterfaceText/InterfaceTranslationsTsv.csのRead/Writeと同じ4列
+    /// 形式（Key/English/Japanese/Resolved）——InterfaceTextDetailForm.csの
+    /// InterfaceTranslationRow/ReadTsvと同じ理由（GUIはCore/Translationへの参照を
+    /// 持たない）で、ここでも小さく重複させている。</summary>
+    private static List<(string Key, string English, string Japanese, bool Resolved)> ReadInterfaceTranslationsTsv(string path)
     {
-        var untranslatedRows = rows.Where(r => string.IsNullOrEmpty(r.GetValueOrDefault("Japanese"))).ToList();
+        var rows = new List<(string, string, string, bool)>();
+        if (!File.Exists(path)) return rows;
+        foreach (var line in File.ReadAllLines(path, System.Text.Encoding.UTF8).Skip(1))
+        {
+            if (line.Length == 0) continue;
+            var cols = line.Split('\t');
+            if (cols.Length < 4) continue;
+            rows.Add((cols[0], cols[1], cols[2], cols[3] == "1"));
+        }
+        return rows;
+    }
+
+    /// <summary>InterfaceText形式の値は改行・タブを含み得ない（1行1値のファイル
+    /// 形式そのものの制約）ため、ESP側のComputeStatsと違いUnescapeは不要。</summary>
+    private static (int Total, int Untranslated, double Ratio, long UntranslatedChars, double CharsRatio) ComputeStats(
+        List<(string Key, string English, string Japanese, bool Resolved)> rows)
+    {
+        var untranslatedRows = rows.Where(r => !r.Resolved).ToList();
         var untranslatedCount = untranslatedRows.Count;
-        var untranslatedChars = untranslatedRows.Sum(r => (long)Unescape(r.GetValueOrDefault("EnglishText", "")).Length);
-        var totalChars = rows.Sum(r => (long)Unescape(r.GetValueOrDefault("EnglishText", "")).Length);
+        var untranslatedChars = untranslatedRows.Sum(r => (long)r.English.Length);
+        var totalChars = rows.Sum(r => (long)r.English.Length);
         var ratio = rows.Count == 0 ? 100.0 : 100.0 * (rows.Count - untranslatedCount) / rows.Count;
         var charsRatio = totalChars == 0 ? 100.0 : 100.0 * (totalChars - untranslatedChars) / totalChars;
         return (rows.Count, untranslatedCount, ratio, untranslatedChars, charsRatio);
-    }
-
-    // Mirrors Core/TsvEscaping.cs's Unescape — see TranslationDetailForm's identical
-    // helper for why this is duplicated rather than referencing Core. v0.55.4:
-    // rewritten to a single left-to-right scan — see Core/TsvEscaping.cs's
-    // remarks for why the old sequential-Replace version corrupted a literal
-    // backslash immediately followed by a literal 'n'/'t' (e.g. a Windows path).
-    private static string Unescape(string s)
-    {
-        var sb = new System.Text.StringBuilder(s.Length);
-        for (var i = 0; i < s.Length; i++)
-        {
-            if (s[i] == '\\' && i + 1 < s.Length)
-            {
-                switch (s[i + 1])
-                {
-                    case 'n': sb.Append('\n'); i++; continue;
-                    case 't': sb.Append('\t'); i++; continue;
-                    case '\\': sb.Append('\\'); i++; continue;
-                }
-            }
-            sb.Append(s[i]);
-        }
-        return sb.ToString();
     }
 
     private void Grid_CellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
@@ -886,65 +743,6 @@ public sealed class MainForm : Form
         var g = (int)(255 - t * 160);
         var b = (int)(255 - t * 170);
         e.CellStyle!.BackColor = Color.FromArgb(r, g, b);
-    }
-
-    /// <summary>v0.52.1a: ⑤ローカルLLM・⑥生成AI翻訳（クラウド）は独立したチェーン
-    /// ステップ（CLI側も--llm-local/--llm-cloudの2つを独立に受け取る）——両方
-    /// 同時にONで構わない。⑤で解決できなかったものだけが⑥に回る。</summary>
-    private List<string> BuildOptionFlags()
-    {
-        var flags = new List<string>();
-        if (!_chkMeaning.Checked) flags.Add("--no-meaning");
-        if (!_chkTranslit.Checked) flags.Add("--no-translit");
-        if (!_chkNameFallback.Checked) flags.Add("--no-namefallback");
-
-        if (_chkLlm.Checked)
-        {
-            flags.Add("--llm-local");
-            flags.Add($"--llm-local-model={LlmModel}");
-            if (!string.IsNullOrWhiteSpace(LlmEndpoint))
-                flags.Add($"--llm-local-endpoint={LlmEndpoint}");
-            // v0.58.1: 設定ウィンドウの「思考モードOFF」チェック（既定ON）に連動。
-            if (_settings.LlmLocalReasoningOff)
-                flags.Add("--llm-local-reasoning-effort=none");
-        }
-
-        if (_chkCloudAi.Checked)
-        {
-            // v0.52.1a: 「生成AI（クラウド）連携設定」ウィンドウで選ばれている方式を
-            // そのまま使う。Claude Code CLIならサブプロセス起動、OpenAI互換APIなら
-            // 専用のクラウドAIエンドポイント（CloudAiEndpoint、「ローカルLLM
-            // エンドポイント」とは別物）にAPIキー付きでHTTP——どちらになるかは
-            // 設定ウィンドウのタブ選択（UseClaudeCodeCli）次第で、ここではその
-            // 結果に従うだけ。
-            flags.Add("--llm-cloud");
-            if (UseClaudeCodeCli)
-            {
-                flags.Add("--llm-cloud-provider=claudecode");
-                if (!string.IsNullOrWhiteSpace(ClaudeCodeExePath))
-                    flags.Add($"--claude-code-exe={ClaudeCodeExePath}");
-                // モデル名はclaude側の既定に任せられるため省略可（ローカルLLMと違い必須ではない）。
-                if (!string.IsNullOrWhiteSpace(ClaudeCodeModel))
-                    flags.Add($"--llm-cloud-model={ClaudeCodeModel}");
-            }
-            else
-            {
-                flags.Add("--llm-cloud-provider=http");
-                flags.Add($"--llm-cloud-model={LlmModel}");
-                if (!string.IsNullOrWhiteSpace(CloudAiEndpoint))
-                    flags.Add($"--llm-cloud-endpoint={CloudAiEndpoint}");
-            }
-        }
-
-        // 既定値と異なるときだけ渡す——不要なフラグでコマンドラインを汚さない。
-        var llmBatchCharLimit = (int)_numLlmBatchCharLimit.Value;
-        if (llmBatchCharLimit != DefaultLlmLocalBatchCharLimit)
-            flags.Add($"--llm-local-batch-char-limit={llmBatchCharLimit}");
-        var cloudAiBatchCharLimit = (int)_numCloudAiBatchCharLimit.Value;
-        if (cloudAiBatchCharLimit != DefaultLlmCloudBatchCharLimit)
-            flags.Add($"--llm-cloud-batch-char-limit={cloudAiBatchCharLimit}");
-
-        return flags;
     }
 
     /// <summary>v0.54.2（既知の課題22.）: SettingsFormがローカルLLMのエンドポイント・
@@ -1005,24 +803,14 @@ public sealed class MainForm : Form
             "Beta機能: 生成AI翻訳（クラウド）", MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
 
-    /// <summary>v0.52.1a: 読み取り専用——Translation/out_temp配下の
-    /// translations.tsvを直接再スキャンするだけで、CLIは一切呼ばない。既存の
-    /// 翻訳結果（⑤⑥の結果含む）を一切変更しないため、確認ダイアログも不要。
-    /// 新規プラグインの取り込み・コーパス更新の反映が必要な場合は
-    /// 「MO2再読込＆初期化」（BtnReloadMo2_Click）を使うこと。</summary>
-    private void BtnRescan_Click(object? sender, EventArgs e) => LoadData();
-
-    /// <summary>「MO2再読込＆初期化」— pickuptarget＋translation --allを実行し、
-    /// 新規プラグインの取り込みやコーパス更新（xTranslatorインポート等）を
-    /// 反映する。これは対象プラグイン全ての translations.tsv を①バニラコーパス
-    /// のみの状態へ書き戻す破壊的操作（ModifiedByUser行を含め全て）——⑤⑥の生成AI・
-    /// ローカルLLM翻訳結果もここで消えるため、「翻訳状況を初期化」等と同様に
-    /// 実行前に確認する。
-    /// v0.60.0: バックアップ直後、pickuptarget再実行前にTranslation/out_temp
-    /// 全体を削除する（TranslationOutTempCleaner）——今回のスキャンで候補が
-    /// 無くなったプラグインの古いフォルダが削除されずに残り続け、プラグイン
-    /// 一覧（LoadData）に実態と合わない古い未翻訳件数が表示され続ける問題への
-    /// 対応。</summary>
+    /// <summary>「MO2対象Interfaceフォルダ読込み＆初期化」— SJPTS_InterfaceTextの
+    /// `detect`をMO2インスタンス全体（--mod=/--mods-file=省略）で実行し、
+    /// interface/translations配下の全MODを再スキャンする。detectは対象MOD
+    /// それぞれのinterface_translations.tsvを毎回新規に書き出す（既存分は破棄・
+    /// 再生成）破壊的操作——手動編集・ローカルLLM/生成AI翻訳結果もここで消える
+    /// ため、実行前に確認する（ESP側のBtnReloadMo2_Clickと同じ考え方）。
+    /// 実行前にTranslationBackup（ESP側と共有、汎用化済み）で対象MOD全件を
+    /// InterfaceText/Translation/bak/へバックアップする。</summary>
     private async void BtnReloadMo2_Click(object? sender, EventArgs e)
     {
         if (string.IsNullOrWhiteSpace(Mo2Dir) || !Directory.Exists(Mo2Dir))
@@ -1032,50 +820,43 @@ public sealed class MainForm : Form
         }
 
         var confirm = MessageBox.Show(this,
-            "MO2を再読込し、翻訳状況を初期化します。\n" +
-            "全プラグインの翻訳結果（手動での編集・生成AI/ローカルLLMでの翻訳結果を含む）を\n" +
+            "MO2のInterface\\Translationsを対象MOD全体で再読込し、翻訳状況を初期化します。\n" +
+            "全MODの翻訳結果（手動での編集・生成AI/ローカルLLMでの翻訳結果を含む）を\n" +
             "すべて消去し、初期状態に戻します。よろしいですか？\n" +
-            "（実行前の状態はTranslation\\bak\\に自動でバックアップされます）\n\n" +
-            "（既存の翻訳結果を消さずに現在の状況を見るだけなら「再スキャン（読み取りのみ）」を使ってください）",
-            "MO2再読込＆初期化", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
+            "（実行前の状態はInterfaceText\\Translation\\bak\\に自動でバックアップされます）",
+            "MO2対象Interfaceフォルダ読込み＆初期化", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
         if (confirm != DialogResult.OK) return;
 
-        // v0.55.0: バックアップ対象は「これから破壊される全プラグイン」——
-        // pickuptargetの再実行前、現在のTranslation/out_temp配下に実在する
-        // プラグインフォルダをそのまま列挙する（画面の選択状態とは無関係）。
-        var existingOutTempDir = Path.Combine(ProductRoot, "Translation", "out_temp");
-        var allPluginFolderNames = Directory.Exists(existingOutTempDir)
-            ? Directory.GetDirectories(existingOutTempDir).Select(Path.GetFileName).OfType<string>()
+        // v0.55.0のESP側と同じ考え方——バックアップ対象は「これから破壊される
+        // 全MOD」で、現在InterfaceTextWorkDir配下に実在するMODフォルダをそのまま
+        // 列挙する（画面の選択状態とは無関係）。
+        var existingModFolderNames = Directory.Exists(InterfaceTextWorkDir)
+            ? Directory.GetDirectories(InterfaceTextWorkDir).Select(Path.GetFileName).OfType<string>()
             : Enumerable.Empty<string>();
-        TranslationBackup.Backup(Path.Combine(ProductRoot, "Translation", "out_temp"), allPluginFolderNames, "translations.tsv");
-
-        // v0.60.0: バックアップ済みなので、ここでTranslation/out_temp全体を
-        // 削除しておく——今回のスキャンで候補が無くなったプラグイン（既存DSDで
-        // 新たにカバーされた・ロードオーダーから外れた等）の古いフォルダが
-        // 削除されずに残り続け、この後のLoadDataでプラグイン一覧に古い（実態と
-        // 合わない）未翻訳件数がいつまでも表示され続けてしまう問題への対応。
-        TranslationOutTempCleaner.Clear(existingOutTempDir);
+        TranslationBackup.Backup(InterfaceTextWorkDir, existingModFolderNames, "interface_translations.tsv");
 
         // Remember the current selection before the table gets rebuilt.
-        _deselectedPlugins.Clear();
+        _deselectedMods.Clear();
         foreach (DataRow row in _table.Rows)
             if (row["選択"] is false)
-                _deselectedPlugins.Add((string)row["プラグイン"]);
+                _deselectedMods.Add((string)row["Target"]);
 
         SetBusy(true);
         try
         {
-            if (!await RunCliAsync(BuildPickupTargetArgs(Mo2Dir))) return;
-            // Always ①バニラコーパスのみ, regardless of this window's current checkbox
-            // state — this is a baseline refresh (e.g. after collecting more
-            // xTranslator files), not a preview of what "翻訳実行" would currently
-            // do with the checked options.
-            // v0.55.2: --discard-user-edits was missing here, so this button
-            // silently PRESERVED every already-resolved row instead of the full
-            // reset its own confirmation dialog/comment promises ("初期状態に
-            // 戻します。元に戻せません。") — see DESIGN_NOTES.md's Integration
-            // scenario ⑪ entry for how this was found and confirmed.
-            if (!await RunCliAsync(new[] { "translation", "PickUpTarget/out_temp", "Translation/out_temp", "--all", "--no-meaning", "--no-translit", "--no-namefallback", "--discard-user-edits" })) return;
+            var args = new List<string> { "detect", $"--mo2-instance={Mo2Dir}", $"--work={InterfaceTextWorkDir}", $"--import={InterfaceTextImportDir}" };
+            // ESP側のBuildPickupTargetArgsと同じ——非標準MO2構成（ポータブル
+            // インスタンス等）向けの上書き設定。SJPTS_InterfaceText側も
+            // Mo2InstanceReader.Read（Core共通コード）自体は既に対応済みだったが、
+            // このCLIの引数解析が受け取っていなかった（2026-09-12修正済み）。
+            var settings = _getSettings();
+            if (!string.IsNullOrWhiteSpace(settings.Mo2ModsDirOverride))
+                args.Add($"--mods-dir={settings.Mo2ModsDirOverride}");
+            if (!string.IsNullOrWhiteSpace(settings.Mo2ProfileDirOverride))
+                args.Add($"--profile-dir={settings.Mo2ProfileDirOverride}");
+            if (!string.IsNullOrWhiteSpace(settings.Mo2OverwriteDirOverride))
+                args.Add($"--overwrite-dir={settings.Mo2OverwriteDirOverride}");
+            if (!await RunCliAsync(args)) return;
             LoadData();
         }
         finally
@@ -1099,78 +880,124 @@ public sealed class MainForm : Form
             return;
         }
 
-        var selectedPlugins = GetSelectedPlugins();
-        if (selectedPlugins.Count == 0)
+        var selectedMods = GetSelectedPlugins();
+        if (selectedMods.Count == 0)
         {
-            MessageBox.Show(this, "翻訳対象のプラグインを少なくとも1つ選択してください。", "入力エラー", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, "翻訳対象のMODを少なくとも1つ選択してください。", "入力エラー", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
         SetBusy(true);
-        // v0.50.1a: one process launch for the whole selection via --plugins-file,
-        // not one invocation per plugin — see PromptGenerator.RunMany's remarks.
-        // Looping single-plugin invocations was repeating BuildContext's ~10s
-        // corpus/dictionary setup once per selected plugin (up to 175 times).
-        var pluginsFilePath = Path.Combine(Path.GetTempPath(), $"sjpts_plugins_{Guid.NewGuid():N}.txt");
-        // v0.53.0a: 既知の課題15.——このパス自体は作らず、パスだけ生成してCLIに渡す。
-        // ユーザーがキャンセルを要求したときだけ実際にファイルを作成し、CLI側は
-        // プラグインの区切りごとにこのパスの存在を確認する。
-        _activeCancelFlagPath = Path.Combine(Path.GetTempPath(), $"sjpts_cancel_{Guid.NewGuid():N}.flag");
+        // SJPTS_InterfaceTextの`translate`は--mods-file=で複数MODを1回の起動で
+        // まとめて処理できる（ESP側の--plugins-file=と同じ考え方）。
+        var modsFilePath = Path.Combine(Path.GetTempPath(), $"sjpts_interfacetext_mods_{Guid.NewGuid():N}.txt");
+        // ESP側のBtnTranslate_Clickと同じ仕組み——パスだけ生成してCLIに渡し、
+        // 実際にキャンセルが要求されたときだけこのパスにファイルを作る
+        // （LogWindow_CancelRequested参照）。CLI側はMODの区切りごとにこのパスの
+        // 存在を確認する（Program.csのForEachTargetMod、ESPのプラグイン単位の
+        // 粒度と同じ）。
+        _activeCancelFlagPath = Path.Combine(Path.GetTempPath(), $"sjpts_interfacetext_cancel_{Guid.NewGuid():N}.flag");
         _cancelRequestedForCurrentRun = false;
         _logWindow.SetCancelEnabled(true);
         try
         {
-            await File.WriteAllLinesAsync(pluginsFilePath, selectedPlugins);
-            var args = new List<string> { "translation", "PickUpTarget/out_temp", "Translation/out_temp", $"--plugins-file={pluginsFilePath}", $"--cancel-flag-path={_activeCancelFlagPath}" };
-            args.AddRange(BuildOptionFlags());
-            // v0.60.0: 実行ログウィンドウの進捗バー用——選択プラグインそれぞれの
-            // 未翻訳文字数（ベース画面の一覧で既に計算済み、_rows参照）。
-            var pluginCharCounts = selectedPlugins.ToDictionary(
-                p => p,
-                p => _rows.FirstOrDefault(r => r.Plugin.Equals(p, StringComparison.OrdinalIgnoreCase))?.UntranslatedChars ?? 0L,
+            await File.WriteAllLinesAsync(modsFilePath, selectedMods);
+
+            // 進捗バー用——選択MODそれぞれの未翻訳文字数（一覧で既に計算済み、
+            // _rows参照）。ESP側のBtnTranslate_Clickと同じ考え方。
+            var modCharCounts = selectedMods.ToDictionary(
+                m => m,
+                m => _rows.FirstOrDefault(r => r.Target.Equals(m, StringComparison.OrdinalIgnoreCase))?.UntranslatedChars ?? 0L,
                 StringComparer.OrdinalIgnoreCase);
-            if (!await RunCliAsync(args, pluginCharCounts)) return;
+
+            // `translate`は1回の起動につきローカルLLM／生成AI（クラウド）の
+            // どちらか片方しか受け取れない（--local-llm-endpoint=の有無で判定）
+            // ため、ESP側と違い両方チェックされている場合は2回に分けて呼ぶ。
+            // 2回目の呼び出しは既に解決済みのkeyを再送しない（Program.cs参照）。
+            if (_chkLlm.Checked)
+            {
+                var localArgs = new List<string> { "translate", $"--mods-file={modsFilePath}", $"--work={InterfaceTextWorkDir}",
+                    $"--local-llm-endpoint={LlmEndpoint}", $"--local-llm-model={LlmModel}", $"--cancel-flag-path={_activeCancelFlagPath}" };
+                // APIキーは引数に含めない——RunCliAsync→CliRunnerがSKYRIMJPSP_LLM_API_KEY
+                // 環境変数として子プロセスへ渡す（ESP側と同じ方式、CLIのProgram.cs参照）。
+                // v0.58.1: 設定ウィンドウの「思考モードOFF」チェック（既定ON）に連動——
+                // 未対応のままだと、gemma4等の思考系ローカルモデルが応答の文字数上限を
+                // 内部思考トレースで使い切り、常に空応答で失敗する（実機で確認済み）。
+                if (_getSettings().LlmLocalReasoningOff)
+                    localArgs.Add("--local-llm-reasoning-effort=none");
+                // SJPTS_InterfaceText側の内部既定値（3000、InterfaceTextPromptGenerator.
+                // DefaultLocalLlmBatchCharLimit）はGUIの既定値（6000）と異なるため、
+                // ESP側のように「既定値と同じなら省略」はできない——常に明示的に渡す。
+                localArgs.Add($"--char-limit={(int)_numLlmBatchCharLimit.Value}");
+                if (!await RunCliAsync(localArgs, modCharCounts)) return;
+            }
+
+            if (_chkCloudAi.Checked && !_cancelRequestedForCurrentRun)
+            {
+                var cloudArgs = new List<string> { "translate", $"--mods-file={modsFilePath}", $"--work={InterfaceTextWorkDir}", $"--cancel-flag-path={_activeCancelFlagPath}" };
+                if (UseClaudeCodeCli)
+                {
+                    if (!string.IsNullOrWhiteSpace(ClaudeCodeExePath)) cloudArgs.Add($"--claude-code-exe={ClaudeCodeExePath}");
+                    if (!string.IsNullOrWhiteSpace(ClaudeCodeModel)) cloudArgs.Add($"--claude-code-model={ClaudeCodeModel}");
+                }
+                else
+                {
+                    // OpenAI互換API方式——ESP側（Program.cs --llm-cloud-provider=http）
+                    // と同じ引数名。CloudAiApiKeyはRunCliAsync→CliRunnerが
+                    // SKYRIMJPSP_CLOUD_LLM_API_KEY環境変数として子プロセスへ渡す
+                    // （プレーンな引数には含めない）。
+                    if (string.IsNullOrWhiteSpace(CloudAiEndpoint) || string.IsNullOrWhiteSpace(LlmModel))
+                    {
+                        MessageBox.Show(this, "生成AI翻訳（クラウド・OpenAI互換API）を使うには、「設定」でエンドポイントとモデル名を指定してください。",
+                            "入力エラー", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
+                    cloudArgs.Add("--llm-cloud-provider=http");
+                    cloudArgs.Add($"--llm-cloud-endpoint={CloudAiEndpoint}");
+                    cloudArgs.Add($"--llm-cloud-model={LlmModel}");
+                }
+                // ローカルLLM側と同じ理由で、生成AI（クラウド）側も常に明示的に渡す
+                // （SJPTS_InterfaceText側の内部既定値はInterfaceTextPromptGenerator.
+                // DefaultLlmBatchCharLimit=12000でGUIの既定値と一致するが、将来ズレた
+                // 場合に同じ事故を防ぐため、ここも省略しない）。
+                cloudArgs.Add($"--char-limit={(int)_numCloudAiBatchCharLimit.Value}");
+                if (!await RunCliAsync(cloudArgs, modCharCounts)) return;
+            }
 
             _translationExecuted = true;
-            RefreshRowsFromTranslations(selectedPlugins);
+            RefreshRowsFromTranslations(selectedMods);
 
             if (_cancelRequestedForCurrentRun)
             {
                 MessageBox.Show(this,
                     "ユーザーの要求により、処理を中断しました。\n" +
-                    "中断までに完了したプラグインの翻訳結果は保存されています。\n" +
-                    "残りのプラグインは、改めて「翻訳実行」を行うと続きから処理されます。",
+                    "中断までに完了したMODの翻訳結果は保存されています。\n" +
+                    "残りのMODは、改めて「翻訳実行」を行うと続きから処理されます。",
                     "処理を中断しました", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
-            // v0.53.0: 「生成AI翻訳」「ローカルLLM翻訳」を有効にしたのに1件も
-            // 解決できなかった場合、CLI自体は（失敗した候補をそのまま未解決に
-            // 残すだけで）正常終了するため、ここで検知して警告しないと
-            // 「実行はできたので設定は合っているはず」という誤解を招く。
-            // 実際にはAPIキー・パス・ログイン状態等の設定ミスの可能性が高い
-            // ——詳しい理由は既にtranslation.log/実行ログに出ているので、
-            // ここではその存在に気づかせることに専念する。
-            var stillUntranslated = selectedPlugins.Sum(p => _rows.FirstOrDefault(r => r.Plugin.Equals(p, StringComparison.OrdinalIgnoreCase))?.Untranslated ?? 0);
-            var warnings = new List<string>();
-            if (_chkCloudAi.Checked && stillUntranslated > 0 && CountResolvedByMethod(selectedPlugins, "TranslationCloudLlm") == 0)
-                warnings.Add("生成AI翻訳（クラウド）を有効にしましたが、1件も翻訳できませんでした。");
-            if (_chkLlm.Checked && stillUntranslated > 0 && CountResolvedByMethod(selectedPlugins, "TranslationLocalLlm") == 0)
-                warnings.Add("ローカルLLM翻訳を有効にしましたが、1件も翻訳できませんでした。");
-
-            if (warnings.Count > 0)
+            // TODO(次のステップ): interface_translations.tsvにはESP側のNotes列（解決手法の
+            // タグ）が無いため、「⑤/⑥のどちらが失敗したか」の判定はできない
+            // （design/interface_translations.md記載の既知の簡略化）。ここでは
+            // 「選択MODに1件でも未解決が残っているか」だけを見る。
+            var stillUntranslated = selectedMods.Sum(p => _rows.FirstOrDefault(r => r.Target.Equals(p, StringComparison.OrdinalIgnoreCase))?.Untranslated ?? 0);
+            if ((_chkCloudAi.Checked || _chkLlm.Checked) && stillUntranslated > 0)
             {
                 _logWindow.ShowAndActivate();
                 MessageBox.Show(this,
-                    string.Join("\n", warnings) + "\n\n" +
-                    "設定（生成AIの接続情報・ログイン状態・ローカルLLMの起動状況等）に問題がある可能性があります。\n" +
-                    "実行ログウィンドウに詳しい失敗理由が出力されていますので確認してください。",
-                    "生成AI/ローカルLLM翻訳が失敗しています", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    "未解決のまま残ったkeyがあります。\n\n" +
+                    "・全く翻訳されない場合は、設定（生成AIの接続情報・ログイン状態・\n" +
+                    "　ローカルLLMの起動状況等）を確認してください。\n" +
+                    "・ローカルLLM/生成AIの応答は毎回安定するとは限らないため、\n" +
+                    "　「翻訳実行」を複数回行うと解決することもあります。\n\n" +
+                    "実行ログウィンドウに詳しい失敗理由が出力されています。",
+                    "一部のkeyが未解決です", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             else
             {
-                MessageBox.Show(this, "翻訳が完了しました。翻訳内容を確認してください（「詳細を確認」ボタン、またはtranslations.tsvを直接開く）。\n" +
-                    "内容に問題なければ「DSDファイル生成」でDSDファイルを作成してください。",
+                MessageBox.Show(this, "翻訳が完了しました。翻訳内容を確認してください（「詳細を確認」ボタン）。\n" +
+                    "内容に問題なければ「翻訳ファイル出力」で出力してください。",
                     "翻訳完了", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
@@ -1178,7 +1005,7 @@ public sealed class MainForm : Form
         {
             SetBusy(false);
             _logWindow.SetCancelEnabled(false);
-            try { File.Delete(pluginsFilePath); } catch { /* best-effort cleanup */ }
+            try { File.Delete(modsFilePath); } catch { /* best-effort cleanup */ }
             try { if (_activeCancelFlagPath != null) File.Delete(_activeCancelFlagPath); } catch { /* best-effort cleanup */ }
             _activeCancelFlagPath = null;
         }
@@ -1186,28 +1013,39 @@ public sealed class MainForm : Form
 
     private async void BtnGenerateDsd_Click(object? sender, EventArgs e)
     {
+        var selectedMods = GetSelectedPlugins();
+        if (selectedMods.Count == 0)
+        {
+            MessageBox.Show(this, "出力対象のMODを少なくとも1つ選択してください。", "入力エラー", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
         if (!_translationExecuted)
         {
             var result = MessageBox.Show(this,
                 "このウィンドウではまだ「翻訳実行」を行っていません。\n" +
-                "翻訳されていない文字列は、原文（英語等）のままDSDファイルに出力されます。\n\n" +
-                "このままDSDファイルを生成しますか？（翻訳してから生成する場合は「キャンセル」を押してください）",
+                "翻訳されていない文字列は、原文（英語等）のまま出力されます。\n\n" +
+                "このまま出力しますか？（翻訳してから出力する場合は「キャンセル」を押してください）",
                 "翻訳が未実行です", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
             if (result != DialogResult.OK) return;
         }
 
         SetBusy(true);
+        var modsFilePath = Path.Combine(Path.GetTempPath(), $"sjpts_interfacetext_mods_{Guid.NewGuid():N}.txt");
         try
         {
-            if (!await RunCliAsync(new[] { "generatedsdfile" })) return;
+            await File.WriteAllLinesAsync(modsFilePath, selectedMods);
+            var outDir = InterfaceTextOutDir;
+            var args = new[] { "output", $"--mods-file={modsFilePath}", $"--work={InterfaceTextWorkDir}", $"--out={outDir}" };
+            if (!await RunCliAsync(args)) return;
 
-            var outDir = Path.Combine(ProductRoot, "out");
-            MessageBox.Show(this, $"DSDファイルの生成が完了しました。出力先フォルダを確認してください:\n{outDir}",
+            MessageBox.Show(this, $"翻訳ファイルの出力が完了しました。出力先フォルダを確認してください:\n{outDir}",
                 "完了", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         finally
         {
             SetBusy(false);
+            try { File.Delete(modsFilePath); } catch { /* best-effort cleanup */ }
         }
     }
 
@@ -1216,16 +1054,12 @@ public sealed class MainForm : Form
     /// corrupt each other's output.</summary>
     private void SetBusy(bool busy)
     {
-        _btnResetSelected.Enabled = !busy;
         _btnReloadMo2.Enabled = !busy;
         _btnTranslate.Enabled = !busy;
         _btnGenerateDsd.Enabled = !busy;
         _btnSelectAll.Enabled = !busy;
         _btnSelectNone.Enabled = !busy;
         _grid.Enabled = !busy;
-        _chkMeaning.Enabled = !busy;
-        _chkTranslit.Enabled = !busy;
-        _chkNameFallback.Enabled = !busy;
         _chkLlm.Enabled = !busy;
         _chkCloudAi.Enabled = !busy;
         _numLlmBatchCharLimit.Enabled = !busy;
@@ -1265,11 +1099,11 @@ public sealed class MainForm : Form
             MessageBox.Show(this, "実行フォルダを特定できませんでした。GUIの配置場所を確認してください。", "エラー", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return false;
         }
-        // v0.54.0: CLI実行ファイルのパスはユーザー設定にせず、GUI・CLIが常に同じ
-        // 製品フォルダの兄弟として配置される前提で毎回自動検出する（既知の課題
-        // 参照——手動指定できる設定項目は不要と判断し廃止した）。
-        var cliExePath = CliLocator.ResolveAbsolute(_productRoot, CliLocator.TryAutoDetect() ?? "");
-        if (!CliLocator.Validate(cliExePath, out var cliError))
+        // CLI実行ファイルのパスはユーザー設定にせず、GUI・CLIが常に同じ製品
+        // フォルダの兄弟として配置される前提で毎回自動検出する（ESP側の
+        // CliLocatorと同じ考え方——このタブはSJPTS_InterfaceText.exeを呼ぶ）。
+        var cliExePath = InterfaceTextCliLocator.ResolveAbsolute(_productRoot, InterfaceTextCliLocator.TryAutoDetect() ?? "");
+        if (!InterfaceTextCliLocator.Validate(cliExePath, out var cliError))
         {
             MessageBox.Show(this, cliError, "CLI実行ファイルが見つかりません", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return false;
@@ -1304,7 +1138,7 @@ public sealed class MainForm : Form
         {
             AppendLog(line);
             if (pluginCharsForProgress != null && progressTotalChars > 0
-                && Services.TranslationProgressParser.TryParsePluginCompleted(line, out var completedPlugin)
+                && Services.TranslationProgressParser.TryParseModCompleted(line, out var completedPlugin)
                 && pluginCharsForProgress.TryGetValue(completedPlugin, out var chars))
             {
                 progressDoneChars += chars;

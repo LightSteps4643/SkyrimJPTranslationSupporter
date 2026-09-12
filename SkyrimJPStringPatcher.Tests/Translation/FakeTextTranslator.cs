@@ -16,6 +16,12 @@ public sealed class FakeTextTranslator : ITextTranslator
     private readonly string _error;
     public int CallCount { get; private set; }
 
+    /// <summary>The exact prompt text passed to the most recent TryTranslate
+    /// call — lets a test assert against what PromptGenerator actually sent
+    /// (e.g. to verify the prompt_{localLLM|cloudLLM}_batch*.txt debug files
+    /// it writes match byte-for-byte), without re-deriving the expected text.</summary>
+    public string? LastPromptReceived { get; private set; }
+
     private FakeTextTranslator(string? response, string error)
     {
         _response = response;
@@ -32,6 +38,7 @@ public sealed class FakeTextTranslator : ITextTranslator
     public string? TryTranslate(string promptText, out string error)
     {
         CallCount++;
+        LastPromptReceived = promptText;
         error = _error;
         return _response;
     }

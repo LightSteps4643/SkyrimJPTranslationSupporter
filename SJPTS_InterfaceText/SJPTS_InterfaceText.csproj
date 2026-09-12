@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>SJPTS_InterfaceText</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Reuses Translation.ITextTranslator/LocalLlmTranslator/ClaudeCodeTranslator
+         and Core.Mo2InstanceReader/LanguageDetector by referencing the existing
+         CLI project as a library — no changes to that project. -->
+    <ProjectReference Include="..\SkyrimJPStringPatcher.csproj" />
+  </ItemGroup>
+
+</Project>

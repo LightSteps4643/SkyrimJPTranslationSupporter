@@ -152,6 +152,45 @@ public class PromptGeneratorTests
         }
     }
 
+    /// <summary>2026-09-12: debugging aid distinct from prompt.txt (that one is
+    /// a human AI-chat handoff for whatever's STILL unresolved after this
+    /// step; this file is a record of what WAS actually sent to step 5,
+    /// win or lose — added after investigating a real local-LLM failure on
+    /// the Interface\Translations side of the tool, then brought here for
+    /// parity). Content must match what ApplyLlmStep actually built and
+    /// passed to ITextTranslator.TryTranslate — checked directly against
+    /// FakeTextTranslator's own captured prompt rather than re-deriving the
+    /// expected text, since the point is exact byte-for-byte parity.</summary>
+    [Fact]
+    public void RunOne_LocalLlmStep_WritesPromptBatchFile_MatchingWhatWasSent()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outputDir = Path.Combine(root, "out_temp");
+            using var log = OpenTestLog(root);
+            var fakeLlm = FakeTextTranslator.Succeeding(("Sjpts Llm Candidate", "LLMによる訳"));
+
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), TargetPlugin, outputDir, log, llmLocal: fakeLlm);
+
+            var pluginDir = Path.Combine(outputDir, "SjptsTestMod");
+            var promptBatchPath = Path.Combine(pluginDir, "prompt_localLLM_batch1_of_1.txt");
+            Assert.True(File.Exists(promptBatchPath));
+            var promptBatchContent = File.ReadAllText(promptBatchPath);
+            Assert.Equal(fakeLlm.LastPromptReceived, promptBatchContent);
+            Assert.Contains("Target: <SJPTS_TARGET>Sjpts Llm Candidate</SJPTS_TARGET>", promptBatchContent);
+
+            // Only this run's own step-5 file exists — no leftover step-6
+            // (cloudLLM) file from a run that never enabled step 6.
+            Assert.Empty(Directory.GetFiles(pluginDir, "prompt_cloudLLM_batch*.txt"));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
     /// <summary>v0.58.5: a real bug found investigating why gemma4 batches
     /// consisting entirely of vanilla Skyrim's own untranslated "arcane
     /// script" spell-tome content (e.g. the $MageScriptFont flavor page —

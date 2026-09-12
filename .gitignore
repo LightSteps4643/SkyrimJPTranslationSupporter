@@ -11,8 +11,19 @@ Translation/bak/
 debug_out_temp/
 out/
 
+# SJPTS_InterfaceText（Interface\Translations翻訳、別CLI）側の同種の派生物。
+# 上記のTranslation/out_temp・Translation/bak等はリポジトリルート直下にしか
+# マッチしない（パターンの途中にスラッシュがあるため）ので、別途追加が必要。
+InterfaceText/Translation/out_temp/
+InterfaceText/Translation/bak/
+# SJPTS_InterfaceText.exeを直接その場で実行したとき（--work=省略時）の既定の
+# 作業フォルダ（AppContext.BaseDirectory相対）——CLIプロジェクト直下に作られる。
+SJPTS_InterfaceText/out_temp/
+SJPTS_InterfaceText/Translation/
+
 # 開発中の調査用スクラッチファイル
 tmp/
+_backup/
 
 # MOD単位の用語集（ファイル名がユーザーの導入MOD名そのものになるため、
 # 個人の導入MODリストの流出を避ける目的で追跡しない。ツールが雛形を自動生成、
@@ -22,6 +33,10 @@ Data/mod_glossary/*.tsv
 # xTranslatorインポート用フォルダ（ユーザーが自分の翻訳ファイルを置く場所）
 Translation/import/*
 !Translation/import/.gitkeep
+
+# SJPTS_InterfaceText側のインポートフォルダ（同じ理由）
+InterfaceText/Translation/import/*
+!InterfaceText/Translation/import/.gitkeep
 
 # 実行ログ
 *.log

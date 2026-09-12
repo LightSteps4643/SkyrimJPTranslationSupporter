@@ -540,8 +540,8 @@ public static class PromptGenerator
         // entirely) and tries a cloud AI backend — the two are independent
         // opt-ins that chain, exactly like ①〜④ already fall through to each
         // other. See ApplyLlmStep for the shared per-candidate logic.
-        resolved = ApplyLlmStep(resolved, llmLocal, "5", "ローカルLLM", "local LLM", "TranslationLocalLlm", plugin, retriever, auto, npcNames, topN, log, trace, llmLocalBatchCharLimit);
-        resolved = ApplyLlmStep(resolved, llmCloud, "6", "生成AI翻訳", "cloud AI", "TranslationCloudLlm", plugin, retriever, auto, npcNames, topN, log, trace, llmCloudBatchCharLimit);
+        resolved = ApplyLlmStep(resolved, llmLocal, "5", "ローカルLLM", "local LLM", "TranslationLocalLlm", plugin, retriever, auto, npcNames, topN, log, trace, pluginDir, llmLocalBatchCharLimit);
+        resolved = ApplyLlmStep(resolved, llmCloud, "6", "生成AI翻訳", "cloud AI", "TranslationCloudLlm", plugin, retriever, auto, npcNames, topN, log, trace, pluginDir, llmCloudBatchCharLimit);
 
         var unresolved = resolved.Where(r => r.Auto == null).Select(r => r.Candidate).ToList();
 
@@ -667,17 +667,34 @@ public static class PromptGenerator
     /// reasonable char limit, so count alone was never actually the binding
     /// constraint in practice.)
     /// </summary>
+    /// <param name="pluginDir">Where to write each batch's actual sent prompt
+    /// (instruction + candidate block(s), byte-for-byte what goes into
+    /// <see cref="ITextTranslator.TryTranslate"/>) as "prompt_{localLLM|
+    /// cloudLLM}_batch{N}_of_{total}.txt" (2026-09-12 design discussion,
+    /// mirrors SJPTS_InterfaceText/InterfaceTextPromptGenerator.cs's own —
+    /// added there first, this is the ESP-side parity follow-up). Distinct
+    /// from this method's own <c>WritePrompt</c>-written prompt.txt (a human
+    /// AI-chat handoff for whatever's STILL unresolved after THIS step; this
+    /// one is a record of what WAS actually sent, win or lose). Only this
+    /// step's own prefix (localLLM vs cloudLLM, from <paramref
+    /// name="stepNumber"/>) is cleared first, so step 6 doesn't wipe out
+    /// step 5's files from the same run.</param>
     private static List<(Candidate Candidate, AutoTranslationResult? Auto)> ApplyLlmStep(
         List<(Candidate Candidate, AutoTranslationResult? Auto)> resolved, ITextTranslator? llm,
         string stepNumber, string stepLabelJa, string stepLabelEn, string methodTag,
         string plugin, PrecedentRetriever retriever, AutoTranslator auto, IReadOnlySet<string> npcNames,
-        int topN, RunLog log, TraceLog? trace, int batchCharLimit = DefaultLlmBatchCharLimit)
+        int topN, RunLog log, TraceLog? trace, string pluginDir, int batchCharLimit = DefaultLlmBatchCharLimit)
     {
         if (llm == null) return resolved;
 
         var beforeStep = resolved.Where(r => r.Auto == null).Select(r => r.Candidate).ToList();
         var byText = beforeStep.GroupBy(c => c.CurrentText, StringComparer.Ordinal).ToList();
         if (byText.Count == 0) return resolved;
+
+        var providerLabel = stepNumber == "5" ? "localLLM" : "cloudLLM";
+        var promptFilePrefix = $"prompt_{providerLabel}_batch";
+        foreach (var stale in Directory.Exists(pluginDir) ? Directory.EnumerateFiles(pluginDir, $"{promptFilePrefix}*_of_*.txt") : Enumerable.Empty<string>())
+            File.Delete(stale);
 
         // 各グループのブロック本文を先に1回だけ組み立て、その文字数を見ながら
         // batchCharLimit以下になるようサブバッチへ分割する。1件だけで上限を
@@ -745,8 +762,13 @@ public static class PromptGenerator
             var promptBuilder = new System.Text.StringBuilder(LlmBatchInstruction);
             foreach (var (_, block, _) in batch)
                 promptBuilder.Append(block);
+            var promptText = promptBuilder.ToString();
 
-            var response = llm.TryTranslate(promptBuilder.ToString(), out var error);
+            Directory.CreateDirectory(pluginDir);
+            var promptBatchPath = Path.Combine(pluginDir, $"{promptFilePrefix}{batchIndex + 1}_of_{batches.Count}.txt");
+            File.WriteAllText(promptBatchPath, promptText, new System.Text.UTF8Encoding(false));
+
+            var response = llm.TryTranslate(promptText, out var error);
             if (response == null)
             {
                 // v0.52.1a: 失敗理由は、以前はTraceレベルのtrace.logにしか出ておらず

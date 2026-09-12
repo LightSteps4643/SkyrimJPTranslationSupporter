@@ -24,18 +24,34 @@ namespace SkyrimJPStringPatcherGui.Services;
 ///
 /// 保存先は既存の.gitignoreでderivativeフォルダとして予約済みのTranslation/bak/
 /// を再利用する（現状コード上は未使用）。
+///
+/// 2026-09-12: Interface翻訳側（InterfaceText/Translation/out_temp・
+/// InterfaceText/Translation/bak）と共有できるよう、out_tempフォルダ・
+/// タイムスタンプ判定用ファイル名を引数化した——このクラス自体はCore/
+/// Translationへの参照を持たない純粋なファイルI/Oユーティリティで、
+/// ESP固有のロジックは無いため、コピーではなく汎用化して両方から呼ぶ。
 /// </summary>
 public static class TranslationBackup
 {
-    /// <summary>Zips each named plugin's Translation/out_temp/&lt;name&gt;/ folder
-    /// (whole contents) into a new Translation/bak/&lt;timestamp&gt;.zip, before the
-    /// caller performs a destructive re-init on it. Plugins with no existing
-    /// out_temp folder yet (never scanned/translated) are silently skipped —
-    /// there is nothing to lose for them. No-op if nothing exists to back up.</summary>
-    public static void Backup(string productRoot, IEnumerable<string> pluginFolderNames)
+    /// <summary>Zips each named subfolder of <paramref name="outTempDir"/>
+    /// (whole contents) into a new "bak/&lt;timestamp&gt;.zip" sibling of
+    /// <paramref name="outTempDir"/>, before the caller performs a destructive
+    /// re-init on it. A name with no existing subfolder yet (never scanned/
+    /// translated) is silently skipped — there is nothing to lose for it.
+    /// No-op if nothing exists to back up.</summary>
+    /// <param name="outTempDir">The out_temp folder whose subfolders (one per
+    /// plugin/mod) are the backup source — e.g. "Translation/out_temp" or
+    /// "InterfaceText/Translation/out_temp". The backup zip is written to
+    /// this folder's own parent, under "bak/".</param>
+    /// <param name="folderNames">Subfolder names under <paramref
+    /// name="outTempDir"/> to back up (plugin folder names, or mod names).</param>
+    /// <param name="timestampSourceFileName">The per-folder file whose
+    /// LastWriteTime decides the backup's timestamp (see remarks below) —
+    /// "translations.tsv" for the ESP pipeline, "interface_translations.tsv"
+    /// for Interface翻訳.</param>
+    public static void Backup(string outTempDir, IEnumerable<string> folderNames, string timestampSourceFileName)
     {
-        var outTempDir = Path.Combine(productRoot, "Translation", "out_temp");
-        var sourceDirs = pluginFolderNames
+        var sourceDirs = folderNames
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Select(name => Path.Combine(outTempDir, name))
             .Where(Directory.Exists)
@@ -50,14 +66,14 @@ public static class TranslationBackup
         DateTime? latest = null;
         foreach (var dir in sourceDirs)
         {
-            var tsvPath = Path.Combine(dir, "translations.tsv");
+            var tsvPath = Path.Combine(dir, timestampSourceFileName);
             if (!File.Exists(tsvPath)) continue;
             var writeTime = File.GetLastWriteTime(tsvPath);
             if (latest == null || writeTime > latest) latest = writeTime;
         }
         var timestamp = (latest ?? DateTime.Now).ToString("yyyyMMdd_HHmmss");
 
-        var bakDir = Path.Combine(productRoot, "Translation", "bak");
+        var bakDir = Path.Combine(Directory.GetParent(outTempDir)!.FullName, "bak");
         Directory.CreateDirectory(bakDir);
         var zipPath = Path.Combine(bakDir, $"{timestamp}.zip");
 

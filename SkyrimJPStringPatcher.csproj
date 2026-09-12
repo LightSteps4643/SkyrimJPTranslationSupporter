@@ -15,6 +15,12 @@
     <Compile Remove="SkyrimJPStringPatcherGui\**\*.cs" />
     <!-- v0.55.0a: same reason, for the new SkyrimJPStringPatcher.Tests/ sibling project. -->
     <Compile Remove="SkyrimJPStringPatcher.Tests\**\*.cs" />
+    <!-- 2026-09-11: same reason, for the new SJPTS_InterfaceText/ prototype sibling project
+         (design/interface_translations.md) — it project-references THIS csproj to
+         reuse Translation.ITextTranslator/Core.Mo2InstanceReader without copying them. -->
+    <Compile Remove="SJPTS_InterfaceText\**\*.cs" />
+    <!-- 2026-09-11: same reason, for the new SJPTS_InterfaceText.Tests/ sibling project. -->
+    <Compile Remove="SJPTS_InterfaceText.Tests\**\*.cs" />
   </ItemGroup>
 
   <ItemGroup>

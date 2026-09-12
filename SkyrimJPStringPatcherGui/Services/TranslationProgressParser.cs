@@ -34,4 +34,23 @@ public static class TranslationProgressParser
         plugin = "";
         return false;
     }
+
+    /// <summary>Parses SJPTS_InterfaceText/Program.cs's own "##SJPTS_MOD_DONE##
+    /// {mod}" line (ForEachTargetMod) — unlike the ESP CLI's "Target: ..." line
+    /// above, this one IS a purpose-built machine-readable marker (InterfaceText
+    /// has no equivalent pre-existing human-facing "done" line to piggyback on),
+    /// printed once per mod regardless of that mod's success/failure so the
+    /// progress bar still advances on a skipped one.</summary>
+    private const string ModDoneMarkerPrefix = "##SJPTS_MOD_DONE## ";
+
+    public static bool TryParseModCompleted(string line, out string mod)
+    {
+        if (line.StartsWith(ModDoneMarkerPrefix, StringComparison.Ordinal))
+        {
+            mod = line[ModDoneMarkerPrefix.Length..].Trim();
+            return true;
+        }
+        mod = "";
+        return false;
+    }
 }
