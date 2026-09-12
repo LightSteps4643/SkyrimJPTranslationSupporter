@@ -88,6 +88,46 @@ public class DsdJsonGeneratorTests
         }
     }
 
+    /// <summary>
+    /// 2026-09-12: issue #6 — the GUI's "DSDファイル生成" button always processed
+    /// the ENTIRE Translation/out_temp tree, ignoring which plugins were checked
+    /// in the DataGridView (unlike Interface翻訳's "output", which already
+    /// scopes to selection via --mods-file). This is a pure behavior/black-box
+    /// test — like the fixture test above, it drives DsdJsonGenerator.Run
+    /// end-to-end on the SAME checked-in fixture (translations_basic.tsv, two
+    /// winning plugins: Skyrim.esm and TestMod.esp) and asserts only on the
+    /// output files, with no reference to internals — but this time passing a
+    /// pluginFilter restricted to "TestMod.esp" and confirming Skyrim.esm's
+    /// output is entirely absent while TestMod.esp's is unaffected. Deliberately
+    /// confirmed red against today's (pre-fix) code — Run had no such parameter
+    /// at all before this fix.
+    /// </summary>
+    [Fact]
+    public void Run_WithPluginFilter_OnlyWritesOutputForTheFilteredPlugins()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_dsd_filter_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outDir = Path.Combine(root, "out");
+            using var log = OpenTestLog(root);
+
+            DsdJsonGenerator.Run(FixturePath("translations_basic.tsv"), outDir, log,
+                outputTimestamp: TestTimestamp, pluginFilter: new[] { "TestMod.esp" });
+
+            var actualFiles = Directory.Exists(outDir)
+                ? Directory.GetFiles(outDir, "*", SearchOption.AllDirectories)
+                : Array.Empty<string>();
+
+            Assert.Contains(actualFiles, f => f.Contains("TestMod.esp"));
+            Assert.DoesNotContain(actualFiles, f => f.Contains("Skyrim.esm"));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
     /// <summary>v0.56.0: a ModifiedByUser row whose translation doesn't contain
     /// Japanese (Fixtures/translations_basic.tsv's "Bob" row) must be INCLUDED
     /// as-is (already covered by the golden-file check above) AND get a logged

@@ -15,7 +15,15 @@ public static class DsdJsonGenerator
     /// <param name="outputTimestamp">Passed straight through to
     /// <see cref="DsdWriter.WriteAll"/> — see its own doc comment. Defaults to
     /// the real current time; only tests pass an explicit value.</param>
-    public static void Run(string translationsInputPath, string outputDir, RunLog log, TraceLog? trace = null, DateTime? outputTimestamp = null)
+    /// <param name="pluginFilter">2026-09-12, issue #6: when given, only rows
+    /// whose WinningPlugin is in this set are included — lets the GUI's "DSD
+    /// ファイル生成" button honor the DataGridView's checked-plugin selection
+    /// instead of always processing the entire Translation/out_temp tree
+    /// (matching how Interface翻訳's own "output" already scopes to selection
+    /// via --mods-file). Null (the default) processes every row, unchanged
+    /// from before this parameter existed — a bare CLI/script invocation with
+    /// no --plugins-file keeps working exactly as it always has.</param>
+    public static void Run(string translationsInputPath, string outputDir, RunLog log, TraceLog? trace = null, DateTime? outputTimestamp = null, IReadOnlyCollection<string>? pluginFilter = null)
     {
         trace?.Info($"Input file resolution start: {translationsInputPath}");
         var files = ResolveInputFiles(translationsInputPath);
@@ -29,6 +37,14 @@ public static class DsdJsonGenerator
             var rows = ReadTranslations(file);
             allRows.AddRange(rows);
             trace?.Trace($"Read done: {file} ({rows.Count} rows)");
+        }
+
+        if (pluginFilter != null)
+        {
+            var filterSet = new HashSet<string>(pluginFilter, StringComparer.OrdinalIgnoreCase);
+            var beforeCount = allRows.Count;
+            allRows = allRows.Where(r => filterSet.Contains(r.WinningPlugin)).ToList();
+            trace?.Info($"Plugin filter applied: {filterSet.Count} plugin(s) -> {allRows.Count}/{beforeCount} row(s) kept");
         }
 
         var translated = allRows.Where(r => !string.IsNullOrWhiteSpace(r.Japanese)).ToList();

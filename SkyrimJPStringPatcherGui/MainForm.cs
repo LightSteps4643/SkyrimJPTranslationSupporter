@@ -1197,6 +1197,13 @@ public sealed class MainForm : Form
 
     private async void BtnGenerateDsd_Click(object? sender, EventArgs e)
     {
+        var selectedPlugins = GetSelectedPlugins();
+        if (selectedPlugins.Count == 0)
+        {
+            MessageBox.Show(this, "DSDファイル生成の対象プラグインを少なくとも1つ選択してください。", "入力エラー", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
         if (!_translationExecuted)
         {
             var result = MessageBox.Show(this,
@@ -1208,17 +1215,24 @@ public sealed class MainForm : Form
         }
 
         SetBusy(true);
+        // 2026-09-12, issue #6: --plugins-file, same convention as「翻訳実行」
+        // (BtnTranslate_Click) and Interface翻訳の--mods-file — restricts DSD
+        // output to the DataGridViewでチェックされたプラグインのみ（以前は常に
+        // Translation/out_temp全体を処理していた）。
+        var pluginsFilePath = Path.Combine(Path.GetTempPath(), $"sjpts_dsd_plugins_{Guid.NewGuid():N}.txt");
         try
         {
-            if (!await RunCliAsync(new[] { "generatedsdfile" })) return;
+            await File.WriteAllLinesAsync(pluginsFilePath, selectedPlugins);
+            if (!await RunCliAsync(new[] { "generatedsdfile", $"--plugins-file={pluginsFilePath}" })) return;
 
             var outDir = Path.Combine(ProductRoot, "out");
-            MessageBox.Show(this, $"DSDファイルの生成が完了しました。出力先フォルダを確認してください:\n{outDir}",
+            MessageBox.Show(this, $"DSDファイルの生成が完了しました（選択中の{selectedPlugins.Count}プラグイン分）。出力先フォルダを確認してください:\n{outDir}",
                 "完了", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         finally
         {
             SetBusy(false);
+            try { File.Delete(pluginsFilePath); } catch { /* best-effort cleanup */ }
         }
     }
 

@@ -402,12 +402,31 @@ switch (args[0])
             return 1;
         }
 
+        // 2026-09-12, issue #6: same --plugins-file convention "translation"
+        // already uses (parsed once, shared, above) — lets the GUI restrict
+        // DSD output to the DataGridView's checked plugins instead of always
+        // processing the entire input tree.
+        List<string>? pluginFilter = null;
+        if (pluginsFileArg != null)
+        {
+            var pluginsFilePath = pluginsFileArg["--plugins-file=".Length..];
+            if (!File.Exists(pluginsFilePath))
+            {
+                Console.Error.WriteLine($"--plugins-file target not found: {pluginsFilePath}");
+                return 1;
+            }
+            pluginFilter = File.ReadAllLines(pluginsFilePath)
+                .Select(l => l.Trim())
+                .Where(l => l.Length > 0)
+                .ToList();
+        }
+
         using var log = RunLog.Open("GenerateDsdFile", "GenerateDsdFile");
         using var trace = TraceLog.Open("GenerateDsdFile", "GenerateDsdFile");
         try
         {
-            trace.Info($"Input: {translationsInput} / output: {finalOutDir}");
-            DsdJsonGenerator.Run(translationsInput, finalOutDir, log, trace);
+            trace.Info($"Input: {translationsInput} / output: {finalOutDir}" + (pluginFilter != null ? $" / plugin filter: {pluginFilter.Count} plugin(s) from {pluginsFileArg!["--plugins-file=".Length..]}" : ""));
+            DsdJsonGenerator.Run(translationsInput, finalOutDir, log, trace, pluginFilter: pluginFilter);
             trace.Info("DSD JSON generation complete");
             return 0;
         }
