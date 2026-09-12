@@ -25,3 +25,5 @@ FormId	WinningPlugin	RecordType	EnglishText	Index	EditorId	Context	StaleOriginal
 000856:SjptsMatchingEdgeCases.esp	SjptsMatchingEdgeCases.esp	ARMO DESC	Sjpts Plain No Quote Candidate	0
 000858:SjptsMatchingEdgeCases.esp	SjptsMatchingEdgeCases.esp	BOOK CNAM	Sjpts Scrambled Gibberish Candidate	0
 000860:SjptsLlmSkipReasons.esp	SjptsLlmSkipReasons.esp	WEAP FULL	Sjpts Omitted By Model Candidate	0
+000870:SjptsTargetTagCases.esp	SjptsTargetTagCases.esp	WEAP FULL	Target:	0
+000871:SjptsTargetTagCases.esp	SjptsTargetTagCases.esp	WEAP FULL	Sjpts Format Edge Case Candidate	0

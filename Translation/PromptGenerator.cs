@@ -815,7 +815,7 @@ public static class PromptGenerator
                 if (line.Length == 0) continue;
                 var tabIndex = line.IndexOf('\t');
                 if (tabIndex < 0) continue;
-                var source = NormalizeBatchResponseSource(line[..tabIndex]);
+                var source = ExtractTaggedSource(line[..tabIndex]);
                 // v0.58.5: <SJPTS_TARGET>タグ方式への移行前は、境界引用符
                 // マーカー方式の副作用で、モデルが訳文の末尾（まれに先頭）に
                 // 自分で余分な"を片側だけ付け足すことがあった（実測6件、実機
@@ -844,7 +844,7 @@ public static class PromptGenerator
             foreach (var (group, _, matchKey) in batch)
             {
                 // v0.58.4: matchKeyは常に候補原文そのまま（Trimしない）だが、
-                // NormalizeBatchResponseSourceは応答側のsource列を必ずTrimしてから
+                // ExtractTaggedSourceは応答側のsource列を必ずTrimしてから
                 // byLineへ格納している——原文の先頭/末尾に空白を含む候補は、
                 // モデルが無意味な空白を保持しない限り未Trim側と絶対に一致せず、
                 // モデルの性能・再実行回数に関係なく毎回この照合に失敗する
@@ -947,46 +947,37 @@ public static class PromptGenerator
             .ToList();
     }
 
-    /// <summary>v0.52.1a: the source column is supposed to be just the bare
-    /// text that followed <c>Target:</c> in the prompt — real Claude Code CLI
-    /// responses sometimes echo the "Target:" label itself too (confirmed against
-    /// real output: <c>Target: $TNG_TCT&lt;TAB&gt;トングトクト</c> instead of the
-    /// requested bare <c>$TNG_TCT&lt;TAB&gt;...</c>), which would otherwise never
-    /// match <c>Candidate.CurrentText</c> and silently leave that candidate
-    /// unresolved. A leading "- " (as in the prompt's own "- Target: ..." bullet)
-    /// is tolerated the same way.
+    /// <summary>2026-09-12: replaces the old NormalizeBatchResponseSource's
+    /// guess-and-strip approach (leading "- ", leading "Target:", then a
+    /// tolerant tag strip) after a real-data bug (HeelsFix mod,
+    /// "$HEELSFIX_TARGET_ACTOR" = the literal string "Target:") proved that
+    /// approach unsound: unconditionally stripping a literal "Target:" prefix
+    /// destroys a candidate whose OWN text starts with that word, exactly the
+    /// same class of bug this method's own v0.58.5 history already lived
+    /// through once for boundary quotes (see the old remarks, preserved in
+    /// git history) — "a WRONG strip permanently breaks the exact-text match,
+    /// this is a genuine ambiguity, not a safe heuristic."
     ///
-    /// v0.58.5: also strips a leading/trailing &lt;SJPTS_TARGET&gt;/
-    /// &lt;/SJPTS_TARGET&gt; if the model echoed the wrapper tags back despite
-    /// being told not to — defensive only, not observed in real testing (8/8
-    /// and 8/9 real gemma4 samples across plain text, boundary/embedded quotes,
-    /// HTML-like markup, and other punctuation all echoed cleanly with no
-    /// wrapper-tag artifacts at all).
-    ///
-    /// Deliberately does NOT strip surrounding quotes any more (unlike the
-    /// pre-v0.58.5 versions of this method, and unlike the Japanese answer
-    /// column — see <see cref="StripSurroundingQuotes"/>'s remarks). A
-    /// candidate's own text can legitimately start and/or end with a literal
-    /// " (dialogue, a quoted nickname, ...), and this method has no way to
-    /// tell that apart from a model wrapping its whole answer field in
-    /// quotes as an unrelated habit — stripping here is a genuine ambiguity,
-    /// not a safe heuristic, because a WRONG strip permanently breaks the
-    /// exact-text match against <c>Candidate.CurrentText</c> (found the hard
-    /// way in v0.58.5: a candidate quoted on both sides, e.g.
-    /// <c>"Sjpts Quoted Both Sides"</c>, stopped matching once this method
-    /// started stripping its own genuine boundary quotes). The
-    /// &lt;SJPTS_TARGET&gt; tag delimiter (see its own remarks) exists
-    /// specifically so the model never needs to be told about quoting at
-    /// all any more, and real testing confirmed it doesn't add any on its
-    /// own — so there is nothing left here worth the risk of guessing.</summary>
-    private static string NormalizeBatchResponseSource(string text)
+    /// The fix mirrors that same lesson: stop guessing what surrounding text
+    /// means and require an unambiguous delimiter instead. The prompt now
+    /// requires the model to echo the source WRAPPED IN THE SAME
+    /// &lt;SJPTS_TARGET&gt;/&lt;/SJPTS_TARGET&gt; tags it was sent (see
+    /// LlmBatchInstruction) rather than a bare, tag-free echo — so this
+    /// method now does the opposite of the old one: it REQUIRES the trimmed
+    /// text to start with the open tag and end with the close tag, with
+    /// nothing else (not even "Target:" or "- ") outside them. Anything that
+    /// doesn't match — no tags at all, a missing tag, or extra text around an
+    /// otherwise well-formed tag pair — returns "" and is treated as an
+    /// unparseable line by the caller (unresolved, retried on the next
+    /// `translate` run), the same as any other malformed response. Confirmed
+    /// against real gemma4:26b (reasoning off) and Claude Code CLI output
+    /// that a well-behaved model readily complies with this instruction.</summary>
+    private static string ExtractTaggedSource(string text)
     {
         var t = text.Trim();
-        if (t.StartsWith("- ", StringComparison.Ordinal)) t = t[2..].TrimStart();
-        if (t.StartsWith("Target:", StringComparison.OrdinalIgnoreCase)) t = t[7..].TrimStart();
-        if (t.StartsWith(TargetTagOpen, StringComparison.Ordinal)) t = t[TargetTagOpen.Length..];
-        if (t.EndsWith(TargetTagClose, StringComparison.Ordinal)) t = t[..^TargetTagClose.Length];
-        return t;
+        if (!t.StartsWith(TargetTagOpen, StringComparison.Ordinal)) return "";
+        if (!t.EndsWith(TargetTagClose, StringComparison.Ordinal)) return "";
+        return t[TargetTagOpen.Length..^TargetTagClose.Length];
     }
 
     /// <summary>v0.58.6: 既知の課題26.関連の実機調査（unofficial skyrim special
@@ -1024,7 +1015,7 @@ public static class PromptGenerator
     /// quotes as its own unrelated formatting habit (confirmed against real
     /// Claude Code CLI output), independent of whatever delimiter this
     /// project's own prompt uses. Used ONLY for the Japanese answer column —
-    /// see <see cref="NormalizeBatchResponseSource"/>'s remarks for why the
+    /// see <see cref="ExtractTaggedSource"/>'s remarks for why the
     /// English matching key deliberately does NOT use this any more (the
     /// same ambiguity is far more damaging there: a wrong strip silently
     /// breaks the exact-text match instead of just leaving a cosmetic stray
@@ -1040,7 +1031,7 @@ public static class PromptGenerator
     /// 訳文を<c>&lt;SJPTS_TARGET&gt;...&lt;/SJPTS_TARGET&gt;</c>で囲んで返す
     /// ことを確認した——プロンプト例（"- Target: &lt;SJPTS_TARGET&gt;example
     /// text&lt;/SJPTS_TARGET&gt;"）を「自分の回答もこの形式で囲むべき」と
-    /// 誤って一般化した可能性がある。原文再掲側（NormalizeBatchResponseSource）
+    /// 誤って一般化した可能性がある。原文再掲側（ExtractTaggedSource）
     /// には対応する除去処理が既にあるが、訳文側には無かったため保存された訳文に
     /// タグがそのまま残っていた。StripSurroundingQuotesと同じ「対称のみ剥がす」
     /// 方針——片側だけタグが付くケース（原文自体に偶然この文字列が含まれる等）を
@@ -1210,14 +1201,18 @@ public static class PromptGenerator
         "even if you're not fully confident in the translation, and do not add the original English in parentheses next to\n" +
         "your translation. For a proper noun you don't recognize, give your best phonetic katakana rendering rather than\n" +
         "leaving it in English.\n\n" +
-        "Output ONE line per string below: the English source, then a single actual tab character (press Tab —\n" +
-        "do NOT write the four characters \"<TAB>\" as literal text), then the Japanese translation. No other lines,\n" +
-        "no header row, no numbering, no preamble or explanation. Each string to translate is wrapped in\n" +
-        TargetTagOpen + " and " + TargetTagClose + " tags, like this: - Target: " + TargetTagOpen + "example text" + TargetTagClose + "\n" +
+        "Each string to translate below is wrapped in " + TargetTagOpen + " and " + TargetTagClose + " tags, like\n" +
+        "this: - Target: " + TargetTagOpen + "example text" + TargetTagClose + "\n" +
         "Translate ONLY the text between these tags. Copy that exact text (unchanged, including any punctuation,\n" +
-        "quotes, or markup it may contain, and including case) as the English source column in your answer — this\n" +
-        "is the matching key used to parse your answer back. Do NOT include the word \"Target:\" or the\n" +
-        TargetTagOpen + "/" + TargetTagClose + " tags themselves anywhere in your answer.\n\n" +
+        "quotes, or markup it may contain, and including case).\n\n" +
+        "Output ONE line per string below: the English source WRAPPED IN THE SAME " + TargetTagOpen + "..." + TargetTagClose + "\n" +
+        "tags shown above (e.g. " + TargetTagOpen + "example text" + TargetTagClose + "), then a single actual tab\n" +
+        "character (press Tab — do NOT write the four characters \"<TAB>\" as literal text), then the Japanese\n" +
+        "translation. No other lines, no header row, no numbering, no preamble or explanation, and nothing other\n" +
+        "than whitespace before the opening tag or after the closing tag — no leading \"- \" or the word \"Target:\".\n" +
+        "Keeping the tags in your answer's source column is required: it is how your answer is matched back to the\n" +
+        "string you translated, even if that string itself happens to contain the word \"Target:\" or look similar\n" +
+        "to this instruction's own formatting.\n\n" +
         "Some Target strings contain the literal marker " + MultilineBreakMarker + ". Treat it exactly like any other\n" +
         "in-string placeholder tag (e.g. <mag>, <dur>): copy it unchanged, do not translate or remove it, and place it\n" +
         "at the corresponding point in your Japanese translation too — it stands in for a line break that was removed\n" +

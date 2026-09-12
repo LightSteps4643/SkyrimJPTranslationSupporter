@@ -15,7 +15,7 @@ namespace SJPTS_InterfaceText;
 /// splitting by char limit not item count, per-batch circuit-breaker checks,
 /// dedup-by-identical-text before sending, defensive response-side
 /// quote/tag stripping, per-candidate "not found" vs "no Japanese in answer"
-/// logging): the core loop shape of ApplyLlmStep, NormalizeBatchResponseSource,
+/// logging): the core loop shape of ApplyLlmStep, ExtractTaggedSource,
 /// StripSurroundingQuotes, StripTargetTags.
 ///
 /// Removed as ESP-specific (does not apply to plain $Key/English UI strings):
@@ -63,14 +63,18 @@ public static class InterfaceTextPromptGenerator
         "Some strings contain a placeholder token — for example {0}, %s, %.1f, or an angle-bracket tag like <font>.\n" +
         "Copy any such token EXACTLY unchanged (same characters, same position in the sentence) — never translate,\n" +
         "reword, or drop it.\n\n" +
-        "Output ONE line per string below: the English source, then a single actual tab character (press Tab —\n" +
-        "do NOT write the four characters \"<TAB>\" as literal text), then the Japanese translation. No other lines,\n" +
-        "no header row, no numbering, no preamble or explanation. Each string to translate is wrapped in\n" +
-        TargetTagOpen + " and " + TargetTagClose + " tags, like this: - Target: " + TargetTagOpen + "example text" + TargetTagClose + "\n" +
+        "Each string to translate below is wrapped in " + TargetTagOpen + " and " + TargetTagClose + " tags, like\n" +
+        "this: - Target: " + TargetTagOpen + "example text" + TargetTagClose + "\n" +
         "Translate ONLY the text between these tags. Copy that exact text (unchanged, including any punctuation,\n" +
-        "quotes, or markup it may contain, and including case) as the English source column in your answer — this\n" +
-        "is the matching key used to parse your answer back. Do NOT include the word \"Target:\" or the\n" +
-        TargetTagOpen + "/" + TargetTagClose + " tags themselves anywhere in your answer.\n\n";
+        "quotes, or markup it may contain, and including case).\n\n" +
+        "Output ONE line per string below: the English source WRAPPED IN THE SAME " + TargetTagOpen + "..." + TargetTagClose + "\n" +
+        "tags shown above (e.g. " + TargetTagOpen + "example text" + TargetTagClose + "), then a single actual tab\n" +
+        "character (press Tab — do NOT write the four characters \"<TAB>\" as literal text), then the Japanese\n" +
+        "translation. No other lines, no header row, no numbering, no preamble or explanation, and nothing other\n" +
+        "than whitespace before the opening tag or after the closing tag — no leading \"- \" or the word \"Target:\".\n" +
+        "Keeping the tags in your answer's source column is required: it is how your answer is matched back to the\n" +
+        "string you translated, even if that string itself happens to contain the word \"Target:\" or look similar\n" +
+        "to this instruction's own formatting.\n\n";
 
     /// <summary>
     /// Translates every not-yet-resolved (Key, English) pair, deduplicated by
@@ -188,7 +192,7 @@ public static class InterfaceTextPromptGenerator
                 if (line.Length == 0) continue;
                 var tabIndex = line.IndexOf('\t');
                 if (tabIndex < 0) continue;
-                var source = NormalizeBatchResponseSource(line[..tabIndex]);
+                var source = ExtractTaggedSource(line[..tabIndex]);
                 var japanese = StripSurroundingQuotes(StripTargetTags(line[(tabIndex + 1)..].Trim()));
                 if (source.Length > 0 && japanese.Length > 0)
                     byLine[source] = japanese; // 同じキーが複数行あれば最後の行を採用
@@ -245,15 +249,23 @@ public static class InterfaceTextPromptGenerator
         return sb.ToString();
     }
 
-    /// <summary>Copied verbatim from <c>PromptGenerator.NormalizeBatchResponseSource</c>.</summary>
-    private static string NormalizeBatchResponseSource(string text)
+    /// <summary>2026-09-12: copied from <c>PromptGenerator.ExtractTaggedSource</c>
+    /// (renamed from NormalizeBatchResponseSource after a real-data bug —
+    /// HeelsFix mod, "$HEELSFIX_TARGET_ACTOR" = the literal string "Target:" —
+    /// proved the old guess-and-strip approach unsound: unconditionally
+    /// stripping a literal "Target:" prefix destroys a candidate whose OWN
+    /// text starts with that word). The prompt now requires the model to echo
+    /// the source wrapped in the same &lt;SJPTS_TARGET&gt;/&lt;/SJPTS_TARGET&gt;
+    /// tags it was sent, so this requires an exact tag-delimited match instead
+    /// of guessing at surrounding text — anything else (no tags, a missing
+    /// tag, or extra text around an otherwise well-formed pair) returns ""
+    /// and is treated as an unparseable line by the caller.</summary>
+    private static string ExtractTaggedSource(string text)
     {
         var t = text.Trim();
-        if (t.StartsWith("- ", StringComparison.Ordinal)) t = t[2..].TrimStart();
-        if (t.StartsWith("Target:", StringComparison.OrdinalIgnoreCase)) t = t[7..].TrimStart();
-        if (t.StartsWith(TargetTagOpen, StringComparison.Ordinal)) t = t[TargetTagOpen.Length..];
-        if (t.EndsWith(TargetTagClose, StringComparison.Ordinal)) t = t[..^TargetTagClose.Length];
-        return t;
+        if (!t.StartsWith(TargetTagOpen, StringComparison.Ordinal)) return "";
+        if (!t.EndsWith(TargetTagClose, StringComparison.Ordinal)) return "";
+        return t[TargetTagOpen.Length..^TargetTagClose.Length];
     }
 
     /// <summary>Copied verbatim from <c>PromptGenerator.StripSurroundingQuotes</c>.</summary>

@@ -966,36 +966,203 @@ public class PromptGeneratorTests
         }
     }
 
-    /// <summary>v0.58.5: defensive coverage for NormalizeBatchResponseSource's
-    /// &lt;SJPTS_TARGET&gt;/&lt;/SJPTS_TARGET&gt; stripping — not observed in
-    /// real gemma4 testing (the model always omitted the wrapper tags as
-    /// instructed), but the prompt can't force this from every possible
-    /// model/server, so a model that echoes the tags back anyway must still
-    /// match correctly rather than silently failing forever.</summary>
+    // 2026-09-12: RunOne_LlmBatch_ModelEchoesWrapperTagsBackDespiteInstructions_StillMatches
+    // (v0.58.5, defensive coverage for a model that echoes the wrapper tags
+    // back "despite instructions") was removed here — its premise no longer
+    // applies now that the prompt REQUIRES the model to echo the tags (see
+    // the new tag-based matching tests above), and its scenario is now just
+    // the default/expected case covered by every other Succeeding()-based
+    // test, plus more thoroughly by the new noise/malformed-tag tests above.
+
+    // ==== 2026-09-12 TDD: tag-based response matching (real-data bug, HeelsFix
+    // "$HEELSFIX_TARGET_ACTOR" = "Target:") — written BEFORE the fix, per the
+    // agreed TDD approach. See design/interface_translations.md and this
+    // session's discussion for the full analysis: NormalizeBatchResponseSource's
+    // unconditional "Target:"/"- " prefix strip corrupts a candidate whose own
+    // text collides with that literal prefix when the response isn't
+    // tag-wrapped, AND (independently) currently tolerates malformed/partial
+    // tag pairs and arbitrary noise around a tag that the new, stricter design
+    // must reject. Some of these are expected to FAIL against the current
+    // implementation (see each test's own remarks); others are regression
+    // safety nets for the refactor and should already pass. ====
+
+    /// <summary>Regression-safety net for the refactor (candidate text is
+    /// literally the word the old heuristic tried to strip) — a tag-wrapped
+    /// response already resolves this correctly even under the OLD
+    /// implementation (the old "Target:" strip never fires because the text
+    /// starts with the tag character "&lt;", not literally "Target:"); the
+    /// actual bug is specific to an UNTAGGED response, covered by the sibling
+    /// tests below. Kept here to make sure the new, simplified extraction
+    /// logic doesn't regress this exact real-world case.</summary>
     [Fact]
-    public void RunOne_LlmBatch_ModelEchoesWrapperTagsBackDespiteInstructions_StillMatches()
+    public void RunOne_LlmBatch_CandidateTextIsLiterallyTargetColon_TaggedResponseResolves()
     {
-        const string plugin = "SjptsMatchingEdgeCases.esp";
+        const string plugin = "SjptsTargetTagCases.esp";
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
         try
         {
             var outputDir = Path.Combine(root, "out_temp");
             using var log = OpenTestLog(root);
-            var fakeLlm = FakeTextTranslator.Succeeding(
-                ("<SJPTS_TARGET>Sjpts Plain No Quote Candidate</SJPTS_TARGET>", "タグ付きで返された訳"));
+            var fakeLlm = FakeTextTranslator.Succeeding(("Target:", "対象"));
+            // ①〜④の自動解決（特に④NameFallbackTranslator——"Target:"は一般的な
+            // 単語のため、これ単体で辞書的に解決されてしまいLLM経路に到達しない）
+            // を無効化し、確実に⑤ローカルLLM経路でこのテストのフェイク応答が
+            // 使われるようにする。
+            var stages = new TranslationStageOptions(EnableMeaning: false, EnableTransliteration: false, EnableNameFallback: false);
 
-            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm);
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm, stageOptions: stages);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsMatchingEdgeCases");
+            var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
-            Assert.Equal(("タグ付きで返された訳", "TranslationLocalLlm"), translations["Sjpts Plain No Quote Candidate"]);
+            Assert.Equal(("対象", "TranslationLocalLlm"), translations["Target:"]);
         }
-        finally
+        finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ } }
+    }
+
+    /// <summary>EXPECTED TO FAIL against the current implementation. An
+    /// untagged response currently resolves just fine (tags are optional
+    /// today) — this is the actual real-data bug's exact shape (HeelsFix's
+    /// model response for "Target:" had no tags, since the current prompt
+    /// tells the model to omit them, and the old "Target:" strip then
+    /// destroyed the real content). Under the new design (prompt requires the
+    /// tags; parsing requires them too), an untagged response must instead be
+    /// rejected as unparseable.</summary>
+    [Fact]
+    public void RunOne_LlmBatch_ResponseWithoutTags_IsRejectedAsUnparseable()
+    {
+        const string plugin = "SjptsTargetTagCases.esp";
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
         {
-            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+            var outputDir = Path.Combine(root, "out_temp");
+            using var log = OpenTestLog(root);
+            var fakeLlm = FakeTextTranslator.SucceedingRaw("Sjpts Format Edge Case Candidate\t訳文");
+            var stages = new TranslationStageOptions(EnableMeaning: false, EnableTransliteration: false, EnableNameFallback: false);
+
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm, stageOptions: stages);
+
+            var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases");
+            var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
+
+            Assert.Equal(("", ""), translations["Sjpts Format Edge Case Candidate"]);
         }
+        finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ } }
+    }
+
+    /// <summary>EXPECTED TO FAIL against the current implementation. Text
+    /// before the tag (e.g. the model echoing the prompt's own "Target: "
+    /// label) is currently silently stripped and still matches — the new
+    /// design must instead reject anything other than whitespace outside the
+    /// tag pair, so a non-compliant response fails cleanly (and gets retried
+    /// next run) rather than being guessed at.</summary>
+    [Fact]
+    public void RunOne_LlmBatch_ResponseWithNoiseBeforeTag_IsRejectedAsUnparseable()
+    {
+        const string plugin = "SjptsTargetTagCases.esp";
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outputDir = Path.Combine(root, "out_temp");
+            using var log = OpenTestLog(root);
+            var fakeLlm = FakeTextTranslator.SucceedingRaw("Target: <SJPTS_TARGET>Sjpts Format Edge Case Candidate</SJPTS_TARGET>\t訳文");
+            var stages = new TranslationStageOptions(EnableMeaning: false, EnableTransliteration: false, EnableNameFallback: false);
+
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm, stageOptions: stages);
+
+            var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases");
+            var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
+
+            Assert.Equal(("", ""), translations["Sjpts Format Edge Case Candidate"]);
+        }
+        finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ } }
+    }
+
+    /// <summary>EXPECTED TO FAIL against the current implementation. A missing
+    /// opening tag (only the closing tag present) currently still resolves,
+    /// because the old logic strips a trailing close tag independently of
+    /// whether a matching opening tag was ever seen. The new design requires
+    /// both tags to be present as a matched pair.</summary>
+    [Fact]
+    public void RunOne_LlmBatch_ResponseMissingOpeningTag_IsRejectedAsUnparseable()
+    {
+        const string plugin = "SjptsTargetTagCases.esp";
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outputDir = Path.Combine(root, "out_temp");
+            using var log = OpenTestLog(root);
+            var fakeLlm = FakeTextTranslator.SucceedingRaw("Sjpts Format Edge Case Candidate</SJPTS_TARGET>\t訳文");
+            var stages = new TranslationStageOptions(EnableMeaning: false, EnableTransliteration: false, EnableNameFallback: false);
+
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm, stageOptions: stages);
+
+            var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases");
+            var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
+
+            Assert.Equal(("", ""), translations["Sjpts Format Edge Case Candidate"]);
+        }
+        finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ } }
+    }
+
+    /// <summary>EXPECTED TO FAIL against the current implementation. Symmetric
+    /// to the missing-opening-tag case above — a missing closing tag (only the
+    /// opening tag present) currently still resolves for the same reason
+    /// (independent prefix/suffix strips instead of a matched pair).</summary>
+    [Fact]
+    public void RunOne_LlmBatch_ResponseMissingClosingTag_IsRejectedAsUnparseable()
+    {
+        const string plugin = "SjptsTargetTagCases.esp";
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outputDir = Path.Combine(root, "out_temp");
+            using var log = OpenTestLog(root);
+            var fakeLlm = FakeTextTranslator.SucceedingRaw("<SJPTS_TARGET>Sjpts Format Edge Case Candidate\t訳文");
+            var stages = new TranslationStageOptions(EnableMeaning: false, EnableTransliteration: false, EnableNameFallback: false);
+
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm, stageOptions: stages);
+
+            var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases");
+            var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
+
+            Assert.Equal(("", ""), translations["Sjpts Format Edge Case Candidate"]);
+        }
+        finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ } }
+    }
+
+    /// <summary>Regression-safety net for the refactor — whitespace
+    /// immediately around an otherwise well-formed tag pair must still be
+    /// tolerated (Trim()-level only, not arbitrary text around it). Already
+    /// passes today; kept to make sure the simplified extraction logic
+    /// doesn't accidentally start requiring an exact match with zero
+    /// tolerance.</summary>
+    [Fact]
+    public void RunOne_LlmBatch_WhitespaceAroundOtherwiseWellFormedTag_StillResolves()
+    {
+        const string plugin = "SjptsTargetTagCases.esp";
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outputDir = Path.Combine(root, "out_temp");
+            using var log = OpenTestLog(root);
+            var fakeLlm = FakeTextTranslator.SucceedingRaw("  <SJPTS_TARGET>Sjpts Format Edge Case Candidate</SJPTS_TARGET>  \t訳文");
+            var stages = new TranslationStageOptions(EnableMeaning: false, EnableTransliteration: false, EnableNameFallback: false);
+
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm, stageOptions: stages);
+
+            var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases");
+            var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
+
+            Assert.Equal(("訳文", "TranslationLocalLlm"), translations["Sjpts Format Edge Case Candidate"]);
+        }
+        finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ } }
     }
 
     [Fact]

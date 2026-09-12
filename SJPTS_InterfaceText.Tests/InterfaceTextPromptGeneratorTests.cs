@@ -247,4 +247,147 @@ public class InterfaceTextPromptGeneratorTests
         }
         finally { }
     }
+
+    // ==== 2026-09-12 TDD: tag-based response matching (real-data bug,
+    // HeelsFix "$HEELSFIX_TARGET_ACTOR" = "Target:") — written BEFORE the fix,
+    // per the agreed TDD approach. Mirrors the equivalent new tests added to
+    // SkyrimJPStringPatcher.Tests/Translation/PromptGeneratorTests.cs (ESP
+    // side) — see this session's discussion / design/interface_translations.md
+    // for the full analysis. Some are expected to FAIL against the current
+    // implementation; others are regression safety nets for the refactor. ====
+
+    /// <summary>Regression-safety net for the refactor — a tag-wrapped
+    /// response for a candidate whose own text is literally "Target:" already
+    /// resolves correctly even under the OLD implementation (the old
+    /// "Target:" strip never fires because the text starts with the tag
+    /// character "&lt;", not literally "Target:"); the actual real-data bug is
+    /// specific to an UNTAGGED response, covered by the sibling tests below.</summary>
+    [Fact]
+    public void ApplyLlmStep_CandidateTextIsLiterallyTargetColon_TaggedResponseResolves()
+    {
+        var pending = new List<(string Key, string English)> { ("$HEELSFIX_TARGET_ACTOR", "Target:") };
+        var fake = new FakeTranslator();
+        fake.Enqueue("<SJPTS_TARGET>Target:</SJPTS_TARGET>\t対象");
+
+        using var log = OpenTempLog(out var dir);
+        try
+        {
+            var result = InterfaceTextPromptGenerator.ApplyLlmStep(pending, fake, "heelsfix", log, null, 12_000, dir, "localLLM");
+
+            Assert.Equal("対象", result["$HEELSFIX_TARGET_ACTOR"].Japanese);
+        }
+        finally { }
+    }
+
+    /// <summary>EXPECTED TO FAIL against the current implementation. An
+    /// untagged response currently resolves just fine (tags are optional
+    /// today) — this is the actual real-data bug's exact shape: the current
+    /// prompt tells the model to omit the tags, and the old "Target:" strip
+    /// then destroys real content that happens to start with that word.
+    /// Under the new design (prompt requires the tags; parsing requires them
+    /// too), an untagged response must instead be rejected as unparseable.</summary>
+    [Fact]
+    public void ApplyLlmStep_ResponseWithoutTags_IsRejectedAsUnparseable()
+    {
+        var pending = new List<(string Key, string English)> { ("$Foo", "Sjpts Format Edge Case Candidate") };
+        var fake = new FakeTranslator();
+        fake.Enqueue("Sjpts Format Edge Case Candidate\t訳文");
+
+        using var log = OpenTempLog(out var dir);
+        try
+        {
+            var result = InterfaceTextPromptGenerator.ApplyLlmStep(pending, fake, "TestMod", log, null, 12_000, dir, "localLLM");
+
+            Assert.Empty(result);
+        }
+        finally { }
+    }
+
+    /// <summary>EXPECTED TO FAIL against the current implementation. Text
+    /// before the tag (e.g. the model echoing the prompt's own "Target: "
+    /// label) is currently silently stripped and still matches — the new
+    /// design must instead reject anything other than whitespace outside the
+    /// tag pair.</summary>
+    [Fact]
+    public void ApplyLlmStep_ResponseWithNoiseBeforeTag_IsRejectedAsUnparseable()
+    {
+        var pending = new List<(string Key, string English)> { ("$Foo", "Sjpts Format Edge Case Candidate") };
+        var fake = new FakeTranslator();
+        fake.Enqueue("Target: <SJPTS_TARGET>Sjpts Format Edge Case Candidate</SJPTS_TARGET>\t訳文");
+
+        using var log = OpenTempLog(out var dir);
+        try
+        {
+            var result = InterfaceTextPromptGenerator.ApplyLlmStep(pending, fake, "TestMod", log, null, 12_000, dir, "localLLM");
+
+            Assert.Empty(result);
+        }
+        finally { }
+    }
+
+    /// <summary>EXPECTED TO FAIL against the current implementation. A missing
+    /// opening tag (only the closing tag present) currently still resolves,
+    /// because the old logic strips a trailing close tag independently of
+    /// whether a matching opening tag was ever seen. The new design requires
+    /// both tags to be present as a matched pair.</summary>
+    [Fact]
+    public void ApplyLlmStep_ResponseMissingOpeningTag_IsRejectedAsUnparseable()
+    {
+        var pending = new List<(string Key, string English)> { ("$Foo", "Sjpts Format Edge Case Candidate") };
+        var fake = new FakeTranslator();
+        fake.Enqueue("Sjpts Format Edge Case Candidate</SJPTS_TARGET>\t訳文");
+
+        using var log = OpenTempLog(out var dir);
+        try
+        {
+            var result = InterfaceTextPromptGenerator.ApplyLlmStep(pending, fake, "TestMod", log, null, 12_000, dir, "localLLM");
+
+            Assert.Empty(result);
+        }
+        finally { }
+    }
+
+    /// <summary>EXPECTED TO FAIL against the current implementation. Symmetric
+    /// to the missing-opening-tag case above — a missing closing tag (only
+    /// the opening tag present) currently still resolves for the same reason
+    /// (independent prefix/suffix strips instead of a matched pair).</summary>
+    [Fact]
+    public void ApplyLlmStep_ResponseMissingClosingTag_IsRejectedAsUnparseable()
+    {
+        var pending = new List<(string Key, string English)> { ("$Foo", "Sjpts Format Edge Case Candidate") };
+        var fake = new FakeTranslator();
+        fake.Enqueue("<SJPTS_TARGET>Sjpts Format Edge Case Candidate\t訳文");
+
+        using var log = OpenTempLog(out var dir);
+        try
+        {
+            var result = InterfaceTextPromptGenerator.ApplyLlmStep(pending, fake, "TestMod", log, null, 12_000, dir, "localLLM");
+
+            Assert.Empty(result);
+        }
+        finally { }
+    }
+
+    /// <summary>Regression-safety net for the refactor — whitespace
+    /// immediately around an otherwise well-formed tag pair must still be
+    /// tolerated (Trim()-level only, not arbitrary text around it). Already
+    /// passes today; kept to make sure the simplified extraction logic
+    /// doesn't accidentally start requiring an exact match with zero
+    /// tolerance.</summary>
+    [Fact]
+    public void ApplyLlmStep_WhitespaceAroundOtherwiseWellFormedTag_StillResolves()
+    {
+        var pending = new List<(string Key, string English)> { ("$Foo", "Sjpts Format Edge Case Candidate") };
+        var fake = new FakeTranslator();
+        fake.Enqueue("  <SJPTS_TARGET>Sjpts Format Edge Case Candidate</SJPTS_TARGET>  \t訳文");
+
+        using var log = OpenTempLog(out var dir);
+        try
+        {
+            var result = InterfaceTextPromptGenerator.ApplyLlmStep(pending, fake, "TestMod", log, null, 12_000, dir, "localLLM");
+
+            Assert.Equal("訳文", result["$Foo"].Japanese);
+        }
+        finally { }
+    }
 }
