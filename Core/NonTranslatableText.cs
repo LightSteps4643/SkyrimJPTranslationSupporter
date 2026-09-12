@@ -261,6 +261,34 @@ public static class NonTranslatableText
         return !t.Any(c => Vowels.Contains(c));
     }
 
+    /// <summary>
+    /// True if the string IS an Interface\Translations key reference — a bare
+    /// "$" followed by a whitespace-free run of letters/digits/underscores,
+    /// e.g. "$TNG_TCT", "$DAK_Trade". Some mods apply the same "$Key resolved
+    /// at runtime via Interface\Translations" convention used by MCM menus to
+    /// ESP fields directly (an ARMO's own FULL name, a PERK's activation
+    /// prompt) — this is a raw key, not English text, and machine-translating
+    /// it would corrupt the exact-match lookup the game performs at runtime,
+    /// permanently breaking the dynamic name/prompt resolution for that record.
+    ///
+    /// Confirmed against real data: TheNewGentleman.esp's ARMO FULL
+    /// ("$TNG_TCT"/"$TNG_TMT"/"$TNG_TRT") and Dynamic Activation Key - Addons
+    /// Collection.esp's PERK EPF2/EPFD ("$DAK_Trade" etc., mixed case — which
+    /// is why this is its own check rather than folded into
+    /// <see cref="LooksLikeInternalIdentifier"/>'s all-uppercase SNAKE_CASE
+    /// rule). No genuine "$"-led English text (e.g. a dollar amount) was found
+    /// anywhere in a real 300+-plugin load order.
+    /// </summary>
+    public static bool LooksLikeInterfaceTranslationKeyReference(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        var t = text.Trim();
+        if (!t.StartsWith('$')) return false;
+        var rest = t[1..];
+        if (rest.Length == 0) return false;
+        return rest.All(c => char.IsLetterOrDigit(c) || c == '_');
+    }
+
     private static readonly string[] AssetExtensions = { ".nif", ".dds", ".wav", ".xwm", ".hkx", ".pex", ".swf", ".bik", ".tga" };
 
     /// <summary>

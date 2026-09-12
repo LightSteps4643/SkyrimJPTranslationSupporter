@@ -942,6 +942,19 @@ public static class PickUpTargetRunner
                 continue;
             }
 
+            // 2026-09-12: Interface\Translations key reference ("$TNG_TCT",
+            // "$DAK_Trade") stored directly in an ESP field — a raw key the
+            // game resolves at runtime, not English text.
+            if (NonTranslatableText.LooksLikeInterfaceTranslationKeyReference(winner.Text))
+            {
+                notPlayerFacing++;
+                log.Detail("除外: \"$\"で始まり、続きが空白を含まない英数字とアンダースコアのみで構成されており、Interface\\Translationsのキー参照（実行時に動的解決される）だと判断",
+                    "Excluded: starts with \"$\" followed only by whitespace-free letters/digits/underscores — judged to be an Interface\\Translations key reference (resolved dynamically at runtime), not English text",
+                    $"[{dsdType}] {winner.Text}");
+                trace?.Trace($"Exclude [{dsdType}] {formKey}: Interface\\Translations key reference (\"{winner.Text}\")");
+                continue;
+            }
+
             trace?.Trace($"Candidate [{dsdType}] {formKey}: \"{winner.Text}\" (winning plugin: {winner.Source.FileName})");
 
             // v0.56.0: a cross-mod precedent (see FindCrossModPrecedent's

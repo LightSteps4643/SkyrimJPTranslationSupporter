@@ -128,6 +128,19 @@ public class NonTranslatableTextTests
         Assert.Equal(expected, NonTranslatableText.IsAssetPath(text));
     }
 
+    [Theory]
+    [InlineData("$TNG_TCT", true)] // real: TheNewGentleman.esp ARMO FULL, all-uppercase suffix
+    [InlineData("$DAK_Trade", true)] // real: Dynamic Activation Key - Addons Collection.esp PERK EPF2/EPFD, mixed-case suffix
+    [InlineData("$SHSE_WHITELIST", true)]
+    [InlineData("REF_ATTACH_NODE", false)] // SNAKE_CASE but no leading "$" -> not this rule (LooksLikeInternalIdentifier's job)
+    [InlineData("$", false)] // bare "$", nothing after it
+    [InlineData("$Trade Settlement", false)] // has whitespace after "$" -> real prose, not a key
+    [InlineData("Steel Sword", false)] // no leading "$" at all
+    public void LooksLikeInterfaceTranslationKeyReference(string text, bool expected)
+    {
+        Assert.Equal(expected, NonTranslatableText.LooksLikeInterfaceTranslationKeyReference(text));
+    }
+
     /// <summary>The false-positive guard the class's own remarks call out by
     /// name: an earlier attempt matched any candidate CONTAINING a path,
     /// which flagged 2,000+ book bodies because book text legitimately embeds
@@ -159,5 +172,6 @@ public class NonTranslatableTextTests
         Assert.False(NonTranslatableText.IsPlaceholderToken(text));
         Assert.False(NonTranslatableText.LooksLikeNonWordAcronym(text));
         Assert.False(NonTranslatableText.IsAssetPath(text));
+        Assert.False(NonTranslatableText.LooksLikeInterfaceTranslationKeyReference(text));
     }
 }
