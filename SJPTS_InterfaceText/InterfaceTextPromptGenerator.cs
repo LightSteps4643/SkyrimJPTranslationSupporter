@@ -51,12 +51,37 @@ public static class InterfaceTextPromptGenerator
     private const string TargetTagOpen = "<SJPTS_TARGET>";
     private const string TargetTagClose = "</SJPTS_TARGET>";
 
-    private const string Instruction =
-        "Below are UI strings from a Skyrim SE mod's settings menu (MCM or similar), not yet translated into Japanese.\n" +
+    /// <summary>2026-09-12: takes the mod's own display name (VFS-winning MOD
+    /// folder name — see DetectOneMod's own remarks in Program.cs) so the
+    /// model itself can recognize when a string among the candidates IS that
+    /// mod's own name/title, rather than this tool trying to mechanically
+    /// detect it. Mechanical detection (matching the string against `target`
+    /// or the mod folder name) turned out unreliable in both directions: a
+    /// real-data investigation (Floating Subtitles' "$FSUB_Title_Text" =
+    /// "Floating Subtitles", HeelsFix's "$HEELSFIX_MOD_NAME" = "Heels Fix")
+    /// found title-holding keys with no consistent naming convention, AND
+    /// `target` is explicitly NOT guaranteed to equal the mod's real name
+    /// (design/interface_translations.md) while the MOD folder name is
+    /// user-renamable in MO2 — neither is a dependable ground truth. Confirmed
+    /// against real gemma4:26b (reasoning off) output before implementing:
+    /// the model both preserves the bare mod name AND still correctly
+    /// translates a near-miss like "High Heels" for a mod named "Heels Fix"
+    /// (no over-exclusion of ordinary vocabulary that merely shares a word).
+    /// Scoped to Interface翻訳 only — ESP-side plugin names showed no
+    /// equivalent real-data failure (a plugin name embedded in a longer
+    /// record name, e.g. "Heels Fix Quest", was already handled correctly by
+    /// the model without this instruction; the bug here is specific to a
+    /// standalone MCM title string holding ONLY the mod's own name).</summary>
+    private static string BuildInstruction(string modDisplayName) =>
+        $"Below are UI strings from a Skyrim SE mod named \"{modDisplayName}\", not yet translated into Japanese.\n" +
         "These are the mod's OWN original UI text — do not assume they match any vanilla Skyrim terminology; judge each\n" +
         "string on its own meaning. Many are short (toggle labels, headers, option names) with little surrounding\n" +
         "context — the \"Key(s)\" line for each string lists the $Key name(s) it's used under, which often encode a\n" +
         "feature/page hierarchy (e.g. $ModName_FeatureName_OptionText); use that as a hint to what the string is for.\n\n" +
+        $"If a string IS this mod's own name/title \"{modDisplayName}\" — exactly, or in an equivalent form with only\n" +
+        "different capitalization, spacing, or punctuation — keep it EXACTLY as given in your Japanese translation\n" +
+        "column too (do not translate, transliterate into katakana, or alter it in any way). Only apply this to a\n" +
+        "string that clearly IS the mod's own name, not ordinary vocabulary that merely shares a word with it.\n\n" +
         "Translate EVERY word into Japanese, including simple/common ones — do not leave any English word in your\n" +
         "answer, and do not add the original English in parentheses. For a proper noun you don't recognize, give your\n" +
         "best phonetic katakana rendering rather than leaving it in English.\n\n" +
@@ -109,10 +134,18 @@ public static class InterfaceTextPromptGenerator
     /// <param name="providerLabel">"localLLM" or "cloudLLM" — which of this
     /// mod's two independent translate calls this is, mirroring the ESP CLI's
     /// own step 5 vs step 6 distinction (Translation/PromptGenerator.cs).</param>
+    /// <param name="modDisplayName">The mod's real display name (VFS-winning
+    /// MOD folder name — see <see cref="BuildInstruction"/>'s remarks), used
+    /// only to tell the model what to preserve. Optional and defaults to
+    /// <paramref name="modName"/> (the file-based target identifier) when not
+    /// supplied — every pre-existing caller/test keeps working unchanged,
+    /// just without the real display name available for this specific check.</param>
     public static Dictionary<string, (string Japanese, string Notes)> ApplyLlmStep(
         IReadOnlyList<(string Key, string English)> pending, ITextTranslator translator,
-        string modName, RunLog log, TraceLog? trace, int batchCharLimit, string modWorkDir, string providerLabel)
+        string modName, RunLog log, TraceLog? trace, int batchCharLimit, string modWorkDir, string providerLabel,
+        string? modDisplayName = null)
     {
+        modDisplayName ??= modName;
         var result = new Dictionary<string, (string Japanese, string Notes)>(StringComparer.Ordinal);
         if (pending.Count == 0) return result;
 
@@ -168,7 +201,7 @@ public static class InterfaceTextPromptGenerator
                 break;
             }
 
-            var promptBuilder = new System.Text.StringBuilder(Instruction);
+            var promptBuilder = new System.Text.StringBuilder(BuildInstruction(modDisplayName));
             foreach (var (_, block) in batch) promptBuilder.Append(block);
             var promptText = promptBuilder.ToString();
 

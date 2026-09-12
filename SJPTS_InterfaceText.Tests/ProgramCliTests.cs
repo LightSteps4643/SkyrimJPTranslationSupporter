@@ -259,6 +259,75 @@ public class ProgramCliTests
         finally { try { Directory.Delete(root, recursive: true); } catch { } }
     }
 
+    /// <summary>2026-09-12 real-data bug (Floating Subtitles' "$FSUB_Title_Text"
+    /// = "Floating Subtitles", HeelsFix's "$HEELSFIX_MOD_NAME" = "Heels Fix"
+    /// both got transliterated into katakana instead of staying as the mod's
+    /// own brand name): the prompt now tells the model the mod's real display
+    /// name (read from mod_folder_name.txt, written by `detect`) and asks it
+    /// to preserve an exact/near-exact match. This is a fixed-fixture
+    /// black-box test — no `detect`/MO2 instance needed, mod_folder_name.txt
+    /// is written by hand — and no working LLM connection either: the prompt
+    /// file is written to disk BEFORE the actual translator call, so pointing
+    /// --llm-cloud-endpoint= at a closed local port makes the call fail fast
+    /// without any network dependency, while still exercising the real
+    /// prompt-building code path (unlike the ApplyLlmStep-level unit tests,
+    /// which never touch Program.cs's own mod_folder_name.txt-reading wiring).</summary>
+    [Fact]
+    public void Translate_ModFolderNameFilePresent_PromptNamesTheModAndAsksToPreserveIt()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_uitext_clitest_modname_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var workDir = Path.Combine(root, "Translation", "out_temp");
+            var modWorkDir = Path.Combine(workDir, "heelsfix");
+            InterfaceTranslationsTsv.Write(Path.Combine(modWorkDir, "interface_translations.tsv"),
+                new List<InterfaceTranslationRow> { new("$HEELSFIX_MOD_NAME", "Heels Fix", "", false) }); // unresolved — forces the LLM step to actually build a prompt
+            File.WriteAllText(Path.Combine(modWorkDir, "mod_folder_name.txt"), "Heels Fix");
+
+            // A closed local port fails the HTTP call almost instantly (connection
+            // refused) — no real network/LLM needed, but the prompt is written to
+            // disk before this call happens, so the failure doesn't affect the assertion.
+            var (exitCode, output) = RunCli(root, "translate", "--mod=heelsfix", $"--work={workDir}",
+                "--llm-cloud-provider=http", "--llm-cloud-endpoint=http://127.0.0.1:1/", "--llm-cloud-model=test-model");
+
+            Assert.Equal(0, exitCode);
+            var promptPath = Path.Combine(modWorkDir, "prompt_cloudLLM_batch1_of_1.txt");
+            Assert.True(File.Exists(promptPath), output);
+            var prompt = File.ReadAllText(promptPath);
+            Assert.Contains("a Skyrim SE mod named \"Heels Fix\"", prompt);
+            Assert.Contains("If a string IS this mod's own name/title \"Heels Fix\"", prompt);
+        }
+        finally { try { Directory.Delete(root, recursive: true); } catch { } }
+    }
+
+    /// <summary>Symmetric to the above — when mod_folder_name.txt is absent
+    /// (e.g. a hand-run `translate` without `detect` first), the prompt must
+    /// still be well-formed, falling back to the target (--mod=) value.</summary>
+    [Fact]
+    public void Translate_ModFolderNameFileAbsent_PromptFallsBackToTarget()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_uitext_clitest_modname_fallback_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var workDir = Path.Combine(root, "Translation", "out_temp");
+            var modWorkDir = Path.Combine(workDir, "TestMod");
+            InterfaceTranslationsTsv.Write(Path.Combine(modWorkDir, "interface_translations.tsv"),
+                new List<InterfaceTranslationRow> { new("$K", "Hello", "", false) });
+            // No mod_folder_name.txt written here, deliberately.
+
+            var (exitCode, output) = RunCli(root, "translate", "--mod=TestMod", $"--work={workDir}",
+                "--llm-cloud-provider=http", "--llm-cloud-endpoint=http://127.0.0.1:1/", "--llm-cloud-model=test-model");
+
+            Assert.Equal(0, exitCode);
+            var promptPath = Path.Combine(modWorkDir, "prompt_cloudLLM_batch1_of_1.txt");
+            Assert.True(File.Exists(promptPath), output);
+            Assert.Contains("a Skyrim SE mod named \"TestMod\"", File.ReadAllText(promptPath));
+        }
+        finally { try { Directory.Delete(root, recursive: true); } catch { } }
+    }
+
     /// <summary>2026-09-12: `translate` used to open its own RunLog/TraceLog
     /// PER MOD (Path.Combine(workDir, target)) — a person debugging a failed
     /// run had to check a separate small log file per mod, easy to miss.

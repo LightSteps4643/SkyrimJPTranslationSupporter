@@ -445,7 +445,15 @@ int RunTranslateOne(string target, RunLog log, TraceLog trace)
 
     Directory.CreateDirectory(modWorkDir);
 
-    var translated = InterfaceTextPromptGenerator.ApplyLlmStep(pending, translator, target, log, trace, charLimit, modWorkDir, providerLabel);
+    // 2026-09-12: detectが書いたmod_folder_name.txt（実際にVFSで勝ったMODフォルダ名
+    // ——targetというファイル名由来の内部識別子とは別物、design/interface_
+    // translations.md参照）があれば読み、プロンプトでモデルに「これがMOD名です」と
+    // 伝える材料にする。無ければtargetにフォールバック（手動テスト等、detectを
+    // 経由していない場合）。
+    var modFolderNamePath = Path.Combine(modWorkDir, "mod_folder_name.txt");
+    var modDisplayName = File.Exists(modFolderNamePath) ? File.ReadAllText(modFolderNamePath).Trim() : target;
+
+    var translated = InterfaceTextPromptGenerator.ApplyLlmStep(pending, translator, target, log, trace, charLimit, modWorkDir, providerLabel, modDisplayName);
     Console.WriteLine($"resolved: {translated.Count} / {pending.Count}");
 
     // Mirrors Program.cs's own LogCloudAiUsage — emit cumulative usage at the

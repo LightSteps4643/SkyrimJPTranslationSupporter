@@ -410,4 +410,57 @@ public class InterfaceTextPromptGeneratorTests
     {
         Assert.Equal(expectedCategory, InvokeClassifyTaggedSourceIssue(malformedSourceColumn));
     }
+
+    // ==== 2026-09-12: MOD name preservation — real-data bug (Floating
+    // Subtitles' "$FSUB_Title_Text" = "Floating Subtitles", HeelsFix's
+    // "$HEELSFIX_MOD_NAME" = "Heels Fix" both got transliterated into
+    // katakana instead of staying as the mod's own brand name). Confirmed
+    // against real gemma4:26b output (manual test, see this session's
+    // discussion) that telling the model the mod's display name and asking
+    // it to preserve an exact/near-exact match works, including NOT
+    // over-excluding ordinary vocabulary that merely shares a word with the
+    // mod name (e.g. "High Heels" for a mod named "Heels Fix" still
+    // translates normally). These tests only check the PROMPT TEXT sent
+    // (the model's actual judgment isn't something a fake can exercise). ====
+
+    [Fact]
+    public void ApplyLlmStep_ModDisplayNameGiven_PromptNamesTheModAndAsksToPreserveIt()
+    {
+        var pending = new List<(string Key, string English)> { ("$HEELSFIX_MOD_NAME", "Heels Fix") };
+        var fake = new FakeTranslator();
+        fake.Enqueue("<SJPTS_TARGET>Heels Fix</SJPTS_TARGET>\tHeels Fix");
+
+        using var log = OpenTempLog(out var dir);
+        try
+        {
+            InterfaceTextPromptGenerator.ApplyLlmStep(pending, fake, "heelsfix", log, null, 12_000, dir, "localLLM", modDisplayName: "Heels Fix");
+
+            var prompt = Assert.Single(fake.PromptsReceived);
+            Assert.Contains("a Skyrim SE mod named \"Heels Fix\"", prompt);
+            Assert.Contains("If a string IS this mod's own name/title \"Heels Fix\"", prompt);
+        }
+        finally { }
+    }
+
+    /// <summary>When the caller doesn't supply modDisplayName (every
+    /// pre-existing test/call site above), the prompt must still be
+    /// well-formed — falling back to modName (the file-based target) rather
+    /// than throwing or leaving a blank mod name in the instruction text.</summary>
+    [Fact]
+    public void ApplyLlmStep_ModDisplayNameOmitted_PromptFallsBackToModName()
+    {
+        var pending = new List<(string Key, string English)> { ("$Foo", "Hello") };
+        var fake = new FakeTranslator();
+        fake.Enqueue("<SJPTS_TARGET>Hello</SJPTS_TARGET>\tこんにちは");
+
+        using var log = OpenTempLog(out var dir);
+        try
+        {
+            InterfaceTextPromptGenerator.ApplyLlmStep(pending, fake, "TestMod", log, null, 12_000, dir, "localLLM");
+
+            var prompt = Assert.Single(fake.PromptsReceived);
+            Assert.Contains("a Skyrim SE mod named \"TestMod\"", prompt);
+        }
+        finally { }
+    }
 }
