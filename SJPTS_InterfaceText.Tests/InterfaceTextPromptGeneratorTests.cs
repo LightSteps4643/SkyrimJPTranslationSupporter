@@ -390,4 +390,24 @@ public class InterfaceTextPromptGeneratorTests
         }
         finally { }
     }
+
+    // ==== 2026-09-12: ClassifyTaggedSourceIssue — mirrors the equivalent new
+    // tests in SkyrimJPStringPatcher.Tests/Translation/PromptGeneratorTests.cs
+    // (ESP side). Private/no public seam, so this reflects on it directly. ====
+
+    private static string InvokeClassifyTaggedSourceIssue(string text)
+    {
+        var method = typeof(InterfaceTextPromptGenerator).GetMethod("ClassifyTaggedSourceIssue", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        return method.Invoke(null, [text])!.ToString()!;
+    }
+
+    [Theory]
+    [InlineData("Sjpts Format Edge Case Candidate", "NoTags")]
+    [InlineData("Sjpts Format Edge Case Candidate</SJPTS_TARGET>", "MissingOpeningTag")]
+    [InlineData("<SJPTS_TARGET>Sjpts Format Edge Case Candidate", "MissingClosingTag")]
+    [InlineData("Target: <SJPTS_TARGET>Sjpts Format Edge Case Candidate</SJPTS_TARGET>", "ExtraTextOutsideTags")]
+    public void ClassifyTaggedSourceIssue_ReturnsExpectedCategory(string malformedSourceColumn, string expectedCategory)
+    {
+        Assert.Equal(expectedCategory, InvokeClassifyTaggedSourceIssue(malformedSourceColumn));
+    }
 }

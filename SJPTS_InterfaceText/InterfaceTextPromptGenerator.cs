@@ -192,12 +192,21 @@ public static class InterfaceTextPromptGenerator
                 if (line.Length == 0) continue;
                 var tabIndex = line.IndexOf('\t');
                 if (tabIndex < 0) continue;
-                var source = ExtractTaggedSource(line[..tabIndex]);
+                var sourceColumnRaw = line[..tabIndex];
+                var source = ExtractTaggedSource(sourceColumnRaw);
+                if (source.Length == 0)
+                {
+                    var issue = ClassifyTaggedSourceIssue(sourceColumnRaw);
+                    log.Detail("応答の1行がタグ形式を満たさずスキップ",
+                        "a response line didn't satisfy the tag format and was skipped",
+                        $"[{modName}]  理由: {issue} / 該当行: \"{sourceColumnRaw.Trim()}\"");
+                }
                 var japanese = StripSurroundingQuotes(StripTargetTags(line[(tabIndex + 1)..].Trim()));
                 if (source.Length > 0 && japanese.Length > 0)
                     byLine[source] = japanese; // 同じキーが複数行あれば最後の行を採用
             }
 
+            var anyUnresolvedInBatch = false;
             foreach (var (group, _) in batch)
             {
                 if (!byLine.TryGetValue(group.Key.Trim(), out var japanese))
@@ -209,6 +218,7 @@ public static class InterfaceTextPromptGenerator
                             $"[{modName}]  \"{key}\": \"{english}\"",
                             $"[{modName}] could not resolve \"{key}\" (model's response wasn't in an interpretable format)");
                     }
+                    anyUnresolvedInBatch = true;
                     continue;
                 }
 
@@ -236,6 +246,13 @@ public static class InterfaceTextPromptGenerator
 
                 foreach (var (key, _) in group) result[key] = (japanese, methodTag);
             }
+
+            // 2026-09-12: このバッチで1件でも未解決が残った場合のみ、モデルからの
+            // 生レスポンス全文をtrace.logへ1回だけ残す（バッチ全体で1回、候補ごとに
+            // 重複させない）——上のper-line診断（ClassifyTaggedSourceIssue）で
+            // 大抵の原因は分かるが、それでも特定できない場合の最終手段として。
+            if (anyUnresolvedInBatch)
+                trace?.Warning($"[{modName}] {batchLabel}: raw response for the batch with unresolved candidate(s):\n{response}");
         }
 
         return result;
@@ -266,6 +283,24 @@ public static class InterfaceTextPromptGenerator
         if (!t.StartsWith(TargetTagOpen, StringComparison.Ordinal)) return "";
         if (!t.EndsWith(TargetTagClose, StringComparison.Ordinal)) return "";
         return t[TargetTagOpen.Length..^TargetTagClose.Length];
+    }
+
+    /// <summary>2026-09-12: mirrors PromptGenerator.ClassifyTaggedSourceIssue
+    /// — diagnostic-only classification of WHY a response line's source
+    /// column failed <see cref="ExtractTaggedSource"/>, for translation.log.
+    /// See that method's own remarks for the real-data investigation this
+    /// came from.</summary>
+    private enum TaggedSourceIssue { NoTags, MissingOpeningTag, MissingClosingTag, ExtraTextOutsideTags }
+
+    private static TaggedSourceIssue ClassifyTaggedSourceIssue(string text)
+    {
+        var t = text.Trim();
+        var hasOpen = t.Contains(TargetTagOpen, StringComparison.Ordinal);
+        var hasClose = t.Contains(TargetTagClose, StringComparison.Ordinal);
+        if (!hasOpen && !hasClose) return TaggedSourceIssue.NoTags;
+        if (!hasOpen) return TaggedSourceIssue.MissingOpeningTag;
+        if (!hasClose) return TaggedSourceIssue.MissingClosingTag;
+        return TaggedSourceIssue.ExtraTextOutsideTags;
     }
 
     /// <summary>Copied verbatim from <c>PromptGenerator.StripSurroundingQuotes</c>.</summary>

@@ -1198,4 +1198,29 @@ public class PromptGeneratorTests
             try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
         }
     }
+
+    // ==== 2026-09-12: ClassifyTaggedSourceIssue — diagnostic classification of
+    // why a response line's source column failed the tag-match, added after
+    // a real-data investigation (HeelsFix.esp, gemma4:26b) hit a wall trying
+    // to figure out WHY a candidate didn't resolve — neither translation.log
+    // nor translation.trace.log captured enough to tell apart "no tags at
+    // all" from "tags present but something else was wrong". Private/no
+    // public seam, so this reflects on it directly (same pattern as
+    // TranslationDetailFormTests.cs's Escape/Unescape). ====
+
+    private static string InvokeClassifyTaggedSourceIssue(string text)
+    {
+        var method = typeof(PromptGenerator).GetMethod("ClassifyTaggedSourceIssue", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        return method.Invoke(null, [text])!.ToString()!;
+    }
+
+    [Theory]
+    [InlineData("Sjpts Format Edge Case Candidate", "NoTags")]
+    [InlineData("Sjpts Format Edge Case Candidate</SJPTS_TARGET>", "MissingOpeningTag")]
+    [InlineData("<SJPTS_TARGET>Sjpts Format Edge Case Candidate", "MissingClosingTag")]
+    [InlineData("Target: <SJPTS_TARGET>Sjpts Format Edge Case Candidate</SJPTS_TARGET>", "ExtraTextOutsideTags")]
+    public void ClassifyTaggedSourceIssue_ReturnsExpectedCategory(string malformedSourceColumn, string expectedCategory)
+    {
+        Assert.Equal(expectedCategory, InvokeClassifyTaggedSourceIssue(malformedSourceColumn));
+    }
 }

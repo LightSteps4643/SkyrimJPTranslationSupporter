@@ -815,7 +815,15 @@ public static class PromptGenerator
                 if (line.Length == 0) continue;
                 var tabIndex = line.IndexOf('\t');
                 if (tabIndex < 0) continue;
-                var source = ExtractTaggedSource(line[..tabIndex]);
+                var sourceColumnRaw = line[..tabIndex];
+                var source = ExtractTaggedSource(sourceColumnRaw);
+                if (source.Length == 0)
+                {
+                    var issue = ClassifyTaggedSourceIssue(sourceColumnRaw);
+                    log.Detail($"{stepNumber}.{stepLabelJa}: 応答の1行がタグ形式を満たさずスキップ",
+                        $"{stepNumber}. {stepLabelEn}: a response line didn't satisfy the tag format and was skipped",
+                        $"[{plugin}]  理由: {issue} / 該当行: \"{sourceColumnRaw.Trim()}\"");
+                }
                 // v0.58.5: <SJPTS_TARGET>タグ方式への移行前は、境界引用符
                 // マーカー方式の副作用で、モデルが訳文の末尾（まれに先頭）に
                 // 自分で余分な"を片側だけ付け足すことがあった（実測6件、実機
@@ -841,6 +849,7 @@ public static class PromptGenerator
                 }
             }
 
+            var anyUnresolvedInBatch = false;
             foreach (var (group, _, matchKey) in batch)
             {
                 // v0.58.4: matchKeyは常に候補原文そのまま（Trimしない）だが、
@@ -928,8 +937,17 @@ public static class PromptGenerator
                         $"{stepNumber}. {stepLabelEn} could not resolve this candidate (model's response wasn't in an interpretable format)",
                         $"[{plugin}]  \"{group.Key}\"",
                         $"[{plugin}] {stepLabelEn}: モデルがツールで解釈可能なフォーマットでないレスポンスを返したため、スキップしました \"{group.Key}\"");
+                    anyUnresolvedInBatch = true;
                 }
             }
+
+            // 2026-09-12: このバッチで1件でも未解決が残った場合のみ、モデルからの
+            // 生レスポンス全文をtrace.logへ1回だけ残す（バッチ全体で1回、候補ごとに
+            // 重複させない）——上のper-line診断（ClassifyTaggedSourceIssue）で
+            // 大抵の原因は分かるが、それでも特定できない場合の最終手段として。
+            // 全件成功したバッチでは出力しない（ログの肥大化を避ける）。
+            if (anyUnresolvedInBatch)
+                trace?.Warning($"{stepLabelEn} [{plugin}] {batchLabel}: raw response for the batch with unresolved candidate(s):\n{response}");
 
             // v0.49.2a由来: リトライ診断（成功はしたが1回では済まなかった旨）を
             // 可視化——バッチ単位で1行にまとめる。
@@ -978,6 +996,30 @@ public static class PromptGenerator
         if (!t.StartsWith(TargetTagOpen, StringComparison.Ordinal)) return "";
         if (!t.EndsWith(TargetTagClose, StringComparison.Ordinal)) return "";
         return t[TargetTagOpen.Length..^TargetTagClose.Length];
+    }
+
+    /// <summary>2026-09-12: diagnostic-only classification of WHY a response
+    /// line's source column failed <see cref="ExtractTaggedSource"/> — used
+    /// only for logging (translation.log), never for resolution itself. Added
+    /// after a real-data investigation (this same HeelsFix/"Target:" bug fix)
+    /// hit a wall: the existing per-candidate "could not resolve" log message
+    /// doesn't say WHY, and neither translation.log nor translation.trace.log
+    /// captured the raw response text needed to find out by hand. This gives
+    /// the common case (which of the 4 ways a line can fail the tag format)
+    /// without needing to dump the full response for every failure — see
+    /// ApplyLlmStep's own per-batch trace dump (only for a batch that
+    /// actually ends up with an unresolved candidate) for the rest.</summary>
+    private enum TaggedSourceIssue { NoTags, MissingOpeningTag, MissingClosingTag, ExtraTextOutsideTags }
+
+    private static TaggedSourceIssue ClassifyTaggedSourceIssue(string text)
+    {
+        var t = text.Trim();
+        var hasOpen = t.Contains(TargetTagOpen, StringComparison.Ordinal);
+        var hasClose = t.Contains(TargetTagClose, StringComparison.Ordinal);
+        if (!hasOpen && !hasClose) return TaggedSourceIssue.NoTags;
+        if (!hasOpen) return TaggedSourceIssue.MissingOpeningTag;
+        if (!hasClose) return TaggedSourceIssue.MissingClosingTag;
+        return TaggedSourceIssue.ExtraTextOutsideTags;
     }
 
     /// <summary>v0.58.6: 既知の課題26.関連の実機調査（unofficial skyrim special
