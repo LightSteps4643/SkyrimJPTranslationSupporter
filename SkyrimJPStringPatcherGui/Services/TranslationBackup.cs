@@ -77,7 +77,19 @@ public static class TranslationBackup
         Directory.CreateDirectory(bakDir);
         var zipPath = Path.Combine(bakDir, $"{timestamp}.zip");
 
-        using var zipStream = new FileStream(zipPath, FileMode.Create);
+        // 2026-09-12: timestampは秒精度かつ「対象データの生成時刻」なので、
+        // データに実質差分があっても（例: importフォルダへファイルを追加しただけで
+        // 翻訳処理自体は挟まず短時間に再実行した場合）同じ値になり得る——
+        // このバックアップ自体が「うっかり消さないための安全網」という目的上、
+        // 無警告上書きは避け、衝突時は連番を振って別ファイルとして残す。
+        var suffix = 2;
+        while (File.Exists(zipPath))
+        {
+            zipPath = Path.Combine(bakDir, $"{timestamp}_{suffix}.zip");
+            suffix++;
+        }
+
+        using var zipStream = new FileStream(zipPath, FileMode.CreateNew);
         using var archive = new ZipArchive(zipStream, ZipArchiveMode.Create);
         foreach (var dir in sourceDirs)
         {

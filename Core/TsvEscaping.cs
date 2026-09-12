@@ -1,4 +1,18 @@
+// 2026-09-12: this file is compiled a SECOND time, as a file-level link (NOT a
+// ProjectReference — see SkyrimJPStringPatcherGui.csproj's own comment), into
+// SkyrimJPStringPatcherGui so InterfaceTextPanel.cs/InterfaceTextDetailForm.cs
+// can call this exact logic instead of keeping their own private duplicate.
+// The GUI build defines SJPTS_GUI_LINKED_TSVESCAPING precisely to give that
+// second copy a different namespace — the GUI's own SkyrimJPStringPatcher.Tests
+// project references BOTH assemblies, and two same-named types across two
+// referenced assemblies is a compiler error (CS0433), not a silent conflict.
+// Editing this file's logic (Escape/Unescape below) changes both copies at
+// once, since there is only one physical source — that's the whole point.
+#if SJPTS_GUI_LINKED_TSVESCAPING
+namespace SkyrimJPStringPatcherGui.Services;
+#else
 namespace SkyrimJPStringPatcher.Core;
+#endif
 
 /// <summary>
 /// The single Escape/Unescape pair every TSV writer/reader in the pipeline uses

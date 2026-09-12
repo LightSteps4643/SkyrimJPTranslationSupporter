@@ -223,6 +223,26 @@ int RunDetect()
     var vfs = Mo2InstanceReader.BuildVfsDirectoryMerge(instance, "interface/translations");
     Console.WriteLine($"interface/translations file count after VFS resolution: {vfs.Count}");
 
+    // 2026-09-12: 全件スキャン経路（targetMods多数）でDetectOneModが呼ばれる
+    // たびにvfs全体・importフォルダ全体を毎回線形スキャンし直していた
+    // （O(MOD数×VFSサイズ)相当）——ここで1回だけベース名→パスの辞書に索引化し、
+    // 以降DetectOneModはO(1)で引く。本体プロジェクトのDsdCoverageScanner.cs
+    // （BuildVfsDirectoryMergeの結果を1回だけ索引化する既存パターン）と同じ考え方。
+    var englishByBaseName = vfs.Keys
+        .Where(k => k.EndsWith("_english.txt", StringComparison.OrdinalIgnoreCase))
+        .GroupBy(k => Path.GetFileNameWithoutExtension(k).Replace("_english", "", StringComparison.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase)
+        .ToDictionary(g => g.Key, g => vfs[g.First()], StringComparer.OrdinalIgnoreCase);
+    var japaneseByBaseName = vfs.Keys
+        .Where(k => k.EndsWith("_japanese.txt", StringComparison.OrdinalIgnoreCase))
+        .GroupBy(k => Path.GetFileNameWithoutExtension(k).Replace("_japanese", "", StringComparison.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase)
+        .ToDictionary(g => g.Key, g => vfs[g.First()], StringComparer.OrdinalIgnoreCase);
+    var importByBaseName = Directory.Exists(importDir)
+        ? Directory.EnumerateFiles(importDir, "*", SearchOption.AllDirectories)
+            .Where(f => Path.GetFileNameWithoutExtension(f).EndsWith("_japanese", StringComparison.OrdinalIgnoreCase))
+            .GroupBy(f => Path.GetFileNameWithoutExtension(f)[..^"_japanese".Length], StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase)
+        : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
     List<string> targetMods;
     if (modsFile != null)
     {
@@ -250,7 +270,7 @@ int RunDetect()
     var summary = new List<(string Target, string ModFolderName, int TargetFileCount, int UntranslatedCount, string Status)>();
     foreach (var target in targetMods)
     {
-        var result = DetectOneMod(vfs, target, instance.ModsDir);
+        var result = DetectOneMod(vfs, target, instance.ModsDir, englishByBaseName, japaneseByBaseName, importByBaseName);
         if (result == null)
         {
             Console.WriteLine($"[warn] no *_english.txt found for '{target}' (after VFS resolution) — skipping.");
@@ -275,14 +295,27 @@ int RunDetect()
     return 0;
 }
 
-(int UntranslatedCount, int TotalCount, string ModFolderName)? DetectOneMod(Dictionary<string, string> vfs, string target, string modsDir)
+(int UntranslatedCount, int TotalCount, string ModFolderName)? DetectOneMod(
+    Dictionary<string, string> vfs, string target, string modsDir,
+    Dictionary<string, string> englishByBaseName, Dictionary<string, string> japaneseByBaseName, Dictionary<string, string> importByBaseName)
 {
-    var englishPath = vfs.Keys
-        .Where(k => k.EndsWith("_english.txt", StringComparison.OrdinalIgnoreCase))
-        .Where(k => Path.GetFileNameWithoutExtension(k).StartsWith(target, StringComparison.OrdinalIgnoreCase) ||
-                    vfs[k].Contains(target, StringComparison.OrdinalIgnoreCase))
-        .Select(k => vfs[k])
-        .FirstOrDefault();
+    // targetは常にファイル名由来でなければならない（design/interface_translations.md）
+    // ——ファイルパス内の任意の位置に target が含まれるかで判定する
+    // フォールバックマッチは、MOD名（表示名）等ファイル名由来でない文字列でも
+    // ヒットしてしまい、target(=出力ファイル名の元)と実ファイル名が食い違う
+    // 原因になるため持たない。
+    // 2026-09-12: 全件スキャン経路はtargetが必ずenglishByBaseNameの完全一致
+    // キーになる（RunDetectでの構築規則と同一）ため、まずO(1)の辞書引きを試す。
+    // 手動--mod=でファイル名の一部（プレフィックス）だけを指定したような稀な
+    // ケースのみ、元の線形スキャンにフォールバックする。
+    if (!englishByBaseName.TryGetValue(target, out var englishPath))
+    {
+        englishPath = vfs.Keys
+            .Where(k => k.EndsWith("_english.txt", StringComparison.OrdinalIgnoreCase))
+            .Where(k => Path.GetFileNameWithoutExtension(k).StartsWith(target, StringComparison.OrdinalIgnoreCase))
+            .Select(k => vfs[k])
+            .FirstOrDefault();
+    }
 
     if (englishPath == null) return null;
 
@@ -303,11 +336,7 @@ int RunDetect()
     var baseName = Path.GetFileNameWithoutExtension(englishPath)
         .Replace("_english", "", StringComparison.OrdinalIgnoreCase);
 
-    var japanesePath = vfs
-        .Where(kv => Path.GetFileNameWithoutExtension(kv.Key)
-            .Equals($"{baseName}_japanese", StringComparison.OrdinalIgnoreCase))
-        .Select(kv => kv.Value)
-        .FirstOrDefault();
+    japaneseByBaseName.TryGetValue(baseName, out var japanesePath);
 
     var existingJapanese = new Dictionary<string, string>(StringComparer.Ordinal);
     if (japanesePath != null)
@@ -325,7 +354,7 @@ int RunDetect()
     // _japanese.txt — a per-key overwrite (not a wholesale replace), so a mod
     // whose import only covers some keys still falls back to the load order's
     // own file for the rest.
-    var importPath = FindImportFile(importDir, baseName);
+    importByBaseName.TryGetValue(baseName, out var importPath);
     if (importPath != null)
     {
         Console.WriteLine($"import file (takes priority): {importPath}");
@@ -365,16 +394,6 @@ int RunDetect()
     Console.WriteLine($"wrote intermediate file (regenerated fresh, discarding any existing one): {tsvPath}");
     Console.WriteLine($"providing MOD: {modFolderName}");
     return (untranslated, rows.Count, modFolderName);
-}
-
-// Recursive (mirrors the ESP CLI's own XTranslatorImporter.Load: a zip
-// extracted straight into the import folder still resolves) — looks for
-// "<baseName>_japanese.<ext>" anywhere under importDir.
-string? FindImportFile(string dir, string baseName)
-{
-    if (!Directory.Exists(dir)) return null;
-    return Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories)
-        .FirstOrDefault(f => Path.GetFileNameWithoutExtension(f).Equals($"{baseName}_japanese", StringComparison.OrdinalIgnoreCase));
 }
 
 int RunTranslateOne(string target, RunLog log, TraceLog trace)

@@ -7,11 +7,31 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>Skyrim_JP_Translation_Supporter</AssemblyName>
+    <!-- 2026-09-12: see Core/TsvEscaping.cs's own top-of-file comment — this
+         switches that linked file's namespace so it doesn't collide (CS0433)
+         with the Core-compiled copy inside SkyrimJPStringPatcher.Tests, which
+         references both this assembly and the Core one. -->
+    <DefineConstants>$(DefineConstants);SJPTS_GUI_LINKED_TSVESCAPING</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
     <!-- DPAPI (ProtectedData) for encrypting the stored cloud-AI API key — see Services/SecretProtector.cs -->
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 2026-09-12: file-level link, NOT a ProjectReference — design/gui_architecture.md's
+         "GUI has zero project references to Core/etc." rule stays intact (no
+         dependency-graph edge added, Mutagen and friends are not pulled in).
+         Compiles this one pure-string-utility file directly into this assembly
+         (as SkyrimJPStringPatcherGui.Services.TsvEscaping — see the
+         SJPTS_GUI_LINKED_TSVESCAPING define above and the file's own comment)
+         so InterfaceTextPanel.cs/InterfaceTextDetailForm.cs (and any future
+         GUI code) can call it directly instead of keeping their own private
+         duplicate — the pattern MainForm.cs/TranslationDetailForm.cs's own
+         pre-existing duplicates used before this (those are unchanged; a
+         separate follow-up will consolidate them the same way). -->
+    <Compile Include="..\Core\TsvEscaping.cs" Link="Services\TsvEscaping.cs" />
   </ItemGroup>
 
 </Project>

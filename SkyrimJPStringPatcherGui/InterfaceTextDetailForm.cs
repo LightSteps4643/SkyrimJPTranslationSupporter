@@ -1,19 +1,27 @@
+using SkyrimJPStringPatcherGui.Services;
+
 namespace SkyrimJPStringPatcherGui;
 
 /// <summary>Viewer/editor for one mod's interface_translations.tsv — copied from (and
 /// trimmed down against) TranslationDetailForm.cs's DataGridView review
 /// pattern, against the simpler InterfaceText row shape (Key/English/
-/// Japanese/Resolved/Notes — no FormId/RecordType/EditorId, no escape/unescape
-/// since these values can never contain a literal tab or newline: the file
-/// format itself is one value per line).
+/// Japanese/Resolved/Notes — no FormId/RecordType/EditorId).
 ///
 /// v0.51.0's "GUI has zero project references to Core/Translation/etc." holds
 /// here too — <see cref="InterfaceTranslationRow"/>/tsv read-write below is a small
 /// deliberate duplication of SJPTS_InterfaceText/InterfaceTranslationsTsv.cs's own
-/// (tiny, ~20-line) logic, the same call TranslationDetailForm.cs already
-/// made for Core/TsvEscaping.cs's Escape/Unescape — not worth a project
-/// reference that would drag Mutagen in transitively through
-/// SkyrimJPStringPatcher.csproj.</summary>
+/// (tiny, ~20-line) logic, not worth a project reference that would drag
+/// Mutagen in transitively through SkyrimJPStringPatcher.csproj.
+///
+/// 2026-09-12: values here CAN contain a literal tab/newline (an LLM response
+/// or a user's own multi-line paste into the grid) despite the file format
+/// being nominally one value per line — an unescaped tab/newline silently
+/// corrupts or drops the row on the next read (see Core/TsvEscaping.cs's own
+/// remarks for the general problem). Escape/Unescape are shared via a
+/// file-level link to Core/TsvEscaping.cs (see SkyrimJPStringPatcherGui.csproj)
+/// rather than a further private duplicate — the link adds no project
+/// reference (Core itself is still not referenced), just this one pure
+/// string-utility file compiled directly into this assembly.</summary>
 public sealed record InterfaceTranslationRow(string Key, string English, string Japanese, bool Resolved, string Notes = "");
 
 public sealed class InterfaceTextDetailForm : Form
@@ -207,7 +215,9 @@ public sealed class InterfaceTextDetailForm : Form
             var cols = line.Split('\t');
             if (cols.Length < 4) continue;
             var notes = cols.Length >= 5 ? cols[4] : "";
-            rows.Add(new InterfaceTranslationRow(cols[0], cols[1], cols[2], cols[3] == "1", notes));
+            rows.Add(new InterfaceTranslationRow(
+                TsvEscaping.Unescape(cols[0]), TsvEscaping.Unescape(cols[1]), TsvEscaping.Unescape(cols[2]),
+                cols[3] == "1", TsvEscaping.Unescape(notes)));
         }
         return rows;
     }
@@ -219,7 +229,7 @@ public sealed class InterfaceTextDetailForm : Form
         writer.NewLine = "\n";
         writer.WriteLine("Key\tEnglish\tJapanese\tResolved\tNotes");
         foreach (var row in rows)
-            writer.WriteLine($"{row.Key}\t{row.English}\t{row.Japanese}\t{(row.Resolved ? "1" : "0")}\t{row.Notes}");
+            writer.WriteLine($"{TsvEscaping.Escape(row.Key)}\t{TsvEscaping.Escape(row.English)}\t{TsvEscaping.Escape(row.Japanese)}\t{(row.Resolved ? "1" : "0")}\t{TsvEscaping.Escape(row.Notes)}");
     }
 
     private void ApplyFilter()

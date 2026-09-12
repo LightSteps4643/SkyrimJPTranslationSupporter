@@ -58,6 +58,10 @@ public sealed class InterfaceTextPanel : Form
     // (Func&lt;AppSettings&gt;) を受け取る。
     private readonly Func<AppSettings> _getSettings;
     private string? _productRoot;
+    // 2026-09-12: RunCliAsync本体はMainForm側とほぼ同一だったためCliExecutionRunner
+    // へ切り出し済み（design/gui_architecture.md参照）。差分だった「どのCLIを
+    // 探すか」「どの進捗パーサを使うか」だけをここで束縛する。
+    private readonly CliExecutionRunner _cliRunner;
 
     internal AppSettings Settings => _getSettings();
     internal string ProductRoot => _productRoot ?? throw new InvalidOperationException("Product root not resolved.");
@@ -71,21 +75,12 @@ public sealed class InterfaceTextPanel : Form
     internal string CloudAiEndpoint => _getSettings().CloudAiEndpoint;
     internal string CloudAiApiKey => _getSettings().CloudAiApiKey;
 
-    /// <summary>A CLI subprocess launched via RunCliAsync doesn't stop just
-    /// because the GUI window closes — without this, closing mid-run leaves
-    /// SJPTS_InterfaceText.exe running invisibly in the background. Cancelling
-    /// this token makes CliRunner.RunAsync kill the process (and its tree) before
-    /// the exception propagates back up — see the OperationCanceledException
-    /// handling in RunCliAsync below, which stays silent (no error dialog) since
-    /// this is an intentional user shutdown, not a failure.</summary>
-    private CancellationTokenSource? _currentRunCts;
-
     /// <summary>v0.53.0a: 「翻訳実行」中だけ非nullになる、キャンセル要求用の一時
     /// フラグファイルのパス（既知の課題15.）。「翻訳実行」以外のCLI実行（MO2再読込・
     /// DSD生成等、すぐ終わる処理）にはキャンセルボタンを出さない（ユーザーの明示的な
     /// スコープ決定）ため、他のRunCliAsync呼び出しではnullのままにしておく。
-    /// _currentRunCtsの強制kill（ウィンドウを閉じたとき用）とは別系統——こちらは
-    /// CLI自身がプラグインの区切りで自発的に止まる、協調的な中断。</summary>
+    /// _cliRunner内部の強制kill（ウィンドウを閉じたとき用、CancelForShutdown）とは
+    /// 別系統——こちらはCLI自身がプラグインの区切りで自発的に止まる、協調的な中断。</summary>
     private string? _activeCancelFlagPath;
 
     /// <summary>_activeCancelFlagPathが有効な間にキャンセルが要求されたかどうか——
@@ -199,10 +194,24 @@ public sealed class InterfaceTextPanel : Form
     private TableLayoutPanel? _bottomOptionsPanel;
     private TableLayoutPanel? _bottomActionsPanel;
 
-    public InterfaceTextPanel(LogWindow logWindow, Func<AppSettings> getSettings)
+    // 2026-09-12: 「プラグイン翻訳」タブと本タブは同一のLogWindowを共有している
+    // （SetBusyのクラス冒頭コメント参照）——自分のSetBusyは自分のコントロールしか
+    // 無効化しないため、これだけでは両タブが同時に実行状態になれてしまい、
+    // 共有LogWindowのログ・進捗バーが混線する。実行中は相手タブ（TabPage）自体を
+    // 無効化してもらうことで、同時実行そのものを構造的に防ぐ。
+    private readonly Action<bool> _setSiblingTabEnabled;
+
+    public InterfaceTextPanel(LogWindow logWindow, Func<AppSettings> getSettings, Action<bool> setSiblingTabEnabled)
     {
         _logWindow = logWindow;
         _getSettings = getSettings;
+        _setSiblingTabEnabled = setSiblingTabEnabled;
+        _cliRunner = new CliExecutionRunner(
+            _logWindow,
+            () => InterfaceTextCliLocator.TryAutoDetect(),
+            InterfaceTextCliLocator.ResolveAbsolute,
+            InterfaceTextCliLocator.Validate,
+            TranslationProgressParser.TryParseModCompleted);
         Text = Services.AppVersion.FormatWindowTitle("Skyrim JP Translation Supporter", System.Reflection.Assembly.GetExecutingAssembly().GetName().Version);
         Width = 1150;
         Height = 850;
@@ -262,7 +271,7 @@ public sealed class InterfaceTextPanel : Form
 
     private void MainForm_FormClosing(object? sender, FormClosingEventArgs e)
     {
-        _currentRunCts?.Cancel();
+        _cliRunner.CancelForShutdown();
         // LogWindowを明示的に閉じる必要はない——Application.Run(MainForm)は
         // MainFormが閉じた時点でプロセスごと終了する（LogWindowがどんな状態でも）。
     }
@@ -650,8 +659,12 @@ public sealed class InterfaceTextPanel : Form
         foreach (var target in targets)
         {
             var path = Path.Combine(InterfaceTextWorkDir, target, "interface_translations.tsv");
+            // rows.Count == 0 は「ファイルが存在しない/読めない」とは限らない——
+            // 対象ファイルはあるが未翻訳keyが0件のMODも正当な状態として一覧に
+            // 表示し続ける設計（design/gui_architecture.md「ゼロ件MODの扱い」）
+            // のため、0件でも更新をスキップしない。ComputeStatsは空リストでも
+            // 安全（Total=0/Ratio=100.0を返す）。
             var rows = ReadInterfaceTranslationsTsv(path);
-            if (rows.Count == 0) continue;
 
             var (total, untranslatedCount, ratio, untranslatedChars, charsRatio) = ComputeStats(rows);
 
@@ -717,13 +730,11 @@ public sealed class InterfaceTextPanel : Form
             if (line.Length == 0) continue;
             var cols = line.Split('\t');
             if (cols.Length < 4) continue;
-            rows.Add((cols[0], cols[1], cols[2], cols[3] == "1"));
+            rows.Add((TsvEscaping.Unescape(cols[0]), TsvEscaping.Unescape(cols[1]), TsvEscaping.Unescape(cols[2]), cols[3] == "1"));
         }
         return rows;
     }
 
-    /// <summary>InterfaceText形式の値は改行・タブを含み得ない（1行1値のファイル
-    /// 形式そのものの制約）ため、ESP側のComputeStatsと違いUnescapeは不要。</summary>
     private static (int Total, int Untranslated, double Ratio, long UntranslatedChars, double CharsRatio) ComputeStats(
         List<(string Key, string English, string Japanese, bool Resolved)> rows)
     {
@@ -1069,6 +1080,7 @@ public sealed class InterfaceTextPanel : Form
         _chkCloudAi.Enabled = !busy;
         _numLlmBatchCharLimit.Enabled = !busy;
         _numCloudAiBatchCharLimit.Enabled = !busy;
+        _setSiblingTabEnabled(!busy);
         // v0.58.6: CLI実行（翻訳実行・再スキャン・初期化等）の完了直後にも
         // bottomパネルの高さを補正し直す（RecalculateBottomHeightの他の
         // 呼び出し元と同じ保険的対応）。
@@ -1097,143 +1109,6 @@ public sealed class InterfaceTextPanel : Form
     /// accounting (per-plugin granularity was an explicit choice: ⑤⑥ batch
     /// multiple candidates per LLM call, so per-candidate granularity wouldn't
     /// line up with the real unit of work anyway).</param>
-    internal async Task<bool> RunCliAsync(IReadOnlyList<string> arguments, IReadOnlyDictionary<string, long>? pluginCharsForProgress = null)
-    {
-        if (_productRoot == null)
-        {
-            MessageBox.Show(this, "実行フォルダを特定できませんでした。GUIの配置場所を確認してください。", "エラー", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            return false;
-        }
-        // CLI実行ファイルのパスはユーザー設定にせず、GUI・CLIが常に同じ製品
-        // フォルダの兄弟として配置される前提で毎回自動検出する（ESP側の
-        // CliLocatorと同じ考え方——このタブはSJPTS_InterfaceText.exeを呼ぶ）。
-        var cliExePath = InterfaceTextCliLocator.ResolveAbsolute(_productRoot, InterfaceTextCliLocator.TryAutoDetect() ?? "");
-        if (!InterfaceTextCliLocator.Validate(cliExePath, out var cliError))
-        {
-            MessageBox.Show(this, cliError, "CLI実行ファイルが見つかりません", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            return false;
-        }
-
-        var argsDisplay = string.Join(' ', arguments);
-        SetBusy(true);
-        SetStatus($"実行中: {argsDisplay}");
-        AppendLog($"> {Path.GetFileName(cliExePath)} {argsDisplay}");
-        _currentRunCts = new CancellationTokenSource();
-        // v0.54.2 (既知の課題21.): pickuptargetが不正なプラグイン/レコードを
-        // スキップした場合、機械可読な専用プレフィックス("##SJPTS_ISSUES##")の
-        // 1行をstdoutへ出す。LogWindowの大量の情報に埋もれさせないよう、この行を
-        // 検知したら実行成功時でも明示的なMessageBoxで知らせる（レアケースのため）。
-        const string IssuesMarkerPrefix = "##SJPTS_ISSUES##";
-        const string IssuesPluginsMarkerPrefix = "##SJPTS_ISSUES_PLUGINS##";
-        // v0.57.1: pickuptarget prints "[error] ..." (readable, not a stack
-        // trace) for a recoverable MO2 configuration problem (see
-        // Mo2InstanceConfigurationException) — captured here so the failure
-        // dialog below can show the ACTUAL cause instead of just a bare exit
-        // code, which is what a real user reported being unable to make
-        // sense of ("終了コード-532462766が表示されて..."). Keeps the last
-        // one seen, in case more than one line happens to match.
-        const string ErrorMarkerPrefix = "[error] ";
-        string? issuesLine = null;
-        string? issuesPluginsLine = null;
-        string? lastErrorLine = null;
-        var progressTotalChars = pluginCharsForProgress?.Values.Sum() ?? 0;
-        var progressDoneChars = 0L;
-        if (progressTotalChars > 0) _logWindow.SetProgress(0);
-        void OnOutputLine(string line)
-        {
-            AppendLog(line);
-            if (pluginCharsForProgress != null && progressTotalChars > 0
-                && Services.TranslationProgressParser.TryParseModCompleted(line, out var completedPlugin)
-                && pluginCharsForProgress.TryGetValue(completedPlugin, out var chars))
-            {
-                progressDoneChars += chars;
-                _logWindow.SetProgress((double)progressDoneChars / progressTotalChars);
-            }
-            // より長い方のプレフィックスを先にチェックする——
-            // "##SJPTS_ISSUES_PLUGINS##"は"##SJPTS_ISSUES##"では始まらないため
-            // 実際は衝突しないが、念のため意図を明確にする順序にしてある。
-            if (line.StartsWith(IssuesPluginsMarkerPrefix, StringComparison.Ordinal))
-                issuesPluginsLine = line[IssuesPluginsMarkerPrefix.Length..].Trim();
-            else if (line.StartsWith(IssuesMarkerPrefix, StringComparison.Ordinal))
-                issuesLine = line;
-            else if (line.StartsWith(ErrorMarkerPrefix, StringComparison.Ordinal))
-                lastErrorLine = line[ErrorMarkerPrefix.Length..];
-        }
-        try
-        {
-            var result = await CliRunner.RunAsync(cliExePath, arguments, _productRoot, OnOutputLine, _currentRunCts.Token,
-                LlmApiKey.Length > 0 ? LlmApiKey : null, CloudAiApiKey.Length > 0 ? CloudAiApiKey : null);
-            if (!result.Succeeded)
-            {
-                AppendLog($"[終了コード {result.ExitCode}]");
-                var message = lastErrorLine != null
-                    ? $"処理が失敗しました:\n{lastErrorLine}"
-                    : $"処理が失敗しました（終了コード {result.ExitCode}）。ログを確認してください。";
-                MessageBox.Show(this, message, "実行エラー", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-            else if (issuesLine != null)
-            {
-                var message = "一部のプラグイン、またはレコードを正常に処理できなかったためスキップしました。\n" +
-                    "処理自体は完了していますが、詳細はログを確認してください。\n\n" + FormatIssuesSummary(issuesLine);
-                if (!string.IsNullOrWhiteSpace(issuesPluginsLine))
-                    message += "\n\n対象プラグイン:\n" + string.Join('\n', issuesPluginsLine.Split('|', StringSplitOptions.RemoveEmptyEntries).Select(p => $"・{p}"));
-                MessageBox.Show(this, message, "一部のデータをスキップしました", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
-            return result.Succeeded;
-        }
-        catch (OperationCanceledException)
-        {
-            // Window is closing (MainForm_FormClosing cancelled us) — the child
-            // process has already been killed by CliRunner; no dialog, the form
-            // itself is on its way out.
-            return false;
-        }
-        catch (Exception ex)
-        {
-            AppendLog($"[例外] {ex.Message}");
-            MessageBox.Show(this, $"CLIの起動に失敗しました:\n{ex.Message}", "実行エラー", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            return false;
-        }
-        finally
-        {
-            _currentRunCts?.Dispose();
-            _currentRunCts = null;
-            SetBusy(false);
-            SetStatus("準備完了");
-            if (progressTotalChars > 0) _logWindow.SetProgress(null);
-            // v0.60.0: 空行を1つ挟んで区切りにする——実行ログウィンドウは
-            // 複数のCLI呼び出し（MO2再読込＆初期化はpickuptarget+translationの
-            // 2回、翻訳実行→続けてDSDファイル生成、等）の出力が続けて流れ込むため、
-            // どこからどこまでが1回の操作の出力かが分かりにくいという指摘への対応。
-            // 空行自体にはタイムスタンプを付けない（LogWindow.AppendLine参照）。
-            AppendLog("");
-        }
-    }
-
-    /// <summary>"##SJPTS_ISSUES## plugins=0 fields=1 fail_open=0 context_only=0"
-    /// という機械可読な行を、MessageBoxにそのまま出すのではなく、0件の項目を除いた
-    /// 日本語の箇条書きに変換する。</summary>
-    private static string FormatIssuesSummary(string issuesLine)
-    {
-        var labels = new Dictionary<string, string>
-        {
-            ["plugins"] = "スキップされたプラグイン",
-            ["fields"] = "スキップされたレコード/フィールド",
-            ["fail_open"] = "除外判定に失敗し、安全側に倒して含めた候補",
-            ["context_only"] = "文脈情報のみ抽出できなかった候補（翻訳への影響なし）",
-        };
-
-        var lines = new List<string>();
-        foreach (var token in issuesLine.Split(' ', StringSplitOptions.RemoveEmptyEntries))
-        {
-            var eq = token.IndexOf('=');
-            if (eq < 0) continue;
-            var key = token[..eq];
-            if (!labels.TryGetValue(key, out var label)) continue;
-            if (!int.TryParse(token[(eq + 1)..], out var count) || count <= 0) continue;
-            lines.Add($"・{label}: {count}件");
-        }
-
-        return lines.Count > 0 ? string.Join('\n', lines) : "";
-    }
+    internal Task<bool> RunCliAsync(IReadOnlyList<string> arguments, IReadOnlyDictionary<string, long>? pluginCharsForProgress = null) =>
+        _cliRunner.RunAsync(this, _productRoot, arguments, pluginCharsForProgress, LlmApiKey, CloudAiApiKey, SetBusy, AppendLog, SetStatus);
 }

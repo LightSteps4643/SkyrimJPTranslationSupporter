@@ -1,4 +1,5 @@
 using System.Text;
+using SkyrimJPStringPatcher.Core;
 
 namespace SJPTS_InterfaceText;
 
@@ -31,7 +32,9 @@ public static class InterfaceTranslationsTsv
             var cols = line.Split('\t');
             if (cols.Length < 4) continue;
             var notes = cols.Length >= 5 ? cols[4] : "";
-            rows.Add(new InterfaceTranslationRow(cols[0], cols[1], cols[2], cols[3] == "1", notes));
+            rows.Add(new InterfaceTranslationRow(
+                TsvEscaping.Unescape(cols[0]), TsvEscaping.Unescape(cols[1]), TsvEscaping.Unescape(cols[2]),
+                cols[3] == "1", TsvEscaping.Unescape(notes)));
         }
         return rows;
     }
@@ -45,6 +48,6 @@ public static class InterfaceTranslationsTsv
         writer.NewLine = "\n";
         writer.WriteLine("Key\tEnglish\tJapanese\tResolved\tNotes");
         foreach (var row in rows)
-            writer.WriteLine($"{row.Key}\t{row.English}\t{row.Japanese}\t{(row.Resolved ? "1" : "0")}\t{row.Notes}");
+            writer.WriteLine($"{TsvEscaping.Escape(row.Key)}\t{TsvEscaping.Escape(row.English)}\t{TsvEscaping.Escape(row.Japanese)}\t{(row.Resolved ? "1" : "0")}\t{TsvEscaping.Escape(row.Notes)}");
     }
 }

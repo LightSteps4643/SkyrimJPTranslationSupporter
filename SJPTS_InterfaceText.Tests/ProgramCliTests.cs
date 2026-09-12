@@ -212,6 +212,53 @@ public class ProgramCliTests
         finally { try { Directory.Delete(root, recursive: true); } catch { } }
     }
 
+    /// <summary>Regression test (2026-09-12): `--mod=` used to also match via
+    /// `vfs[k].Contains(target, ...)` — a substring check against the winning
+    /// file's full resolved PATH, not just its own filename. Since that path
+    /// includes the providing mod's folder name (e.g. "...\Oblivion Interaction
+    /// Icons DSD 1.4.3 patch\interface\translations\aaa_english.txt"), passing
+    /// the mod's display name as `--mod=` used to match — and because `target`
+    /// (here, the display name) drives the final `&lt;target&gt;_japanese.txt`
+    /// output filename, this produced an output file that didn't pair with the
+    /// mod's actual "aaa_english.txt" and so was never loaded by the game.
+    /// `target` must only ever match by file-name prefix (see
+    /// design/interface_translations.md), so a display-name argument that
+    /// isn't also the file's own base name must NOT match.</summary>
+    [Fact]
+    public void Detect_ModArgumentIsDisplayNameNotFileName_DoesNotMatch()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_uitext_clitest_displayname_{Guid.NewGuid():N}");
+        try
+        {
+            const string modFolderName = "Oblivion Interaction Icons DSD 1.4.3 patch";
+            const string target = "aaa";
+
+            var mo2Dir = Path.Combine(root, "mo2");
+            var modDir = Path.Combine(mo2Dir, "mods", modFolderName, "interface", "translations");
+            var profileDir = Path.Combine(mo2Dir, "profiles", "Default");
+            Directory.CreateDirectory(modDir);
+            Directory.CreateDirectory(profileDir);
+            Directory.CreateDirectory(Path.Combine(mo2Dir, "overwrite"));
+
+            using (var writer = new StreamWriter(Path.Combine(modDir, $"{target}_english.txt"), append: false, Utf16LeWithBom))
+                writer.WriteLine("$qlie_Use\tW");
+
+            File.WriteAllText(Path.Combine(mo2Dir, "ModOrganizer.ini"),
+                "[General]\r\n" +
+                $"gamePath=@ByteArray({AppContext.BaseDirectory})\r\n" +
+                "selected_profile=@ByteArray(Default)\r\n");
+            File.WriteAllText(Path.Combine(profileDir, "modlist.txt"), $"+{modFolderName}\r\n");
+            File.WriteAllText(Path.Combine(profileDir, "plugins.txt"), "");
+
+            var (exitCode, output) = RunCli(root, "detect", $"--mo2-instance={mo2Dir}", $"--mod={modFolderName}", $"--work={root}\\out_temp");
+
+            Assert.Equal(0, exitCode);
+            Assert.Contains($"no *_english.txt found for '{modFolderName}'", output);
+            Assert.False(File.Exists(Path.Combine(root, "out_temp", modFolderName, "interface_translations.tsv")), output);
+        }
+        finally { try { Directory.Delete(root, recursive: true); } catch { } }
+    }
+
     /// <summary>2026-09-12: `translate` used to open its own RunLog/TraceLog
     /// PER MOD (Path.Combine(workDir, target)) — a person debugging a failed
     /// run had to check a separate small log file per mod, easy to miss.
