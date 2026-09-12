@@ -471,6 +471,39 @@ public class ProgramCliTests
         finally { try { Directory.Delete(root, recursive: true); } catch { } }
     }
 
+    /// <summary>2026-09-12: the default final output used to be
+    /// "&lt;exe folder&gt;/GenerateTranslationFile/out/..." — a separate tree
+    /// from the ESP CLI's own final output ("&lt;product root&gt;/out/SKSE/..."),
+    /// forcing a user packaging their translated MOD to gather files from two
+    /// unrelated locations. Now a bare relative "out", matching the ESP CLI's
+    /// own DefaultFinalOutDir exactly, so it resolves against the CURRENT
+    /// WORKING DIRECTORY (which CliRunner.cs always sets to the product root
+    /// for both CLIs) into the SAME "out/" tree. This test doesn't pass
+    /// --out= at all, to exercise the actual default rather than an explicit
+    /// override.</summary>
+    [Fact]
+    public void Output_NoOutArgument_DefaultsUnderWorkingDirectorysOutFolder()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_uitext_clitest_outdefault_{Guid.NewGuid():N}");
+        try
+        {
+            var tsvDir = Path.Combine(root, "out_temp", "TestMod");
+            Directory.CreateDirectory(tsvDir);
+            InterfaceTranslationsTsv.Write(Path.Combine(tsvDir, "interface_translations.tsv"),
+                new List<InterfaceTranslationRow> { new("$K", "Hello", "こんにちは", true) });
+
+            var (exitCode, output) = RunCli(root, "output", "--mod=TestMod", $"--work={root}\\out_temp");
+
+            Assert.Equal(0, exitCode);
+            // Same "out/" folder the ESP CLI's own generatedsdfile writes
+            // under by default (its own DefaultFinalOutDir = "out") — not
+            // nested inside a SJPTS_InterfaceText-specific subfolder.
+            var outPath = Path.Combine(root, "out", "Interface", "Translations", "TestMod_japanese.txt");
+            Assert.True(File.Exists(outPath), output);
+        }
+        finally { try { Directory.Delete(root, recursive: true); } catch { } }
+    }
+
     [Fact]
     public void Output_UnresolvedRow_FallsBackToEnglishText()
     {

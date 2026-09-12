@@ -49,12 +49,25 @@ string? modsFile = null;
 // the non-LLM existing/import japanese matching in DetectOneMod, and the LLM
 // step in RunTranslateOne, share this folder, exactly like the ESP CLI keeps
 // translations.tsv/prompt.txt/*.log together under Translation/out_temp/
-// <plugin>/) vs "GenerateTranslationFile" (final merged output, ESP's own
-// GenerateDsdFile/out/ counterpart). No PickUpTarget-equivalent folder: unlike
-// the ESP CLI's Mutagen scan, this tool's *_english.txt VFS scan is cheap and
-// mod-scoped, with no standalone artifact worth persisting separately.
+// <plugin>/) vs the FINAL merged output. No PickUpTarget-equivalent folder:
+// unlike the ESP CLI's Mutagen scan, this tool's *_english.txt VFS scan is
+// cheap and mod-scoped, with no standalone artifact worth persisting
+// separately.
 string workDir = Path.Combine(AppContext.BaseDirectory, "Translation", "out_temp");
-string outDir = Path.Combine(AppContext.BaseDirectory, "GenerateTranslationFile", "out");
+// 2026-09-12: the final deliverable used to default to
+// "<exe folder>/GenerateTranslationFile/out/Interface/Translations/" — a
+// SEPARATE tree from the ESP CLI's own final output
+// ("<product root>/out/SKSE/Plugins/DynamicStringDistributor/"), forcing a
+// user packaging their translated MOD to gather files from two unrelated
+// locations. Changed to a bare relative "out" — exactly like the ESP CLI's
+// own DefaultFinalOutDir (Program.cs) — which resolves against the CURRENT
+// WORKING DIRECTORY at runtime rather than this exe's own folder.
+// CliRunner.cs always launches BOTH CLIs with the product root as their
+// working directory, so this now lands in the exact same
+// "<product root>/out/" tree as the ESP CLI, just under its own
+// "Interface/Translations/" subfolder (see RunOutputOne below) — one output
+// folder for both pipelines to package from.
+string outDir = "out";
 // User-supplied *_japanese.txt files (same $Key<TAB>Text format this tool
 // reads/writes itself — NOT xTranslator's XML, unlike the ESP CLI's own
 // Translation/import) — checked by `detect` in DetectOneMod, ahead of
