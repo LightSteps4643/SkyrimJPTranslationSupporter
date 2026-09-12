@@ -45,6 +45,13 @@ public sealed class InterfaceTextDetailForm : Form
     private readonly Dictionary<string, string> _edits = new(); // Key -> edited Japanese
     private readonly Action? _onSaved;
 
+    // 2026-09-12: TranslationDetailForm.cs（ESP側）と同じ複数行編集の仕組みを
+    // 移植——原文・訳文セルをクリックすると行を拡張し複数行スクロール表示に
+    // する。それぞれの役割はTranslationDetailForm.csの同名フィールド・
+    // メソッドのコメント参照。
+    private int _defaultRowHeight;
+    private int _expandedRowIndex = -1;
+
     public InterfaceTextDetailForm(string modName, string tsvPath, Action? onSaved = null)
     {
         _onSaved = onSaved;
@@ -79,6 +86,13 @@ public sealed class InterfaceTextDetailForm : Form
         {
             if (_grid.IsCurrentCellDirty) _grid.CommitEdit(DataGridViewDataErrorContexts.Commit);
         };
+
+        // 2026-09-12: TranslationDetailForm.cs（ESP側）と同じ配線——原文・訳文
+        // セルをシングルクリックで複数行表示に入れられるようにする。
+        _grid.EditingControlShowing += Grid_EditingControlShowing;
+        _grid.CellBeginEdit += Grid_CellBeginEdit;
+        _grid.CellEndEdit += Grid_CellEndEdit;
+        _grid.CellClick += Grid_CellClick;
     }
 
     private void BuildColumns()
@@ -86,7 +100,12 @@ public sealed class InterfaceTextDetailForm : Form
         _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Key", HeaderText = "Key", Width = 260, ReadOnly = true });
         _grid.Columns.Add(new DataGridViewTextBoxColumn
         {
-            Name = "English", HeaderText = "原文", Width = 300, ReadOnly = true,
+            // 2026-09-12: 列レベルのReadOnlyは外した——TranslationDetailForm.cs
+            // と同じ理由（クリックで訳文と同じ複数行スクロール表示に入るには
+            // BeginEditが必要）。実際の書き換えは起こらないよう、編集用
+            // テキストボックス自体をReadOnlyにし、離脱時にも値を強制的に戻す
+            // （Grid_EditingControlShowing/Grid_CellEndEdit参照）。
+            Name = "English", HeaderText = "原文", Width = 300,
             DefaultCellStyle = new DataGridViewCellStyle { WrapMode = DataGridViewTriState.True, Alignment = DataGridViewContentAlignment.TopLeft },
         });
         _grid.Columns.Add(new DataGridViewTextBoxColumn
@@ -160,16 +179,86 @@ public sealed class InterfaceTextDetailForm : Form
     private void UpdateEditCountLabel() =>
         _lblEditCount.Text = _edits.Count > 0 ? $"{_edits.Count}件編集済み（未保存）" : "";
 
+    // 2026-09-12: 以下4メソッドはTranslationDetailForm.cs（ESP側）の同名
+    // メソッドの移植——複数行編集を「クリック操作が完全に終わったあとにしか
+    // 発火しないCellClickでだけ」行毎の拡張/折りたたみを行う理由等、詳細な
+    // 経緯はそちらのコメント参照。
+
+    private bool IsMultilineColumn(int columnIndex)
+    {
+        var name = _grid.Columns[columnIndex].Name;
+        return name is "Japanese" or "English";
+    }
+
+    private void Grid_CellClick(object? sender, DataGridViewCellEventArgs e)
+    {
+        if (e.RowIndex < 0) return;
+
+        if (_expandedRowIndex != -1 && _expandedRowIndex != e.RowIndex)
+        {
+            if (_expandedRowIndex < _grid.Rows.Count) _grid.Rows[_expandedRowIndex].Height = _defaultRowHeight;
+            _expandedRowIndex = -1;
+        }
+
+        if (!IsMultilineColumn(e.ColumnIndex)) return;
+        _expandedRowIndex = e.RowIndex;
+        _grid.BeginEdit(false); // selectAll:false — 全選択状態で編集開始すると誤って上書きしやすいため
+    }
+
+    private void Grid_CellBeginEdit(object? sender, DataGridViewCellCancelEventArgs e)
+    {
+        if (!IsMultilineColumn(e.ColumnIndex)) return;
+        if (_defaultRowHeight == 0) _defaultRowHeight = _grid.Rows[e.RowIndex].Height;
+        _grid.Rows[e.RowIndex].Height = Math.Min(200, Math.Max(_defaultRowHeight, _grid.ClientSize.Height / 3));
+        _grid.UpdateRowHeightInfo(e.RowIndex, true);
+    }
+
+    /// <summary>原文セルは表示専用 — SaveChanges自体は常に元のEnglishを書き戻すので
+    /// 実害はないが、編集モードで万一キー入力があった場合にグリッド上の見た目まで
+    /// 書き変わって見えるのは紛らわしいため、離脱時に必ず元の値へ戻す。</summary>
+    private void Grid_CellEndEdit(object? sender, DataGridViewCellEventArgs e)
+    {
+        if (_grid.Columns[e.ColumnIndex].Name != "English") return;
+        var key = (string)_grid.Rows[e.RowIndex].Tag!;
+        var original = _rows.FirstOrDefault(r => r.Key == key);
+        _grid.Rows[e.RowIndex].Cells["English"].Value = original?.English ?? "";
+    }
+
+    private void Grid_EditingControlShowing(object? sender, DataGridViewEditingControlShowingEventArgs e)
+    {
+        if (_grid.CurrentCell?.OwningColumn == null || !IsMultilineColumn(_grid.CurrentCell.ColumnIndex)) return;
+        if (e.Control is not TextBox tb) return;
+        tb.Multiline = true;
+        tb.WordWrap = true;
+        tb.AcceptsReturn = true; // 改行はShift+Enter（プレーンEnterはDataGridViewが行移動として先取りする）
+        tb.ScrollBars = ScrollBars.Vertical;
+        tb.ReadOnly = _grid.Columns[_grid.CurrentCell.ColumnIndex].Name == "English";
+
+        tb.SelectionStart = tb.Text.Length;
+        tb.SelectionLength = 0;
+        var cellBounds = _grid.GetCellDisplayRectangle(_grid.CurrentCell!.ColumnIndex, _grid.CurrentCell.RowIndex, false);
+        if (!cellBounds.IsEmpty) tb.Bounds = cellBounds;
+
+        tb.ScrollBars = ScrollBars.None;
+        tb.ScrollBars = ScrollBars.Vertical;
+    }
+
     private void BtnOk_Click(object? sender, EventArgs e)
     {
         if (_grid.IsCurrentCellDirty) _grid.CommitEdit(DataGridViewDataErrorContexts.Commit);
 
         if (_edits.Count > 0)
         {
+            // 2026-09-12: SaveChanges()自身が最後に_edits.Clear()するため、
+            // 呼び出し後に_edits.Countを参照すると必ず0になる（実機報告の
+            // 「0件保存されました」の原因）。ESP側TranslationDetailForm.cs
+            // には無い問題——SaveChanges自体は_editsをクリアしない設計。
+            // 呼ぶ前に件数を退避しておく。
+            var editedCount = _edits.Count;
             try
             {
                 SaveChanges();
-                MessageBox.Show(this, $"{_edits.Count}件の変更を保存しました。\n{_path}", "保存完了", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(this, $"{editedCount}件の変更を保存しました。\n{_path}", "保存完了", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 _onSaved?.Invoke();
             }
             catch (Exception ex)
