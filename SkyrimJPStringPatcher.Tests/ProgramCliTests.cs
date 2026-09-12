@@ -16,13 +16,14 @@ namespace SkyrimJPStringPatcher.Tests;
 /// the GUI's own call sites, not exhaustive flag-combination coverage.
 ///
 /// SkyrimJPStringPatcher.Tests references the main console project, so its
-/// own build output already contains a ready-to-run SkyrimJPStringPatcher.exe
-/// (confirmed: same folder as AppContext.BaseDirectory) — no separate build
-/// step or path gymnastics needed.
+/// own build output already contains a ready-to-run SJPTS_InGameText.exe
+/// (the csproj's own AssemblyName — confirmed: same folder as
+/// AppContext.BaseDirectory) — no separate build step or path gymnastics
+/// needed.
 /// </summary>
 public class ProgramCliTests
 {
-    private static readonly string ExePath = Path.Combine(AppContext.BaseDirectory, "SkyrimJPStringPatcher.exe");
+    private static readonly string ExePath = Path.Combine(AppContext.BaseDirectory, "SJPTS_InGameText.exe");
     private static readonly string FixturesDir = Path.Combine(AppContext.BaseDirectory, "Fixtures");
 
     private static (int ExitCode, string Stdout) RunCli(string workingDirectory, params string[] arguments)

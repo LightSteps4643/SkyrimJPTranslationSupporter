@@ -53,7 +53,7 @@ namespace SkyrimJPStringPatcher.Tests;
 public class ProgramCliMo2InstanceErrorHandlingTests
 {
     private const int ClrUnhandledExceptionExitCode = -532462766; // 0xE0434352 as signed int32 -- must never reappear once fixed
-    private static readonly string ExePath = Path.Combine(AppContext.BaseDirectory, "SkyrimJPStringPatcher.exe");
+    private static readonly string ExePath = Path.Combine(AppContext.BaseDirectory, "SJPTS_InGameText.exe");
     private static readonly string FixturesDir = Path.Combine(AppContext.BaseDirectory, "Fixtures");
 
     private static (int ExitCode, string Output) RunCli(string workingDirectory, params string[] arguments)

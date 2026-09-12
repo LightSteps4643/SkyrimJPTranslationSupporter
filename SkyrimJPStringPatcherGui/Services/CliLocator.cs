@@ -13,13 +13,15 @@ namespace SkyrimJPStringPatcherGui.Services;
 /// </summary>
 public static class CliLocator
 {
-    private const string ExeName = "SkyrimJPStringPatcher.exe";
+    /// <summary>2026-09-12: the published exe's filename (via the csproj's own
+    /// AssemblyName) is SJPTS_InGameText.exe — distinct from the C# project/
+    /// namespace name (SkyrimJPStringPatcher), which is unchanged.</summary>
+    private const string ExeName = "SJPTS_InGameText.exe";
 
-    /// <summary>v0.58.0: the CLI's own subfolder name in the current release
-    /// layout (see <see cref="TryGetProductRoot"/> case 1) — matches the CLI
-    /// project's own name, symmetric to how the GUI's dev-tree folder is
-    /// already named "SkyrimJPStringPatcherGui".</summary>
-    private const string CliSubfolderName = "SkyrimJPStringPatcher";
+    /// <summary>2026-09-12: matches <see cref="ExeName"/> rather than the C#
+    /// project name, symmetric to SJPTS_InterfaceText's own CliSubfolderName
+    /// (InterfaceTextCliLocator.cs).</summary>
+    private const string CliSubfolderName = "SJPTS_InGameText";
 
     /// <summary>The product root — the folder holding Data/PickUpTarget/Translation/etc.
     /// Also where the console app must be launched FROM (its relative default
@@ -34,7 +36,7 @@ public static class CliLocator
     ///    it. Changed from the flat layout below specifically so a curious user
     ///    browsing the release folder isn't tempted to run the CLI directly
     ///    (see DESIGN_NOTES.md's known-issues list, item 25) — but a curious
-    ///    user running SkyrimJPStringPatcher.exe by mistake even inside the
+    ///    user running SJPTS_InGameText.exe by mistake even inside the
     ///    subfolder isn't the main protection here; the point is it's simply
     ///    not the first thing you see at the top level any more.
     /// 2. **Old release layout (v0.54.0–v0.57.x)** — a self-contained
@@ -124,7 +126,7 @@ public static class CliLocator
         }
         if (!File.Exists(path))
         {
-            error = $"CLI実行ファイルが見つかりません: {path}\n先に本体（SkyrimJPStringPatcher.csproj）をビルドしてください。";
+            error = $"CLI実行ファイルが見つかりません: {path}\n先に本体（SkyrimJPStringPatcher.csproj、公開名SJPTS_InGameText.exe）をビルドしてください。";
             return false;
         }
         error = "";

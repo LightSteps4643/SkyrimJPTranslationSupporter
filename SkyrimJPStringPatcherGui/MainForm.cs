@@ -94,7 +94,7 @@ public sealed class MainForm : Form
 
     /// <summary>A CLI subprocess launched via RunCliAsync doesn't stop just
     /// because the GUI window closes — without this, closing mid-run leaves
-    /// SkyrimJPStringPatcher.exe running invisibly in the background. Cancelling
+    /// SJPTS_InGameText.exe running invisibly in the background. Cancelling
     /// this token makes CliRunner.RunAsync kill the process (and its tree) before
     /// the exception propagates back up — see the OperationCanceledException
     /// handling in RunCliAsync below, which stays silent (no error dialog) since

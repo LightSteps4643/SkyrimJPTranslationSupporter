@@ -14,6 +14,11 @@ v0.54.0でバージョン管理をgit/GitHub（[Releases](https://github.com/Lig
 - ユーザーが用意した翻訳ファイルを優先的に取り込むためのimportフォルダ（`InterfaceText\Translation\import`）に対応しました。
 - モデルの応答に日本語が含まれない場合（原文をそのまま返す等）も、プラグイン翻訳と同様に専用のタグを付けて解決済みとして扱い、実行ログウィンドウやMOD詳細画面で後から見分けられるようにしました。
 
+#### 修正
+
+- Interface翻訳タブのMOD一覧で、行ごとの「翻訳状況を初期化」ボタンを押すと処理エラーになる不具合を修正しました。
+- 内部処理用のCLI（プラグイン翻訳）の実行ファイル名を`SkyrimJPStringPatcher.exe`から`SJPTS_InGameText.exe`に変更しました（Interface翻訳用CLIの`SJPTS_InterfaceText.exe`と対称的な名称にするため）。配布フォルダ内のサブフォルダ名も同様に変更しています。
+
 ### v0.59.7 (2026-09-07 18:14)
 
 #### 修正

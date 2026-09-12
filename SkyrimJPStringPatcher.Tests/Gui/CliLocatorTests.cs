@@ -13,13 +13,14 @@ namespace SkyrimJPStringPatcher.Tests.Gui;
 public class CliLocatorTests
 {
     private const string GuiExeName = "Skyrim_JP_Translation_Supporter.exe"; // not actually checked by CliLocator, just realism
-    private const string CliExeName = "SkyrimJPStringPatcher.exe";
+    private const string CliExeName = "SJPTS_InGameText.exe";
+    private const string CliSubfolderName = "SJPTS_InGameText";
 
     [Fact]
     public void CurrentReleaseLayout_CliNestedInOwnSubfolder_FindsRootAndNestedExe()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_clilocator_{Guid.NewGuid():N}");
-        var cliDir = Path.Combine(root, "SkyrimJPStringPatcher");
+        var cliDir = Path.Combine(root, CliSubfolderName);
         Directory.CreateDirectory(cliDir);
         try
         {
@@ -27,7 +28,7 @@ public class CliLocatorTests
             File.WriteAllText(Path.Combine(cliDir, CliExeName), "");
 
             Assert.Equal(root, CliLocator.TryGetProductRoot(root));
-            Assert.Equal(Path.Combine("SkyrimJPStringPatcher", CliExeName), CliLocator.TryAutoDetect(root));
+            Assert.Equal(Path.Combine(CliSubfolderName, CliExeName), CliLocator.TryAutoDetect(root));
         }
         finally
         {
@@ -108,7 +109,7 @@ public class CliLocatorTests
     public void BothReleaseLayoutsPresentAtOnce_PrefersTheNestedSubfolderLayout()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_clilocator_{Guid.NewGuid():N}");
-        var cliDir = Path.Combine(root, "SkyrimJPStringPatcher");
+        var cliDir = Path.Combine(root, CliSubfolderName);
         Directory.CreateDirectory(cliDir);
         try
         {
@@ -116,7 +117,7 @@ public class CliLocatorTests
             File.WriteAllText(Path.Combine(cliDir, CliExeName), ""); // new layout
             File.WriteAllText(Path.Combine(root, CliExeName), ""); // old layout, also present
 
-            Assert.Equal(Path.Combine("SkyrimJPStringPatcher", CliExeName), CliLocator.TryAutoDetect(root));
+            Assert.Equal(Path.Combine(CliSubfolderName, CliExeName), CliLocator.TryAutoDetect(root));
         }
         finally
         {

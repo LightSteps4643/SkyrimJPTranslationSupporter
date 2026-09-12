@@ -25,9 +25,9 @@ Nexus側のファイルが検疫等で一時的にダウンロードできない
 ## 構成
 
 - `Core/` `PickUpTarget/` `Translation/` `GenerateDsdFile/` `Program.cs` — CLI本体
-  （`SkyrimJPStringPatcher.csproj`）。①MO2のロードオーダーから翻訳候補を抽出
-  （PickUpTarget）→②各種手法で自動翻訳（Translation）→③DSD形式のJSONを生成
-  （GenerateDsdFile）、の3ステージ構成
+  （`SkyrimJPStringPatcher.csproj`、公開する実行ファイル名は`SJPTS_InGameText.exe`）。
+  ①MO2のロードオーダーから翻訳候補を抽出（PickUpTarget）→②各種手法で自動翻訳
+  （Translation）→③DSD形式のJSONを生成（GenerateDsdFile）、の3ステージ構成
 - `SkyrimJPStringPatcherGui/` — GUI本体（`SkyrimJPStringPatcherGui.csproj`）。
   CLIをサブプロセス起動するだけの薄い層
 - `Data/` — コーパス・用語集等の同梱データ

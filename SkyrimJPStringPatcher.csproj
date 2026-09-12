@@ -5,6 +5,11 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- 2026-09-12: SJPTS_InterfaceText（Interface\Translations翻訳、別CLI）との対比で
+         わかりやすくするため、公開する実行ファイル名だけをSJPTS_InGameTextに変更する。
+         C#名前空間・プロジェクト名（このcsprojファイル自体の名前）は変更しない方針
+         （全面リネームは機能に無関係な作業と判断——design/gui_architecture.md参照）。 -->
+    <AssemblyName>SJPTS_InGameText</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>

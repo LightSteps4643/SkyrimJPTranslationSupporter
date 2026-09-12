@@ -73,7 +73,7 @@ public sealed class InterfaceTextPanel : Form
 
     /// <summary>A CLI subprocess launched via RunCliAsync doesn't stop just
     /// because the GUI window closes — without this, closing mid-run leaves
-    /// SkyrimJPStringPatcher.exe running invisibly in the background. Cancelling
+    /// SJPTS_InterfaceText.exe running invisibly in the background. Cancelling
     /// this token makes CliRunner.RunAsync kill the process (and its tree) before
     /// the exception propagates back up — see the OperationCanceledException
     /// handling in RunCliAsync below, which stays silent (no error dialog) since
@@ -459,9 +459,6 @@ public sealed class InterfaceTextPanel : Form
             Text = "翻訳状況を初期化",
             UseColumnTextForButtonValue = true,
             Width = 130,
-            // TODO(次のステップ): CLI呼び出し先をSJPTS_InterfaceText側に揃えるまでは
-            // 誤動作（ESP用CLIを呼んでしまう）を防ぐため無効化しておく。
-            ReadOnly = true,
         });
         _grid.CellContentClick += Grid_CellContentClick;
     }
@@ -500,33 +497,41 @@ public sealed class InterfaceTextPanel : Form
         PseudoModal.Show(detail, this);
     }
 
-    /// <summary>「翻訳状況を初期化」— TODO(次のステップ): 現在はグリッドの
-    /// ReadOnly=trueにより実際には呼ばれない（ボタン配線はまだ着手していない）。
-    /// ESP版のResetPluginを踏襲した形だけ残してあるが、中身はSJPTS_InterfaceText
-    /// 側のCLI呼び出しに置き換える必要がある。</summary>
-    private async Task ResetMod(string mod)
+    /// <summary>「翻訳状況を初期化」— このMOD1件だけを対象にdetectを再実行する
+    /// （detectは対象MODのinterface_translations.tsvを毎回新規に書き出す＝
+    /// 既存分は破棄・再生成される、BtnReloadMo2_Clickと同じ破壊的挙動を1MODに
+    /// 絞ったもの）。手動編集・LLM翻訳結果もここで消えるため、実行前に確認する。</summary>
+    private async Task ResetMod(string target)
     {
-        var plugin = mod;
         var confirm = MessageBox.Show(this,
-            $"「{plugin}」の翻訳状況を初期化します。\n" +
-            "このプラグインの翻訳結果（手動での編集を含む）をすべて消去し、初期状態に戻します。\n" +
-            "元に戻せません。よろしいですか？",
+            $"「{target}」の翻訳状況を初期化します。\n" +
+            "このMODの翻訳結果（手動での編集・生成AI/ローカルLLMでの翻訳結果を含む）を\n" +
+            "すべて消去し、初期状態に戻します。\n" +
+            "元に戻せません（実行前の状態はInterfaceText\\Translation\\bak\\に自動でバックアップされます）。よろしいですか？",
             "翻訳状況を初期化", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
         if (confirm != DialogResult.OK) return;
 
-        // TODO(次のステップ): このメソッド自体がESP版ResetPluginの未変換のまま
-        // （グリッドの「初期化」列はReadOnly=trueで実際には呼ばれない）——
-        // SJPTS_InterfaceText側のCLI呼び出しに置き換える際、バックアップ先も
-        // InterfaceTextWorkDir/"interface_translations.tsv"に揃えること。
-        TranslationBackup.Backup(Path.Combine(ProductRoot, "Translation", "out_temp"), new[] { PluginFolderName.From(plugin) }, "translations.tsv");
+        if (string.IsNullOrWhiteSpace(Mo2Dir) || !Directory.Exists(Mo2Dir))
+        {
+            MessageBox.Show(this, "MO2インスタンスフォルダを「設定」で正しく指定してください。", "入力エラー", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        TranslationBackup.Backup(InterfaceTextWorkDir, new[] { target }, "interface_translations.tsv");
 
         SetBusy(true);
         try
         {
-            var args = new[] { "translation", "PickUpTarget/out_temp", "Translation/out_temp", plugin,
-                "--no-meaning", "--no-translit", "--no-namefallback", "--discard-user-edits" };
+            var args = new List<string> { "detect", $"--mo2-instance={Mo2Dir}", $"--mod={target}", $"--work={InterfaceTextWorkDir}", $"--import={InterfaceTextImportDir}" };
+            var settings = _getSettings();
+            if (!string.IsNullOrWhiteSpace(settings.Mo2ModsDirOverride))
+                args.Add($"--mods-dir={settings.Mo2ModsDirOverride}");
+            if (!string.IsNullOrWhiteSpace(settings.Mo2ProfileDirOverride))
+                args.Add($"--profile-dir={settings.Mo2ProfileDirOverride}");
+            if (!string.IsNullOrWhiteSpace(settings.Mo2OverwriteDirOverride))
+                args.Add($"--overwrite-dir={settings.Mo2OverwriteDirOverride}");
             if (!await RunCliAsync(args)) return;
-            RefreshRowsFromTranslations(new[] { plugin });
+            RefreshRowsFromTranslations(new[] { target });
         }
         finally
         {

@@ -17,8 +17,11 @@
       と判明した。単一ファイル化でZIP内のPEファイル数を大幅に削減し、この要因を
       弱める狙い。トリミング（-p:PublishTrimmed=true）は、Mutagenがリフレクションを
       使用しているため安全性が不明であり、あえて含めていない。
-    - v0.58.0: GUIは出力先フォルダ直下、CLIはその中の `SkyrimJPStringPatcher` サブ
-      フォルダに分けて publish する（CliLocator.TryGetProductRoot の新レイアウト
+    - v0.58.0: GUIは出力先フォルダ直下、CLIはその中の `SJPTS_InGameText` サブ
+      フォルダ（v0.58.0時点では`SkyrimJPStringPatcher`という名称だったが、
+      2026-09-12にSJPTS_InterfaceTextとの対比でわかりやすくするため公開名を
+      変更した——C#プロジェクト名・csprojファイル自体は`SkyrimJPStringPatcher`
+      のまま）に分けて publish する（CliLocator.TryGetProductRoot の新レイアウト
       検出に対応、DESIGN_NOTES.md既知の課題25.参照）。GUIをフォルダ直下に置く
       ことで、ランチャー（.bat/.lnk）を挟まず直接ダブルクリックで起動できる。
       CLIを別フォルダへ分けているのは、ユーザーが誤って直接実行してしまう混乱を
@@ -84,7 +87,7 @@ if ($gitVersion -match '^v(\d+\.\d+\.\d+)') {
 } else {
     Write-Host "警告: gitタグの形式が想定と異なるため（'$gitVersion'）、exeへのバージョン埋め込みをスキップします。"
 }
-$cliOutputDir = Join-Path $OutputDir "SkyrimJPStringPatcher"
+$cliOutputDir = Join-Path $OutputDir "SJPTS_InGameText"
 $interfaceTextOutputDir = Join-Path $OutputDir "SJPTS_InterfaceText"
 
 Write-Host "出力先: $OutputDir"
@@ -136,7 +139,7 @@ if (-not (Test-Path $zipPath)) { throw "zipの作成に失敗しました: $zipP
 
 Write-Host ""
 Write-Host "完了: $OutputDir"
-Write-Host "  Skyrim_JP_Translation_Supporter.exe（直下） / SkyrimJPStringPatcher\SkyrimJPStringPatcher.exe（サブフォルダ） /"
+Write-Host "  Skyrim_JP_Translation_Supporter.exe（直下） / SJPTS_InGameText\SJPTS_InGameText.exe（サブフォルダ） /"
 Write-Host "  SJPTS_InterfaceText\SJPTS_InterfaceText.exe（サブフォルダ） / Data/ / Translation/import/ / InterfaceText/Translation/import/ を含む"
 Write-Host "  ソースコード・開発用ドキュメント（DESIGN_NOTES.md等）は含まれない"
 Write-Host "  起動は直下の「Skyrim_JP_Translation_Supporter.exe」から（CLIは通常直接使わない）"
