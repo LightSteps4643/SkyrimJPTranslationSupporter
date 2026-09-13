@@ -122,6 +122,50 @@ public class ProgramCliTests
         finally { try { Directory.Delete(root, recursive: true); } catch { } }
     }
 
+    /// <summary>
+    /// 2026-09-13: real-data bug — SmartHarvestSE's "$SHSE_DESC_INTERVAL" etc.
+    /// have a completely BLANK English source (not merely a short/odd string —
+    /// nothing at all). These candidates are structurally impossible to
+    /// translate (there is no source text), so they stayed forever unresolved
+    /// no matter how many times `translate` ran, which then tripped the
+    /// "未翻訳のケースがあります" warning every single time even though nothing
+    /// was actually wrong. Mirrors the ESP CLI's own
+    /// LanguageDetector.IsTranslatableEnglish gate (candidates.tsv never even
+    /// contains a blank/symbol-only/whitespace-only candidate in the first
+    /// place, for the same reason) — reused here rather than reinvented, per
+    /// the user's own framing: "そもそも英文ではない（空だったり、記号のみ
+    /// だったり）→スキップもしくは解決済み扱い".
+    /// </summary>
+    [Theory]
+    [InlineData("")] // completely empty
+    [InlineData("   ")] // whitespace only (spaces)
+    [InlineData("---")] // symbols only, no letters at all
+    public void Detect_KeyWithNonTranslatableEnglishSource_KeptAsIsAndMarkedResolved(string nonTranslatableSource)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_uitext_clitest_detect5_{Guid.NewGuid():N}");
+        try
+        {
+            var mo2Dir = SetUpSyntheticMo2Instance(root, "TestMod", new List<(string, string)>
+            {
+                ("$TestMod_Blank", nonTranslatableSource),
+                ("$TestMod_Enable", "Enable feature"), // ordinary candidate, control case
+            });
+
+            var (exitCode, output) = RunCli(root, "detect", $"--mo2-instance={mo2Dir}", "--mod=TestMod", $"--work={root}\\out_temp");
+
+            Assert.Equal(0, exitCode);
+            var rows = InterfaceTranslationsTsv.Read(Path.Combine(root, "out_temp", "TestMod", "interface_translations.tsv"));
+
+            var blankRow = rows.Single(r => r.Key == "$TestMod_Blank");
+            Assert.True(blankRow.Resolved);
+            Assert.Equal(nonTranslatableSource, blankRow.Japanese); // kept as-is, never sent for translation
+
+            var optionRow = rows.Single(r => r.Key == "$TestMod_Enable");
+            Assert.False(optionRow.Resolved); // ordinary candidate is unaffected
+        }
+        finally { try { Directory.Delete(root, recursive: true); } catch { } }
+    }
+
     [Fact]
     public void Detect_ExistingJapaneseWithRealJapaneseText_MarksResolved()
     {

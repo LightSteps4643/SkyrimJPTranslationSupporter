@@ -390,6 +390,23 @@ int RunDetect()
         if (e.Key.TrimStart('$').Equals(target, StringComparison.OrdinalIgnoreCase))
             return new InterfaceTranslationRow(e.Key, e.Value, e.Value, true);
 
+        // 2026-09-13: real-data bug (SmartHarvestSE's "$SHSE_DESC_INTERVAL"
+        // etc. — completely blank English source) — a candidate with no
+        // translatable English text at all (empty, whitespace-only, or
+        // symbols-only — no letters) can never be translated no matter how
+        // many times `translate` runs, so it stayed forever unresolved and
+        // kept tripping the "未翻訳のケースがあります" warning even though
+        // nothing was actually wrong. Reuses the ESP CLI's own
+        // LanguageDetector.IsTranslatableEnglish gate (candidates.tsv never
+        // contains such a candidate in the first place, for the same reason)
+        // rather than reinventing the check. Output is unaffected either way
+        // (RunOutputOne writes every key regardless of Resolved, falling back
+        // to the English value when Japanese is blank) — this only stops the
+        // GUI/warning from treating a structurally-untranslatable string as a
+        // failure.
+        if (!LanguageDetector.IsTranslatableEnglish(e.Value))
+            return new InterfaceTranslationRow(e.Key, e.Value, e.Value, true);
+
         var hasGood = existingJapanese.TryGetValue(e.Key, out var jp) && LanguageDetector.ContainsJapanese(jp);
         return new InterfaceTranslationRow(e.Key, e.Value, hasGood ? jp! : "", hasGood);
     }).ToList();
