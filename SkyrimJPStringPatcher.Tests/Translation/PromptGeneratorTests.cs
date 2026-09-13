@@ -1165,6 +1165,64 @@ public class PromptGeneratorTests
         finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ } }
     }
 
+    /// <summary>
+    /// 2026-09-13: real-data bug — a candidate whose English text has
+    /// meaningful trailing whitespace ("Sjpts Trailing Whitespace Candidate ",
+    /// mirroring FloatingSubtitles' real "$FSUB_DualSubtitlesOffscreen_Text"
+    /// = "DUAL SUBTITLES ") is embedded VERBATIM into the prompt's tag, and
+    /// the prompt instructs the model to copy it "unchanged". A model that
+    /// does exactly that must still resolve — matching on the untrimmed
+    /// response must not be broken by trimming only the candidate side.
+    /// </summary>
+    [Fact]
+    public void RunOne_LlmBatch_CandidateHasTrailingWhitespace_ModelEchoesExactly_StillResolves()
+    {
+        const string plugin = "SjptsTargetTagCases.esp";
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outputDir = Path.Combine(root, "out_temp");
+            using var log = OpenTestLog(root);
+            var fakeLlm = FakeTextTranslator.SucceedingRaw("<SJPTS_TARGET>Sjpts Trailing Whitespace Candidate </SJPTS_TARGET>\t訳文");
+            var stages = new TranslationStageOptions(EnableMeaning: false, EnableTransliteration: false, EnableNameFallback: false);
+
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm, stageOptions: stages);
+
+            var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases");
+            var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
+
+            Assert.Equal(("訳文", "TranslationLocalLlm"), translations["Sjpts Trailing Whitespace Candidate "]);
+        }
+        finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ } }
+    }
+
+    /// <summary>The flexible/fallback side of the same fix: a model that
+    /// (despite the "copy unchanged" instruction) trims the candidate's own
+    /// trailing whitespace when echoing it back must still resolve.</summary>
+    [Fact]
+    public void RunOne_LlmBatch_CandidateHasTrailingWhitespace_ModelTrimsItWhenEchoing_StillResolvesViaFallback()
+    {
+        const string plugin = "SjptsTargetTagCases.esp";
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outputDir = Path.Combine(root, "out_temp");
+            using var log = OpenTestLog(root);
+            var fakeLlm = FakeTextTranslator.SucceedingRaw("<SJPTS_TARGET>Sjpts Trailing Whitespace Candidate</SJPTS_TARGET>\t訳文");
+            var stages = new TranslationStageOptions(EnableMeaning: false, EnableTransliteration: false, EnableNameFallback: false);
+
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm, stageOptions: stages);
+
+            var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases");
+            var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
+
+            Assert.Equal(("訳文", "TranslationLocalLlm"), translations["Sjpts Trailing Whitespace Candidate "]);
+        }
+        finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ } }
+    }
+
     [Fact]
     public void RunOne_UnresolvedCandidateWithEveryPromptHint_WritesAllOptionalPromptLines()
     {

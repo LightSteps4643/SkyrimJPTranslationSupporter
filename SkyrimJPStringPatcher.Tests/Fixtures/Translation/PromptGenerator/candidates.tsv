@@ -27,3 +27,4 @@ FormId	WinningPlugin	RecordType	EnglishText	Index	EditorId	Context	StaleOriginal
 000860:SjptsLlmSkipReasons.esp	SjptsLlmSkipReasons.esp	WEAP FULL	Sjpts Omitted By Model Candidate	0
 000870:SjptsTargetTagCases.esp	SjptsTargetTagCases.esp	WEAP FULL	Target:	0
 000871:SjptsTargetTagCases.esp	SjptsTargetTagCases.esp	WEAP FULL	Sjpts Format Edge Case Candidate	0
+000872:SjptsTargetTagCases.esp	SjptsTargetTagCases.esp	WEAP FULL	Sjpts Trailing Whitespace Candidate 	0

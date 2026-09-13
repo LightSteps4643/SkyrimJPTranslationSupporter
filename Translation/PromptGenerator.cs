@@ -809,6 +809,14 @@ public static class PromptGenerator
             // 「通常の完全一致（byLine）が失敗した場合だけ」の救済としてのみ使う
             // （下のTryGetValueを参照）。
             var byLineMarkerTrimmed = new Dictionary<string, string>(StringComparer.Ordinal);
+            // 2026-09-13: real-data bug (FloatingSubtitles' Interface翻訳側で
+            // 発見・確認、ESP側にも同じ形のコードがあったため合わせて修正) — a
+            // candidate whose English text has meaningful trailing whitespace
+            // is embedded VERBATIM into BuildCandidateBlock's tag, and the
+            // prompt instructs the model to copy it "unchanged". A model that
+            // does exactly that must still match — see below where matchKey
+            // is looked up UNTRIMMED against byLine first now.
+            var byLineTrimmed = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (var rawLine in response.Replace("\r\n", "\n").Split('\n'))
             {
                 var line = rawLine.Trim();
@@ -843,6 +851,7 @@ public static class PromptGenerator
                 if (source.Length > 0 && japanese.Length > 0)
                 {
                     byLine[source] = japanese; // 同じキーが複数行あれば最後の行を採用
+                    byLineTrimmed[source.Trim()] = japanese;
                     var trimmedSource = StripSpuriousBoundaryMarker(source);
                     if (trimmedSource != source)
                         byLineMarkerTrimmed[trimmedSource] = japanese;
@@ -852,21 +861,29 @@ public static class PromptGenerator
             var anyUnresolvedInBatch = false;
             foreach (var (group, _, matchKey) in batch)
             {
-                // v0.58.4: matchKeyは常に候補原文そのまま（Trimしない）だが、
-                // ExtractTaggedSourceは応答側のsource列を必ずTrimしてから
-                // byLineへ格納している——原文の先頭/末尾に空白を含む候補は、
-                // モデルが無意味な空白を保持しない限り未Trim側と絶対に一致せず、
-                // モデルの性能・再実行回数に関係なく毎回この照合に失敗する
-                // 再現性のあるバグだった。ここでTrimして比較することで解消する
-                // ——送信するブロック本文・保存先キー（answers[group.Key]、下の
-                // TryGetValueの外側）はどちらも変更しないため、既存の一致関係を
-                // 壊す副作用は無い。
-                // v0.58.6: まず通常の完全一致（byLine）を試し、それが失敗した
-                // 場合だけbyLineMarkerTrimmed（末尾の余分なMultilineBreakMarker
-                // を剥がした版）へフォールバックする——正当にマーカーで始まる/
-                // 終わる候補（315+706件、実データで確認済み）はbyLine側で先に
-                // 一致するため一切影響を受けない。
-                if (!byLine.TryGetValue(matchKey.Trim(), out var japaneseRaw))
+                // 2026-09-13訂正: 以前はここで`matchKey.Trim()`だけを使って
+                // byLineを引いていたが、これ自体が独立したバグだった——
+                // BuildCandidateBlockはmatchKeyを一切変更せずタグに埋め込み、
+                // プロンプトも「一切変更せず正確にコピーすること」を明記して
+                // いるため、モデルが指示通り前後の空白まで含めて正確に再掲した
+                // 場合、byLine側のキーもmatchKeyと全く同じ（未Trim）はずである。
+                // それにもかかわらず照合側だけをTrimしていたため、原文の先頭/
+                // 末尾に意味のある空白を含む候補（実例: Interface翻訳側の
+                // FloatingSubtitles「$FSUB_DualSubtitlesOffscreen_Text」=
+                // "DUAL SUBTITLES "）は、モデルが完璧に応答してもモデルの性能・
+                // 再実行回数に関係なく毎回この照合に失敗する再現性のあるバグと
+                // なっていた。
+                //
+                // 修正: まず未Trimの完全一致（byLine）を試す——モデルが指示通り
+                // 正確に再掲したケースはここで一致する。それでも見つからない
+                // 場合のみ、双方をTrimしたbyLineTrimmed（モデルが自発的に前後の
+                // 空白を削ってしまったケースの救済）、さらにbyLineMarkerTrimmed
+                // （末尾の余分なMultilineBreakMarkerを剥がした版）の順にフォール
+                // バックする。送信するブロック本文・保存先キー（answers[group.Key]、
+                // 下のTryGetValueの外側）はどちらも変更しないため、既存の一致
+                // 関係を壊す副作用は無い。
+                if (!byLine.TryGetValue(matchKey, out var japaneseRaw)
+                    && !byLineTrimmed.TryGetValue(matchKey.Trim(), out japaneseRaw))
                     byLineMarkerTrimmed.TryGetValue(matchKey.Trim(), out japaneseRaw);
                 if (japaneseRaw != null)
                 {

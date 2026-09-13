@@ -391,6 +391,59 @@ public class InterfaceTextPromptGeneratorTests
         finally { }
     }
 
+    /// <summary>
+    /// 2026-09-13: real-data bug — a candidate whose English text has
+    /// meaningful trailing whitespace (real example: FloatingSubtitles'
+    /// "$FSUB_DualSubtitlesOffscreen_Text" = "DUAL SUBTITLES " with a
+    /// trailing space) was embedded VERBATIM (untrimmed) into the prompt's
+    /// tag, per BuildBlock — and the prompt explicitly instructs the model to
+    /// copy the tagged text "unchanged". When the model does exactly that
+    /// (confirmed against real gemma4:26b output), the matching code's
+    /// `group.Key.Trim()` at the lookup site stripped the space back off
+    /// before comparing against `byLine`'s untrimmed key — guaranteeing a
+    /// mismatch no matter how faithfully the model answered, on every retry.
+    /// This is the exact-match side of the fix: the untrimmed candidate must
+    /// still match the model's untrimmed, faithful echo.
+    /// </summary>
+    [Fact]
+    public void ApplyLlmStep_CandidateHasTrailingWhitespace_ModelEchoesExactly_StillResolves()
+    {
+        var pending = new List<(string Key, string English)> { ("$Foo", "DUAL SUBTITLES ") };
+        var fake = new FakeTranslator();
+        fake.Enqueue("<SJPTS_TARGET>DUAL SUBTITLES </SJPTS_TARGET>\t二重字幕");
+
+        using var log = OpenTempLog(out var dir);
+        try
+        {
+            var result = InterfaceTextPromptGenerator.ApplyLlmStep(pending, fake, "TestMod", log, null, 12_000, dir, "localLLM");
+
+            Assert.Equal("二重字幕", result["$Foo"].Japanese);
+        }
+        finally { }
+    }
+
+    /// <summary>The flexible/fallback side of the same fix: a model that
+    /// (despite the "copy unchanged" instruction) trims the candidate's own
+    /// trailing whitespace when echoing it back must still resolve — matching
+    /// should tolerate either an exact echo or a trimmed one, not demand
+    /// exactly one of the two.</summary>
+    [Fact]
+    public void ApplyLlmStep_CandidateHasTrailingWhitespace_ModelTrimsItWhenEchoing_StillResolvesViaFallback()
+    {
+        var pending = new List<(string Key, string English)> { ("$Foo", "DUAL SUBTITLES ") };
+        var fake = new FakeTranslator();
+        fake.Enqueue("<SJPTS_TARGET>DUAL SUBTITLES</SJPTS_TARGET>\t二重字幕");
+
+        using var log = OpenTempLog(out var dir);
+        try
+        {
+            var result = InterfaceTextPromptGenerator.ApplyLlmStep(pending, fake, "TestMod", log, null, 12_000, dir, "localLLM");
+
+            Assert.Equal("二重字幕", result["$Foo"].Japanese);
+        }
+        finally { }
+    }
+
     // ==== 2026-09-12: ClassifyTaggedSourceIssue — mirrors the equivalent new
     // tests in SkyrimJPStringPatcher.Tests/Translation/PromptGeneratorTests.cs
     // (ESP side). Private/no public seam, so this reflects on it directly. ====

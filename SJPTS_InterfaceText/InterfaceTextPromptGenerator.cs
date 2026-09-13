@@ -218,7 +218,20 @@ public static class InterfaceTextPromptGenerator
                 continue; // 自動リトライしない — 次のバッチへ（既存と同じ方針）
             }
 
+            // 2026-09-13: real-data bug (FloatingSubtitles' "$FSUB_
+            // DualSubtitlesOffscreen_Text" = "DUAL SUBTITLES ", trailing
+            // space) — BuildBlock embeds a candidate's English text VERBATIM
+            // into the prompt's tag, and the prompt explicitly instructs the
+            // model to copy it "unchanged". A model that does exactly that
+            // (confirmed against real gemma4:26b output) must still match —
+            // so byLine is keyed on the UNTRIMMED extracted source (an exact,
+            // faithful echo matches byLine directly), with byLineTrimmed as a
+            // same-shape fallback (keyed after trimming) for a model that
+            // trims incidental whitespace despite the instruction. Mirrors
+            // the exact-then-fallback pattern PromptGenerator.cs already uses
+            // for MultilineBreakMarker (byLine / byLineMarkerTrimmed).
             var byLine = new Dictionary<string, string>(StringComparer.Ordinal);
+            var byLineTrimmed = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (var rawLine in response.Replace("\r\n", "\n").Split('\n'))
             {
                 var line = rawLine.Trim();
@@ -236,13 +249,16 @@ public static class InterfaceTextPromptGenerator
                 }
                 var japanese = StripSurroundingQuotes(StripTargetTags(line[(tabIndex + 1)..].Trim()));
                 if (source.Length > 0 && japanese.Length > 0)
+                {
                     byLine[source] = japanese; // 同じキーが複数行あれば最後の行を採用
+                    byLineTrimmed[source.Trim()] = japanese;
+                }
             }
 
             var anyUnresolvedInBatch = false;
             foreach (var (group, _) in batch)
             {
-                if (!byLine.TryGetValue(group.Key.Trim(), out var japanese))
+                if (!byLine.TryGetValue(group.Key, out var japanese) && !byLineTrimmed.TryGetValue(group.Key.Trim(), out japanese))
                 {
                     foreach (var (key, english) in group)
                     {
