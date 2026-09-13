@@ -10,12 +10,18 @@ namespace SJPTS_InterfaceText.Tests;
 /// LLM call.</summary>
 public sealed class FakeTranslator : ITextTranslator
 {
-    private readonly Queue<(string? Response, string Error)> _responses = new();
+    private readonly Queue<(string? Response, string Error, bool? Truncated)> _responses = new();
     public bool CircuitOpen { get; set; }
+
+    /// <summary>Fallback used only while nothing was queued with its OWN
+    /// per-call truncated flag via <see cref="Enqueue"/>'s truncated
+    /// parameter — kept so every existing call site that sets this property
+    /// directly (single fixed-truncation-state tests) keeps working
+    /// unchanged.</summary>
     public bool LastResponseTruncated { get; set; }
     public List<string> PromptsReceived { get; } = new();
 
-    public void Enqueue(string? response, string error = "") => _responses.Enqueue((response, error));
+    public void Enqueue(string? response, string error = "", bool? truncated = null) => _responses.Enqueue((response, error, truncated));
 
     public string? TryTranslate(string promptText, out string error)
     {
@@ -25,7 +31,8 @@ public sealed class FakeTranslator : ITextTranslator
             error = "";
             return null;
         }
-        var (response, err) = _responses.Dequeue();
+        var (response, err, truncated) = _responses.Dequeue();
+        if (truncated.HasValue) LastResponseTruncated = truncated.Value;
         error = err;
         return response;
     }
@@ -182,6 +189,38 @@ public class InterfaceTextPromptGeneratorTests
             Assert.Equal(1, log.DetailCount(
                 "モデルの応答が出力トークン数の上限で打ち切られた可能性があります",
                 "the model's response may have been cut off by an output token limit"));
+        }
+        finally { }
+    }
+
+    /// <summary>
+    /// 2026-09-13 (issue #2): mirrors PromptGeneratorTests'
+    /// RunOne_LlmBatch_RoundTruncatedWithProgress_AutomaticallyRetriesRemainderNextRound
+    /// — a batch cut off by an output-token limit must not force a manual
+    /// re-run just for the leftover candidates. ApplyLlmStep now automatically
+    /// re-batches and re-requests ONLY the still-unresolved candidates for
+    /// another round, as long as the previous round both truncated AND made
+    /// progress (no fixed round cap, per explicit user rejection of an
+    /// arbitrary "3 rounds"). Round 1 here resolves "$Foo" but is silent on
+    /// "$Bar" while truncated; round 2 (the automatic retry) resolves "$Bar"
+    /// from a clean, non-truncated response.
+    /// </summary>
+    [Fact]
+    public void ApplyLlmStep_RoundTruncatedWithProgress_AutomaticallyRetriesRemainderNextRound()
+    {
+        var pending = new List<(string Key, string English)> { ("$Foo", "Hello"), ("$Bar", "World") };
+        var fake = new FakeTranslator();
+        fake.Enqueue("<SJPTS_TARGET>Hello</SJPTS_TARGET>\tこんにちは", truncated: true); // round 1: "$Bar" never answered
+        fake.Enqueue("<SJPTS_TARGET>World</SJPTS_TARGET>\t世界", truncated: false); // round 2: the automatic retry
+
+        using var log = OpenTempLog(out var dir);
+        try
+        {
+            var result = InterfaceTextPromptGenerator.ApplyLlmStep(pending, fake, "TestMod", log, null, 12_000, dir, "localLLM");
+
+            Assert.Equal(2, fake.PromptsReceived.Count);
+            Assert.Equal(("こんにちは", "TranslationLocalLlm"), result["$Foo"]);
+            Assert.Equal(("世界", "TranslationLocalLlm"), result["$Bar"]);
         }
         finally { }
     }

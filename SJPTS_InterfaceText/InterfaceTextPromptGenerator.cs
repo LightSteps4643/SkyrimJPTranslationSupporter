@@ -157,39 +157,59 @@ public static class InterfaceTextPromptGenerator
         foreach (var stale in Directory.Exists(modWorkDir) ? Directory.EnumerateFiles(modWorkDir, $"{promptFilePrefix}*_of_*.txt") : Enumerable.Empty<string>())
             File.Delete(stale);
 
-        // Dedup by identical English text — same rationale as PromptGenerator's
-        // own byText grouping: a meaningful share of a mod's strings repeat
-        // (short toggle/option labels), and asking once costs less while
-        // making a divergent translation of the same text structurally
-        // impossible within this mod.
-        var byText = pending.GroupBy(e => e.English, StringComparer.Ordinal).ToList();
-
-        var blocks = byText.Select(g => (Group: g, Block: BuildBlock(g))).ToList();
-
-        var batches = new List<List<(IGrouping<string, (string Key, string English)> Group, string Block)>>();
-        var current = new List<(IGrouping<string, (string Key, string English)> Group, string Block)>();
-        var currentLength = 0;
-        foreach (var item in blocks)
+        // 2026-09-13 (issue #2): finish_reason=length（出力トークン上限による
+        // 打ち切り）で一部の候補しか解決できなかった場合、未解決分だけを対象に
+        // 自動で再送する——ESP側（Translation/PromptGenerator.cs）とまったく
+        // 同じ設計・終了条件をこちらにもミラーする。固定回数の上限は使わず
+        // （「3回という数字には妥当性がない」という明示的な却下を受けた設計）、
+        // 「まだ未解決が残っている」「直前のラウンドで打ち切りが実際に発生
+        // した」「直前のラウンドで1件以上進捗があった」の3条件がすべて揃う
+        // 間だけラウンドを重ねる。
+        var round = 0;
+        var circuitOpened = false;
+        while (true)
         {
-            if (current.Count > 0 && currentLength + item.Block.Length > batchCharLimit)
+            round++;
+            var stillPending = pending.Where(e => !result.ContainsKey(e.Key)).ToList();
+
+            // Dedup by identical English text — same rationale as PromptGenerator's
+            // own byText grouping: a meaningful share of a mod's strings repeat
+            // (short toggle/option labels), and asking once costs less while
+            // making a divergent translation of the same text structurally
+            // impossible within this mod.
+            var byText = stillPending.GroupBy(e => e.English, StringComparer.Ordinal).ToList();
+            if (byText.Count == 0) break;
+
+            var blocks = byText.Select(g => (Group: g, Block: BuildBlock(g))).ToList();
+
+            var batches = new List<List<(IGrouping<string, (string Key, string English)> Group, string Block)>>();
+            var current = new List<(IGrouping<string, (string Key, string English)> Group, string Block)>();
+            var currentLength = 0;
+            foreach (var item in blocks)
             {
-                batches.Add(current);
-                current = new List<(IGrouping<string, (string Key, string English)> Group, string Block)>();
-                currentLength = 0;
+                if (current.Count > 0 && currentLength + item.Block.Length > batchCharLimit)
+                {
+                    batches.Add(current);
+                    current = new List<(IGrouping<string, (string Key, string English)> Group, string Block)>();
+                    currentLength = 0;
+                }
+                current.Add(item);
+                currentLength += item.Block.Length;
             }
-            current.Add(item);
-            currentLength += item.Block.Length;
-        }
-        if (current.Count > 0) batches.Add(current);
+            if (current.Count > 0) batches.Add(current);
 
-        log.DetailAndReport("生成AI翻訳のバッチ呼び出し件数", "batched call count",
-            log.Lang == RunLogLang.Ja
-                ? $"[{modName}]  未解決{byText.Count}件（重複排除後）を{batches.Count}回のバッチ呼び出しに分割（1回あたりの文字数上限: {batchCharLimit}）"
-                : $"[{modName}]  {byText.Count} unique unresolved string(s), {batches.Count} batched call(s) (char limit: {batchCharLimit})",
-            $"[{modName}] {byText.Count} unique unresolved string(s), {batches.Count} batched call(s), char limit {batchCharLimit}");
+            var roundLabelJa = round > 1 ? $"（再送{round}回目）" : "";
+            var roundLabelEn = round > 1 ? $" (retry round {round})" : "";
+            log.DetailAndReport($"生成AI翻訳のバッチ呼び出し件数{roundLabelJa}", $"batched call count{roundLabelEn}",
+                log.Lang == RunLogLang.Ja
+                    ? $"[{modName}]  未解決{byText.Count}件（重複排除後）を{batches.Count}回のバッチ呼び出しに分割（1回あたりの文字数上限: {batchCharLimit}）{roundLabelJa}"
+                    : $"[{modName}]  {byText.Count} unique unresolved string(s), {batches.Count} batched call(s) (char limit: {batchCharLimit}){roundLabelEn}",
+                $"[{modName}] {byText.Count} unique unresolved string(s), {batches.Count} batched call(s), char limit {batchCharLimit}{roundLabelEn}");
 
-        for (var batchIndex = 0; batchIndex < batches.Count; batchIndex++)
-        {
+            var roundTruncated = false;
+            var resultCountBeforeRound = result.Count;
+            for (var batchIndex = 0; batchIndex < batches.Count; batchIndex++)
+            {
             var batch = batches[batchIndex];
             var batchLabel = batches.Count > 1 ? $"バッチ{batchIndex + 1}/{batches.Count}" : "バッチ";
             var batchLabelEn = batches.Count > 1 ? $"batch {batchIndex + 1}/{batches.Count}" : "batch";
@@ -203,6 +223,7 @@ public static class InterfaceTextPromptGenerator
                         ? $"[{modName}]  連続失敗のため残り{remainingBatches}バッチ（{remainingCandidates}件）をまとめてスキップしました"
                         : $"[{modName}]  circuit breaker open — skipping remaining {remainingBatches} batch(es) ({remainingCandidates} candidate(s))",
                     $"[{modName}] circuit breaker open — skipping remaining {remainingBatches} batch(es) ({remainingCandidates} candidate(s))");
+                circuitOpened = true;
                 break;
             }
 
@@ -211,7 +232,14 @@ public static class InterfaceTextPromptGenerator
             var promptText = promptBuilder.ToString();
 
             Directory.CreateDirectory(modWorkDir);
-            var promptBatchPath = Path.Combine(modWorkDir, $"{promptFilePrefix}{batchIndex + 1}_of_{batches.Count}.txt");
+            // round 1（今まで通り大半のケース）ではファイル名を変えない——
+            // 既存のプロンプトデバッグファイル名をあてにする既存のテスト・運用に
+            // 影響を出さないため。再送が発生した場合のみラウンド番号を付けて
+            // 前ラウンドのファイルを上書きしないようにする。
+            var promptBatchFileName = round > 1
+                ? $"{promptFilePrefix}{batchIndex + 1}_of_{batches.Count}_round{round}.txt"
+                : $"{promptFilePrefix}{batchIndex + 1}_of_{batches.Count}.txt";
+            var promptBatchPath = Path.Combine(modWorkDir, promptBatchFileName);
             File.WriteAllText(promptBatchPath, promptText, new System.Text.UTF8Encoding(false));
 
             var response = translator.TryTranslate(promptText, out var error);
@@ -233,6 +261,7 @@ public static class InterfaceTextPromptGenerator
             // trace-log dump below.
             if (translator.LastResponseTruncated)
             {
+                roundTruncated = true;
                 log.DetailAndReport("モデルの応答が出力トークン数の上限で打ち切られた可能性があります",
                     "the model's response may have been cut off by an output token limit",
                     log.Lang == RunLogLang.Ja
@@ -325,6 +354,12 @@ public static class InterfaceTextPromptGenerator
             // 大抵の原因は分かるが、それでも特定できない場合の最終手段として。
             if (anyUnresolvedInBatch)
                 trace?.Warning($"[{modName}] {batchLabelEn}: raw response for the batch with unresolved candidate(s):\n{response}");
+            }
+
+            if (circuitOpened) break;
+
+            var resolvedThisRound = result.Count - resultCountBeforeRound;
+            if (!roundTruncated || resolvedThisRound == 0) break;
         }
 
         return result;

@@ -1174,6 +1174,64 @@ public class PromptGeneratorTests
     }
 
     /// <summary>
+    /// 2026-09-13 (issue #2): a batch whose response was cut off by an
+    /// output-token limit (finish_reason == "length") must not force the user
+    /// to manually re-run the whole translation just to pick up the leftover
+    /// candidates. ApplyLlmStep now automatically re-batches and re-requests
+    /// ONLY the still-unresolved candidates for another round, as long as the
+    /// previous round both truncated AND made progress (no fixed round cap —
+    /// an explicit user requirement: an arbitrary "3 rounds" was rejected as
+    /// unjustified in favor of this self-terminating condition). This test
+    /// simulates round 1 resolving 2 of 3 candidates from this plugin's fixed
+    /// candidate set (leaving the trailing-whitespace one, deliberately
+    /// omitted from round 1's response) while truncated, and round 2 (the
+    /// automatic retry) resolving the remainder from a clean, non-truncated
+    /// response — end to end, all 3 must end up translated from exactly 2
+    /// TryTranslate calls.
+    /// </summary>
+    [Fact]
+    public void RunOne_LlmBatch_RoundTruncatedWithProgress_AutomaticallyRetriesRemainderNextRound()
+    {
+        const string plugin = "SjptsTargetTagCases.esp";
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outputDir = Path.Combine(root, "out_temp");
+            using var log = OpenTestLog(root);
+            var fakeLlm = FakeTextTranslator.SucceedingRaw("placeholder — replaced by the queued responses below");
+            // Round 1: resolves "Target:" and "Sjpts Format Edge Case
+            // Candidate", but is silent on "Sjpts Trailing Whitespace
+            // Candidate " (as if the response were cut off before reaching
+            // it) — and reports truncation, matching a real finish_reason ==
+            // "length" response.
+            fakeLlm.EnqueueRaw(
+                "<SJPTS_TARGET>Target:</SJPTS_TARGET>\tターゲット\n" +
+                "<SJPTS_TARGET>Sjpts Format Edge Case Candidate</SJPTS_TARGET>\t訳文",
+                truncated: true);
+            // Round 2 (the automatic retry, requesting only the remaining
+            // unresolved candidate): a clean, complete, non-truncated
+            // response.
+            fakeLlm.EnqueueRaw(
+                "<SJPTS_TARGET>Sjpts Trailing Whitespace Candidate </SJPTS_TARGET>\t末尾空白の訳文",
+                truncated: false);
+            var stages = new TranslationStageOptions(EnableMeaning: false, EnableTransliteration: false, EnableNameFallback: false);
+
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm, stageOptions: stages);
+
+            Assert.Equal(2, fakeLlm.CallCount);
+
+            var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases");
+            var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
+
+            Assert.Equal(("ターゲット", "TranslationLocalLlm"), translations["Target:"]);
+            Assert.Equal(("訳文", "TranslationLocalLlm"), translations["Sjpts Format Edge Case Candidate"]);
+            Assert.Equal(("末尾空白の訳文", "TranslationLocalLlm"), translations["Sjpts Trailing Whitespace Candidate "]);
+        }
+        finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ } }
+    }
+
+    /// <summary>
     /// 2026-09-13: real-data investigation — a batch response cut off by an
     /// output-token limit (confirmed via real gemma4:26b/Ollama,
     /// finish_reason == "length") ends mid-tag, silently dropping every
@@ -1199,7 +1257,14 @@ public class PromptGeneratorTests
 
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm, stageOptions: stages);
 
-            Assert.Equal(1, log.DetailCount(
+            // 2026-09-13: 打ち切り(finish_reason=length)かつ当該ラウンドで
+            // 1件以上進捗があった場合、未解決分だけを対象に自動で再送する
+            // ようになった（issue #2）。このフェイクは常に同じ打ち切り応答を
+            // 返すため、1件目が解決した1ラウンド目の後、まだ残っている他の
+            // 候補を対象にした2ラウンド目が自動発生し、それも打ち切り扱いに
+            // なる（が今度は進捗0のためそこで止まる）——よって打ち切りログは
+            // 2回出るのが正しい。
+            Assert.Equal(2, log.DetailCount(
                 "5.ローカルLLM: モデルの応答が出力トークン数の上限で打ち切られた可能性があります",
                 "5. local LLM: the model's response may have been cut off by an output token limit"));
         }

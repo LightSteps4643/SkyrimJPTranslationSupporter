@@ -65,10 +65,31 @@ public sealed class FakeTextTranslator : ITextTranslator
     /// <summary>Always fails, as if the backend were unreachable.</summary>
     public static FakeTextTranslator Failing(string error = "simulated failure") => new(null, error);
 
+    /// <summary>2026-09-13: for tests that need a DIFFERENT response on
+    /// successive TryTranslate calls (e.g. simulating "round 1 truncates a
+    /// batch, round 2's retry of just the leftovers succeeds") — see
+    /// <see cref="EnqueueRaw"/>. Empty by default, so every existing factory
+    /// above (a single fixed response for every call) is unaffected.</summary>
+    private readonly Queue<(string? Response, bool Truncated, string Error)> _queue = new();
+
+    /// <summary>Queues one more scripted response, consumed in order by
+    /// successive TryTranslate calls — takes priority over the fixed
+    /// single-response behavior from the static factories while the queue is
+    /// non-empty. No automatic tag-wrapping (same as <see cref="SucceedingRaw"/>).</summary>
+    public void EnqueueRaw(string? response, bool truncated = false, string error = "") =>
+        _queue.Enqueue((response, truncated, error));
+
     public string? TryTranslate(string promptText, out string error)
     {
         CallCount++;
         LastPromptReceived = promptText;
+        if (_queue.Count > 0)
+        {
+            var (queuedResponse, queuedTruncated, queuedError) = _queue.Dequeue();
+            LastResponseTruncated = queuedTruncated;
+            error = queuedError;
+            return queuedResponse;
+        }
         error = _error;
         return _response;
     }

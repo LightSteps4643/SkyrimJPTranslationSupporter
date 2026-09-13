@@ -698,6 +698,29 @@ public static class PromptGenerator
         foreach (var stale in Directory.Exists(pluginDir) ? Directory.EnumerateFiles(pluginDir, $"{promptFilePrefix}*_of_*.txt") : Enumerable.Empty<string>())
             File.Delete(stale);
 
+        // 2026-09-13: finish_reason=length（出力トークン上限による打ち切り）で
+        // 一部の候補しか解決できなかった場合、ユーザーから「一度得られた結果は
+        // Translation.tsvへ反映した上で、未解決の候補だけを対象に自動で再送
+        // してほしい」との要望があった（既存の3回固定リトライ案は「妥当性が
+        // ない」と明示的に却下され、代わりに進捗ベースの自己終了条件で合意）。
+        // ラウンドを重ねるたびbyText/batchesを未解決分だけで作り直すため、
+        // このループの外では一度も構築しない。
+        // 終了条件（3つ全て）:
+        //   1. まだ未解決の候補が残っている
+        //   2. 直前のラウンドで打ち切り（finish_reason=length）が実際に発生した
+        //      （＝再送しても改善しない失敗をいつまでも繰り返さないため）
+        //   3. 直前のラウンドで1件以上、新規に解決できた（＝進捗がゼロなら
+        //      無限ループになり得るため、固定回数の上限の代わりに使う）
+        var answers = new Dictionary<string, AutoTranslationResult>(StringComparer.Ordinal);
+        var round = 0;
+        var circuitOpened = false;
+        while (true)
+        {
+            round++;
+            var stillUnresolved = beforeStep.Where(c => !answers.ContainsKey(c.CurrentText)).ToList();
+            var byTextThisRound = stillUnresolved.GroupBy(c => c.CurrentText, StringComparer.Ordinal).ToList();
+            if (byTextThisRound.Count == 0) break;
+
         // 各グループのブロック本文を先に1回だけ組み立て、その文字数を見ながら
         // batchCharLimit以下になるようサブバッチへ分割する。1件だけで上限を
         // 超えるグループも、単独のサブバッチとして必ず含める（無限にスキップ
@@ -708,7 +731,7 @@ public static class PromptGenerator
         // MultilineBreakMarkerへ置き換えてMatchKey（1行に収まる文字列）を作り、
         // ブロックの"Target:"行にはそちらを使う——単一行の候補は一切変更しない
         // （指示文の複雑化・トークン消費を、実際に必要な候補だけに限定する）。
-        var blocks = byText.Select(g =>
+        var blocks = byTextThisRound.Select(g =>
         {
             var isMultiline = g.Key.IndexOf('\n') >= 0;
             var matchKey = isMultiline ? FlattenMultiline(g.Key) : g.Key;
@@ -731,14 +754,17 @@ public static class PromptGenerator
         }
         if (current.Count > 0) batches.Add(current);
 
-        log.DetailAndReport($"{stepNumber}.{stepLabelJa}のバッチ呼び出し件数",
-            $"{stepNumber}. {stepLabelEn} batched call count",
+        var roundLabelJa = round > 1 ? $"（再送{round}回目）" : "";
+        var roundLabelEn = round > 1 ? $" (retry round {round})" : "";
+        log.DetailAndReport($"{stepNumber}.{stepLabelJa}のバッチ呼び出し件数{roundLabelJa}",
+            $"{stepNumber}. {stepLabelEn} batched call count{roundLabelEn}",
             log.Lang == RunLogLang.Ja
-                ? $"[{plugin}]  未解決{byText.Count}件を{batches.Count}回のバッチ呼び出しに分割（1回あたりの文字数上限: {batchCharLimit}）"
-                : $"[{plugin}]  {byText.Count} unique unresolved string(s), {batches.Count} batched call(s) (char limit: {batchCharLimit})",
-            $"[{plugin}] Step {stepNumber} ({stepLabelEn}): {byText.Count} unique unresolved string(s), {batches.Count} batched call(s)...");
+                ? $"[{plugin}]  未解決{byTextThisRound.Count}件を{batches.Count}回のバッチ呼び出しに分割（1回あたりの文字数上限: {batchCharLimit}）{roundLabelJa}"
+                : $"[{plugin}]  {byTextThisRound.Count} unique unresolved string(s), {batches.Count} batched call(s) (char limit: {batchCharLimit}){roundLabelEn}",
+            $"[{plugin}] Step {stepNumber} ({stepLabelEn}){roundLabelEn}: {byTextThisRound.Count} unique unresolved string(s), {batches.Count} batched call(s)...");
 
-        var answers = new Dictionary<string, AutoTranslationResult>(StringComparer.Ordinal);
+        var roundTruncated = false;
+        var answersBeforeRound = answers.Count;
         for (var batchIndex = 0; batchIndex < batches.Count; batchIndex++)
         {
             var batch = batches[batchIndex];
@@ -763,6 +789,7 @@ public static class PromptGenerator
                         ? $"[{plugin}]  連続失敗のため残り{remainingBatches}バッチ（{remainingCandidates}件）をまとめてスキップしました"
                         : $"[{plugin}]  circuit breaker open — skipping remaining {remainingBatches} batch(es) ({remainingCandidates} candidate(s))",
                     $"[{plugin}] {stepLabelEn}: circuit breaker open — skipping remaining {remainingBatches} batch(es) ({remainingCandidates} candidate(s))");
+                circuitOpened = true;
                 break;
             }
 
@@ -772,7 +799,14 @@ public static class PromptGenerator
             var promptText = promptBuilder.ToString();
 
             Directory.CreateDirectory(pluginDir);
-            var promptBatchPath = Path.Combine(pluginDir, $"{promptFilePrefix}{batchIndex + 1}_of_{batches.Count}.txt");
+            // round 1（今まで通り大半のケース）ではファイル名を変えない——
+            // 既存のプロンプトデバッグファイル名をあてにする既存のテスト・運用に
+            // 影響を出さないため。再送が発生した場合のみラウンド番号を付けて
+            // 前ラウンドのファイルを上書きしないようにする。
+            var promptBatchFileName = round > 1
+                ? $"{promptFilePrefix}{batchIndex + 1}_of_{batches.Count}_round{round}.txt"
+                : $"{promptFilePrefix}{batchIndex + 1}_of_{batches.Count}.txt";
+            var promptBatchPath = Path.Combine(pluginDir, promptBatchFileName);
             File.WriteAllText(promptBatchPath, promptText, new System.Text.UTF8Encoding(false));
 
             var response = llm.TryTranslate(promptText, out var error);
@@ -803,6 +837,7 @@ public static class PromptGenerator
             // trace-log dump below.
             if (llm.LastResponseTruncated)
             {
+                roundTruncated = true;
                 log.DetailAndReport($"{stepNumber}.{stepLabelJa}: モデルの応答が出力トークン数の上限で打ち切られた可能性があります",
                     $"{stepNumber}. {stepLabelEn}: the model's response may have been cut off by an output token limit",
                     log.Lang == RunLogLang.Ja
@@ -999,6 +1034,12 @@ public static class PromptGenerator
                     log.Lang == RunLogLang.Ja
                         ? $"[{plugin}]  {batchLabel}（{batch.Count}件）  ({error})"
                         : $"[{plugin}]  {batchLabelEn} ({batch.Count} candidate(s))  ({error})");
+        }
+
+            if (circuitOpened) break;
+
+            var resolvedThisRound = answers.Count - answersBeforeRound;
+            if (!roundTruncated || resolvedThisRound == 0) break;
         }
 
         if (answers.Count == 0) return resolved;
