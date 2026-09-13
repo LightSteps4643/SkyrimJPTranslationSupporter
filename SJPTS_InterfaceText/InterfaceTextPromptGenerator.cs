@@ -183,20 +183,25 @@ public static class InterfaceTextPromptGenerator
         if (current.Count > 0) batches.Add(current);
 
         log.DetailAndReport("生成AI翻訳のバッチ呼び出し件数", "batched call count",
-            $"[{modName}]  未解決{byText.Count}件（重複排除後）を{batches.Count}回のバッチ呼び出しに分割（1回あたりの文字数上限: {batchCharLimit}）",
+            log.Lang == RunLogLang.Ja
+                ? $"[{modName}]  未解決{byText.Count}件（重複排除後）を{batches.Count}回のバッチ呼び出しに分割（1回あたりの文字数上限: {batchCharLimit}）"
+                : $"[{modName}]  {byText.Count} unique unresolved string(s), {batches.Count} batched call(s) (char limit: {batchCharLimit})",
             $"[{modName}] {byText.Count} unique unresolved string(s), {batches.Count} batched call(s), char limit {batchCharLimit}");
 
         for (var batchIndex = 0; batchIndex < batches.Count; batchIndex++)
         {
             var batch = batches[batchIndex];
             var batchLabel = batches.Count > 1 ? $"バッチ{batchIndex + 1}/{batches.Count}" : "バッチ";
+            var batchLabelEn = batches.Count > 1 ? $"batch {batchIndex + 1}/{batches.Count}" : "batch";
 
             if (translator.CircuitOpen)
             {
                 var remainingBatches = batches.Count - batchIndex;
                 var remainingCandidates = batches.Skip(batchIndex).Sum(b => b.Count);
                 log.DetailAndReport("生成AI翻訳のサーキットブレーカー作動", "circuit breaker open",
-                    $"[{modName}]  連続失敗のため残り{remainingBatches}バッチ（{remainingCandidates}件）をまとめてスキップしました",
+                    log.Lang == RunLogLang.Ja
+                        ? $"[{modName}]  連続失敗のため残り{remainingBatches}バッチ（{remainingCandidates}件）をまとめてスキップしました"
+                        : $"[{modName}]  circuit breaker open — skipping remaining {remainingBatches} batch(es) ({remainingCandidates} candidate(s))",
                     $"[{modName}] circuit breaker open — skipping remaining {remainingBatches} batch(es) ({remainingCandidates} candidate(s))");
                 break;
             }
@@ -213,8 +218,10 @@ public static class InterfaceTextPromptGenerator
             if (response == null)
             {
                 log.DetailAndReport("生成AI翻訳のバッチが失敗（エラー理由）", "a batch failed (error reason)",
-                    $"[{modName}]  {batchLabel}（{batch.Count}件）が失敗しました  ({error})",
-                    $"[{modName}] {batchLabel} failed ({batch.Count} candidate(s)): {error}");
+                    log.Lang == RunLogLang.Ja
+                        ? $"[{modName}]  {batchLabel}（{batch.Count}件）が失敗しました  ({error})"
+                        : $"[{modName}]  {batchLabelEn} ({batch.Count} candidate(s)) failed ({error})",
+                    $"[{modName}] {batchLabelEn} failed ({batch.Count} candidate(s)): {error}");
                 continue; // 自動リトライしない — 次のバッチへ（既存と同じ方針）
             }
 
@@ -228,8 +235,10 @@ public static class InterfaceTextPromptGenerator
             {
                 log.DetailAndReport("モデルの応答が出力トークン数の上限で打ち切られた可能性があります",
                     "the model's response may have been cut off by an output token limit",
-                    $"[{modName}]  {batchLabel}（finish_reason=length）",
-                    $"[{modName}] {batchLabel}: response may have been cut off by an output token limit (finish_reason=length)");
+                    log.Lang == RunLogLang.Ja
+                        ? $"[{modName}]  {batchLabel}（finish_reason=length）"
+                        : $"[{modName}]  {batchLabelEn} (finish_reason=length)",
+                    $"[{modName}] {batchLabelEn}: response may have been cut off by an output token limit (finish_reason=length)");
             }
 
             // 2026-09-13: real-data bug (FloatingSubtitles' "$FSUB_
@@ -315,7 +324,7 @@ public static class InterfaceTextPromptGenerator
             // 重複させない）——上のper-line診断（ClassifyTaggedSourceIssue）で
             // 大抵の原因は分かるが、それでも特定できない場合の最終手段として。
             if (anyUnresolvedInBatch)
-                trace?.Warning($"[{modName}] {batchLabel}: raw response for the batch with unresolved candidate(s):\n{response}");
+                trace?.Warning($"[{modName}] {batchLabelEn}: raw response for the batch with unresolved candidate(s):\n{response}");
         }
 
         return result;

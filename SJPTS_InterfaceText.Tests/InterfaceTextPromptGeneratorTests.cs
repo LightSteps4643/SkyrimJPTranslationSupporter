@@ -186,6 +186,36 @@ public class InterfaceTextPromptGeneratorTests
         finally { }
     }
 
+    /// <summary>2026-09-13: real bug — `batchLabel` ("バッチ1/2"/"バッチ") is
+    /// Japanese, but was embedded verbatim into English-only strings (the
+    /// DetailAndReport consoleText param and trace.Warning, both meant to be
+    /// English regardless of RunLog's own ja/en setting per RunLog.cs's own
+    /// doc comment). Forces English-language RunLog output for a truncated
+    /// batch and asserts the log file contains no Japanese characters.</summary>
+    [Fact]
+    public void ApplyLlmStep_EnglishLogLanguage_TruncatedBatch_LogTextHasNoJapanese()
+    {
+        var pending = new List<(string Key, string English)> { ("$Foo", "Hello") };
+        var fake = new FakeTranslator { LastResponseTruncated = true };
+        fake.Enqueue("<SJPTS_TARGET>Something Else</SJPTS_TARGET>\t訳文"); // "$Foo" never answered
+
+        var originalLangEnv = Environment.GetEnvironmentVariable("SKYRIMJPSP_LOG_LANG");
+        var dir = Path.Combine(Path.GetTempPath(), $"sjpts_uitext_log_{Guid.NewGuid():N}");
+        try
+        {
+            Environment.SetEnvironmentVariable("SKYRIMJPSP_LOG_LANG", "en");
+            using (var log = RunLog.Open(dir, "Test"))
+                InterfaceTextPromptGenerator.ApplyLlmStep(pending, fake, "TestMod", log, null, 12_000, dir, "localLLM");
+
+            var logText = File.ReadAllText(Path.Combine(dir, "test.log"));
+            Assert.DoesNotContain("バッチ", logText);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SKYRIMJPSP_LOG_LANG", originalLangEnv);
+        }
+    }
+
     [Fact]
     public void ApplyLlmStep_CircuitOpen_SkipsWithoutCallingTranslator()
     {

@@ -217,7 +217,9 @@ public static class PromptGenerator
                 var remaining = byPlugin.Count - processedCount;
                 Console.WriteLine($"Cancelled by user after [{group.Key}] — {remaining} plugin(s) left unprocessed (re-run to continue; already-resolved entries are preserved).");
                 log.DetailAndReport("キャンセル", "Cancelled",
-                    $"ユーザーの中断要求により[{group.Key}]の完了後に処理を打ち切りました（未処理{remaining}件、再実行で続きから対応可能）",
+                    log.Lang == RunLogLang.Ja
+                        ? $"ユーザーの中断要求により[{group.Key}]の完了後に処理を打ち切りました（未処理{remaining}件、再実行で続きから対応可能）"
+                        : $"Cancelled by user after [{group.Key}] — {remaining} plugin(s) left unprocessed (re-run to continue).",
                     $"Cancelled by user after [{group.Key}] — {remaining} plugin(s) left unprocessed.");
                 trace?.Info($"Cancelled by user after [{group.Key}] ({remaining} plugin(s) left unprocessed)");
                 return;
@@ -731,7 +733,9 @@ public static class PromptGenerator
 
         log.DetailAndReport($"{stepNumber}.{stepLabelJa}のバッチ呼び出し件数",
             $"{stepNumber}. {stepLabelEn} batched call count",
-            $"[{plugin}]  未解決{byText.Count}件を{batches.Count}回のバッチ呼び出しに分割（1回あたりの文字数上限: {batchCharLimit}）",
+            log.Lang == RunLogLang.Ja
+                ? $"[{plugin}]  未解決{byText.Count}件を{batches.Count}回のバッチ呼び出しに分割（1回あたりの文字数上限: {batchCharLimit}）"
+                : $"[{plugin}]  {byText.Count} unique unresolved string(s), {batches.Count} batched call(s) (char limit: {batchCharLimit})",
             $"[{plugin}] Step {stepNumber} ({stepLabelEn}): {byText.Count} unique unresolved string(s), {batches.Count} batched call(s)...");
 
         var answers = new Dictionary<string, AutoTranslationResult>(StringComparer.Ordinal);
@@ -739,6 +743,7 @@ public static class PromptGenerator
         {
             var batch = batches[batchIndex];
             var batchLabel = batches.Count > 1 ? $"バッチ{batchIndex + 1}/{batches.Count}" : "バッチ";
+            var batchLabelEn = batches.Count > 1 ? $"batch {batchIndex + 1}/{batches.Count}" : "batch";
 
             // v0.52.1a: ClaudeCodeTranslatorは連続失敗（例: 使用上限到達）が
             // 一定回数続くとCircuitOpenを立てる。v0.58.4: LocalLlmTranslatorにも
@@ -754,7 +759,9 @@ public static class PromptGenerator
                 trace?.Warning($"{stepLabelEn}: circuit breaker open, skipping remaining {remainingBatches} batch(es) for [{plugin}] ({remainingCandidates} candidate(s))");
                 log.DetailAndReport($"{stepNumber}.{stepLabelJa}のサーキットブレーカー作動（残りバッチをまとめてスキップ）",
                     $"{stepNumber}. {stepLabelEn} circuit breaker open (remaining batches skipped)",
-                    $"[{plugin}]  連続失敗のため残り{remainingBatches}バッチ（{remainingCandidates}件）をまとめてスキップしました",
+                    log.Lang == RunLogLang.Ja
+                        ? $"[{plugin}]  連続失敗のため残り{remainingBatches}バッチ（{remainingCandidates}件）をまとめてスキップしました"
+                        : $"[{plugin}]  circuit breaker open — skipping remaining {remainingBatches} batch(es) ({remainingCandidates} candidate(s))",
                     $"[{plugin}] {stepLabelEn}: circuit breaker open — skipping remaining {remainingBatches} batch(es) ({remainingCandidates} candidate(s))");
                 break;
             }
@@ -778,11 +785,13 @@ public static class PromptGenerator
                 // translation.log（RunLog）側にも、既定のログレベルに関わらず必ず
                 // 残るようlog.Detailを追加し、trace.log側もWarningへ引き上げて
                 // 既定のInfoレベルで見えるようにした。
-                trace?.Warning($"{stepLabelEn} {batchLabel} failed [{plugin}] ({batch.Count} candidate(s)): {error}");
+                trace?.Warning($"{stepLabelEn} {batchLabelEn} failed [{plugin}] ({batch.Count} candidate(s)): {error}");
                 log.DetailAndReport($"{stepNumber}.{stepLabelJa}のバッチが失敗（エラー理由）",
                     $"{stepNumber}. {stepLabelEn} a batch failed (error reason)",
-                    $"[{plugin}]  {batchLabel}（{batch.Count}件）が失敗しました  ({error})",
-                    $"[{plugin}] {stepLabelEn} {batchLabel} failed ({batch.Count} candidate(s)): {error}");
+                    log.Lang == RunLogLang.Ja
+                        ? $"[{plugin}]  {batchLabel}（{batch.Count}件）が失敗しました  ({error})"
+                        : $"[{plugin}]  {batchLabelEn} ({batch.Count} candidate(s)) failed ({error})",
+                    $"[{plugin}] {stepLabelEn} {batchLabelEn} failed ({batch.Count} candidate(s)): {error}");
                 continue;
             }
 
@@ -796,8 +805,10 @@ public static class PromptGenerator
             {
                 log.DetailAndReport($"{stepNumber}.{stepLabelJa}: モデルの応答が出力トークン数の上限で打ち切られた可能性があります",
                     $"{stepNumber}. {stepLabelEn}: the model's response may have been cut off by an output token limit",
-                    $"[{plugin}]  {batchLabel}（finish_reason=length）",
-                    $"[{plugin}] {stepLabelEn} {batchLabel}: response may have been cut off by an output token limit (finish_reason=length)");
+                    log.Lang == RunLogLang.Ja
+                        ? $"[{plugin}]  {batchLabel}（finish_reason=length）"
+                        : $"[{plugin}]  {batchLabelEn} (finish_reason=length)",
+                    $"[{plugin}] {stepLabelEn} {batchLabelEn}: response may have been cut off by an output token limit (finish_reason=length)");
             }
 
             // レスポンスを「English<TAB>Japanese」のTSV行として解析し、元の英文
@@ -947,7 +958,7 @@ public static class PromptGenerator
                         log.DetailAndReport($"{stepNumber}.{stepLabelJa}: 応答は得られたが訳文に日本語が含まれない（翻訳不要な文字列か、翻訳失敗かは要レビュー）",
                             $"{stepNumber}. {stepLabelEn}: response parsed but the translation contains no Japanese (needs review — may be untranslatable content, or a genuine translation failure)",
                             $"[{plugin}]  \"{group.Key}\" → \"{japanese}\"",
-                            $"[{plugin}] {stepLabelEn}: 応答に訳文が含まれていましたが日本語ではなかったため、要レビューとして保存しました \"{group.Key}\" → \"{japanese}\"");
+                            $"[{plugin}] {stepLabelEn}: response contained no Japanese — saved as-is for review: \"{group.Key}\" -> \"{japanese}\"");
                     }
                 }
                 else
@@ -967,7 +978,7 @@ public static class PromptGenerator
                     log.DetailAndReport($"{stepNumber}.{stepLabelJa}で解決できなかった候補（モデルの応答形式を解釈できず）",
                         $"{stepNumber}. {stepLabelEn} could not resolve this candidate (model's response wasn't in an interpretable format)",
                         $"[{plugin}]  \"{group.Key}\"",
-                        $"[{plugin}] {stepLabelEn}: モデルがツールで解釈可能なフォーマットでないレスポンスを返したため、スキップしました \"{group.Key}\"");
+                        $"[{plugin}] {stepLabelEn}: could not resolve \"{group.Key}\" (model's response wasn't in an interpretable format)");
                     anyUnresolvedInBatch = true;
                 }
             }
@@ -978,14 +989,16 @@ public static class PromptGenerator
             // 大抵の原因は分かるが、それでも特定できない場合の最終手段として。
             // 全件成功したバッチでは出力しない（ログの肥大化を避ける）。
             if (anyUnresolvedInBatch)
-                trace?.Warning($"{stepLabelEn} [{plugin}] {batchLabel}: raw response for the batch with unresolved candidate(s):\n{response}");
+                trace?.Warning($"{stepLabelEn} [{plugin}] {batchLabelEn}: raw response for the batch with unresolved candidate(s):\n{response}");
 
             // v0.49.2a由来: リトライ診断（成功はしたが1回では済まなかった旨）を
             // 可視化——バッチ単位で1行にまとめる。
             if (error.Length > 0)
                 log.Detail($"{stepNumber}.{stepLabelJa}のリトライ記録（バッチの再試行結果）",
                     $"{stepNumber}. {stepLabelEn} retry record (batch retry outcome)",
-                    $"[{plugin}]  {batchLabel}（{batch.Count}件）  ({error})");
+                    log.Lang == RunLogLang.Ja
+                        ? $"[{plugin}]  {batchLabel}（{batch.Count}件）  ({error})"
+                        : $"[{plugin}]  {batchLabelEn} ({batch.Count} candidate(s))  ({error})");
         }
 
         if (answers.Count == 0) return resolved;

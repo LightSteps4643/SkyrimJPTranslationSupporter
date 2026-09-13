@@ -253,7 +253,11 @@ public class PromptGeneratorTests
             // until after the whole run finished. Now DetailAndReport also
             // echoes it to Console immediately, same as the other ⑤⑥
             // unresolved/needs-review paths.
-            Assert.Contains("要レビューとして保存しました", capturedOut.ToString());
+            // 2026-09-13: console output is English-only regardless of
+            // RunLogLang (RunLog.cs's own documented design) — this used to
+            // wrongly assert Japanese text here, a real bug fixed alongside
+            // the "バッチ" leak into English-only strings.
+            Assert.Contains("saved as-is for review", capturedOut.ToString());
         }
         finally
         {
@@ -509,7 +513,11 @@ public class PromptGeneratorTests
             // NoJapanese case above, the tool never got an answer to store at all.
             Assert.Equal(("", ""), translations["Sjpts Omitted By Model Candidate"]);
 
-            Assert.Contains("モデルがツールで解釈可能なフォーマットでないレスポンスを返したため、スキップしました", capturedOut.ToString());
+            // 2026-09-13: console output is English-only regardless of
+            // RunLogLang (RunLog.cs's own documented design) — this used to
+            // wrongly assert Japanese text here, a real bug fixed alongside
+            // the "バッチ" leak into English-only strings.
+            Assert.Contains("could not resolve", capturedOut.ToString());
         }
         finally
         {
@@ -1196,6 +1204,81 @@ public class PromptGeneratorTests
                 "5. local LLM: the model's response may have been cut off by an output token limit"));
         }
         finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ } }
+    }
+
+    /// <summary>
+    /// 2026-09-13: real bug — `batchLabel` ("バッチ1/2"/"バッチ", built once
+    /// per batch) is Japanese, but it was being embedded verbatim into
+    /// English-only strings (trace.Warning and the DetailAndReport consoleText
+    /// param, both meant to be English regardless of RunLog's own ja/en
+    /// setting per RunLog.cs's own doc comment on Report/DetailAndReport).
+    /// This test forces English-language RunLog output (SKYRIMJPSP_LOG_LANG=en)
+    /// for a truncated-batch scenario and asserts the resulting log file
+    /// contains no Japanese characters at all.
+    /// </summary>
+    [Fact]
+    public void RunOne_LlmBatch_EnglishLogLanguage_TruncatedBatch_LogTextHasNoJapanese()
+    {
+        const string plugin = "SjptsTargetTagCases.esp";
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var originalLangEnv = Environment.GetEnvironmentVariable("SKYRIMJPSP_LOG_LANG");
+        try
+        {
+            Environment.SetEnvironmentVariable("SKYRIMJPSP_LOG_LANG", "en");
+            var outputDir = Path.Combine(root, "out_temp");
+            using var log = OpenTestLog(root);
+            var fakeLlm = FakeTextTranslator.SucceedingRawTruncated("<SJPTS_TARGET>Sjpts Format Edge Case Candidate</SJPTS_TARGET>\t訳文");
+            var stages = new TranslationStageOptions(EnableMeaning: false, EnableTransliteration: false, EnableNameFallback: false);
+
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm, stageOptions: stages);
+            log.Dispose();
+
+            var logText = File.ReadAllText(Path.Combine(root, "Translation", "translation.log"));
+            Assert.DoesNotContain("バッチ", logText);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SKYRIMJPSP_LOG_LANG", originalLangEnv);
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>
+    /// 2026-09-13: real bug, the reverse direction — the DetailAndReport
+    /// consoleText param (meant to be English-only per RunLog.cs's own doc
+    /// comment, printed to console/log-window unconditionally regardless of
+    /// RunLogLang) embedded `{stepLabelEn}` ("local LLM") into an otherwise
+    /// Japanese sentence, for the "no Japanese in response" and "unparseable
+    /// response" cases. Captures Console.Out during a "no Japanese in
+    /// response" run and asserts it contains no Japanese characters.
+    /// </summary>
+    [Fact]
+    public void RunOne_LlmBatch_NoJapaneseInResponse_ConsoleOutputIsEnglishOnly()
+    {
+        const string plugin = "SjptsTargetTagCases.esp";
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var originalOut = Console.Out;
+        var capturedOut = new StringWriter();
+        try
+        {
+            using var log = OpenTestLog(root);
+            var fakeLlm = FakeTextTranslator.Succeeding(("Sjpts Format Edge Case Candidate", "Sjpts Format Edge Case Candidate")); // echoes English back -> no Japanese
+            var stages = new TranslationStageOptions(EnableMeaning: false, EnableTransliteration: false, EnableNameFallback: false);
+
+            Console.SetOut(capturedOut);
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir: Path.Combine(root, "out_temp"), log, llmLocal: fakeLlm, stageOptions: stages);
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+
+        var consoleText = capturedOut.ToString();
+        Assert.Contains("no Japanese", consoleText);
+        Assert.DoesNotContain('応', consoleText); // "応答"/"要レビュー" etc. — none of the surrounding sentence should be Japanese
     }
 
     /// <summary>
