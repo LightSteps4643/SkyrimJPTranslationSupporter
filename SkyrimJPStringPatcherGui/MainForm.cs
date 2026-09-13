@@ -805,22 +805,6 @@ public sealed class MainForm : Form
         UpdateSummaryLabel();
     }
 
-    /// <summary>v0.53.0: 指定プラグインのtranslations.tsvを読み、Notes列が
-    /// <paramref name="methodTag"/>（"TranslationCloudLlm"／"TranslationLocalLlm"）
-    /// と一致する行数を数える——「⑤/⑥を有効にしたのに1件も解決できなかった」を
-    /// 検知するために使う（BtnTranslate_Click参照）。</summary>
-    private int CountResolvedByMethod(IEnumerable<string> plugins, string methodTag)
-    {
-        var count = 0;
-        foreach (var plugin in plugins)
-        {
-            var path = Path.Combine(ProductRoot, "Translation", "out_temp", PluginFolderName.From(plugin), "translations.tsv");
-            var rows = TsvReader.Read(path);
-            count += rows.Count(r => r.GetValueOrDefault("Notes", "") == methodTag);
-        }
-        return count;
-    }
-
     /// <summary>v0.52.1a: `Translation/out_temp`直下の各プラグインフォルダの
     /// translations.tsvを直接読んでグリッドの行を組み立てる——CLIが実際に
     /// 書き出した現物のファイルなので、`plugin_summary.txt`のような
@@ -1155,28 +1139,17 @@ public sealed class MainForm : Form
                 return;
             }
 
-            // v0.53.0: 「生成AI翻訳」「ローカルLLM翻訳」を有効にしたのに1件も
-            // 解決できなかった場合、CLI自体は（失敗した候補をそのまま未解決に
-            // 残すだけで）正常終了するため、ここで検知して警告しないと
-            // 「実行はできたので設定は合っているはず」という誤解を招く。
-            // 実際にはAPIキー・パス・ログイン状態等の設定ミスの可能性が高い
-            // ——詳しい理由は既にtranslation.log/実行ログに出ているので、
-            // ここではその存在に気づかせることに専念する。
+            // 2026-09-13: 発火条件・文言をInterface翻訳側（InterfaceTextPanel.cs）
+            // と統一——以前は「⑤/⑥を有効にしたのに1件も解決できなかった場合
+            // のみ」警告する厳しい条件だったが、これだと打ち切り等でバッチの
+            // 一部だけが失敗したケース（1件以上は解決済み）を見逃していた。
+            // 詳細はServices/TranslationCompletionMessages.cs参照。
             var stillUntranslated = selectedPlugins.Sum(p => _rows.FirstOrDefault(r => r.Plugin.Equals(p, StringComparison.OrdinalIgnoreCase))?.Untranslated ?? 0);
-            var warnings = new List<string>();
-            if (_chkCloudAi.Checked && stillUntranslated > 0 && CountResolvedByMethod(selectedPlugins, "TranslationCloudLlm") == 0)
-                warnings.Add("生成AI翻訳（クラウド）を有効にしましたが、1件も翻訳できませんでした。");
-            if (_chkLlm.Checked && stillUntranslated > 0 && CountResolvedByMethod(selectedPlugins, "TranslationLocalLlm") == 0)
-                warnings.Add("ローカルLLM翻訳を有効にしましたが、1件も翻訳できませんでした。");
-
-            if (warnings.Count > 0)
+            if ((_chkCloudAi.Checked || _chkLlm.Checked) && stillUntranslated > 0)
             {
                 _logWindow.ShowAndActivate();
-                MessageBox.Show(this,
-                    string.Join("\n", warnings) + "\n\n" +
-                    "設定（生成AIの接続情報・ログイン状態・ローカルLLMの起動状況等）に問題がある可能性があります。\n" +
-                    "実行ログウィンドウに詳しい失敗理由が出力されていますので確認してください。",
-                    "生成AI/ローカルLLM翻訳が失敗しています", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this, TranslationCompletionMessages.IncompleteBody,
+                    TranslationCompletionMessages.IncompleteTitle, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             else
             {

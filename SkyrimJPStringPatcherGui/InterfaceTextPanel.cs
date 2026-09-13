@@ -1001,14 +1001,8 @@ public sealed class InterfaceTextPanel : Form
             if ((_chkCloudAi.Checked || _chkLlm.Checked) && stillUntranslated > 0)
             {
                 _logWindow.ShowAndActivate();
-                MessageBox.Show(this,
-                    "未解決のまま残ったkeyがあります。\n\n" +
-                    "・全く翻訳されない場合は、設定（生成AIの接続情報・ログイン状態・\n" +
-                    "　ローカルLLMの起動状況等）を確認してください。\n" +
-                    "・ローカルLLM/生成AIの応答は毎回安定するとは限らないため、\n" +
-                    "　「翻訳実行」を複数回行うと解決することもあります。\n\n" +
-                    "実行ログウィンドウに詳しい失敗理由が出力されています。",
-                    "一部のkeyが未解決です", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this, TranslationCompletionMessages.IncompleteBody,
+                    TranslationCompletionMessages.IncompleteTitle, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             else
             {
