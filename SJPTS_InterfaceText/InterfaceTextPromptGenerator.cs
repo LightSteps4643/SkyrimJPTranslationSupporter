@@ -218,6 +218,20 @@ public static class InterfaceTextPromptGenerator
                 continue; // 自動リトライしない — 次のバッチへ（既存と同じ方針）
             }
 
+            // 2026-09-13: real-data investigation (gemma4:26b/Ollama,
+            // finish_reason == "length") — a batch whose response was cut off
+            // by an output-token limit ends mid-tag, silently dropping every
+            // candidate after the cutoff. Log this as a named reason instead
+            // of leaving an operator to infer truncation by eye from the raw
+            // trace-log dump below.
+            if (translator.LastResponseTruncated)
+            {
+                log.DetailAndReport("モデルの応答が出力トークン数の上限で打ち切られた可能性があります",
+                    "the model's response may have been cut off by an output token limit",
+                    $"[{modName}]  {batchLabel}（finish_reason=length）",
+                    $"[{modName}] {batchLabel}: response may have been cut off by an output token limit (finish_reason=length)");
+            }
+
             // 2026-09-13: real-data bug (FloatingSubtitles' "$FSUB_
             // DualSubtitlesOffscreen_Text" = "DUAL SUBTITLES ", trailing
             // space) — BuildBlock embeds a candidate's English text VERBATIM

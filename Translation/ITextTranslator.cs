@@ -27,4 +27,20 @@ public interface ITextTranslator
     /// for the hard-failure-vs-response-processing-failure distinction that
     /// feeds this.</summary>
     bool CircuitOpen => false;
+
+    /// <summary>2026-09-13: whether the MOST RECENT <see cref="TryTranslate"/>
+    /// call's response was cut short by an output-token limit (the API's own
+    /// <c>finish_reason == "length"</c>) rather than the model finishing
+    /// naturally — confirmed via real gemma4:26b output (Ollama, no
+    /// <c>max_tokens</c> sent) that a large batch's response can end mid-tag
+    /// this way, silently dropping every candidate after the cutoff point.
+    /// The response text itself is still returned as-is by
+    /// <see cref="TryTranslate"/> (whatever was salvageable up to the cutoff);
+    /// this is purely diagnostic, letting the caller
+    /// (<see cref="PromptGenerator.ApplyLlmStep"/>) log a specific reason
+    /// instead of leaving the operator to infer truncation by eye from a raw
+    /// trace-log dump. Defaults to false — an implementation with no such
+    /// concept (e.g. <see cref="ClaudeCodeTranslator"/>, a test fake) never
+    /// reports it.</summary>
+    bool LastResponseTruncated => false;
 }

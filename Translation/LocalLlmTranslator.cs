@@ -100,6 +100,14 @@ public sealed class LocalLlmTranslator : ITextTranslator
     /// 残りの候補をまとめてスキップする。</summary>
     public bool CircuitOpen { get; private set; }
 
+    /// <summary>2026-09-13: see <see cref="ITextTranslator.LastResponseTruncated"/>
+    /// — set from the most recent successful call's <c>choices[0].finish_reason</c>
+    /// (true when it equals <c>"length"</c>). Confirmed against real
+    /// gemma4:26b/Ollama output: with no <c>max_tokens</c> sent, a large batch's
+    /// response was cut off at exactly finish_reason="length" (completion_tokens
+    /// 1004), ending mid-tag.</summary>
+    public bool LastResponseTruncated { get; private set; }
+
     public LocalLlmTranslator(LocalLlmOptions options) : this(options, new HttpClientHandler()) { }
 
     /// <summary>Test-only seam: lets tests substitute an in-memory
@@ -144,6 +152,7 @@ public sealed class LocalLlmTranslator : ITextTranslator
     /// </summary>
     public string? TryTranslate(string promptText, out string error)
     {
+        LastResponseTruncated = false; // reset — a stale true from a previous call must not leak into this one
         if (CircuitOpen)
         {
             error = $"circuit breaker open ({ConsecutiveFailureThreshold}回連続の異常系失敗のため以降のローカルLLM呼び出しを打ち切り中)";
@@ -232,15 +241,27 @@ public sealed class LocalLlmTranslator : ITextTranslator
 
             var body = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
             string? text;
+            var finishReasonIsLength = false;
             try
             {
                 using var doc = JsonDocument.Parse(body);
-                text = doc.RootElement.TryGetProperty("choices", out var choicesEl)
-                    && choicesEl.ValueKind == JsonValueKind.Array && choicesEl.GetArrayLength() > 0
+                var hasChoice = doc.RootElement.TryGetProperty("choices", out var choicesEl)
+                    && choicesEl.ValueKind == JsonValueKind.Array && choicesEl.GetArrayLength() > 0;
+                text = hasChoice
                     && choicesEl[0].TryGetProperty("message", out var messageEl)
                     && messageEl.TryGetProperty("content", out var contentEl)
                     ? contentEl.GetString()
                     : null;
+                // 2026-09-13: real-data investigation (gemma4:26b/Ollama, no
+                // max_tokens sent) — "length" means the server stopped
+                // generating because it hit ITS OWN default output-token
+                // limit (confirmed: completion_tokens exactly 1004 on a
+                // batch whose response ended mid-tag), not that the model
+                // chose to stop naturally ("stop"). Diagnostic only — text
+                // above is still returned as-is (whatever was salvageable).
+                if (hasChoice && choicesEl[0].TryGetProperty("finish_reason", out var finishReasonEl)
+                    && finishReasonEl.ValueKind == JsonValueKind.String)
+                    finishReasonIsLength = finishReasonEl.GetString() == "length";
             }
             catch (JsonException ex)
             {
@@ -249,6 +270,8 @@ public sealed class LocalLlmTranslator : ITextTranslator
 
             if (string.IsNullOrWhiteSpace(text))
                 return (null, false, "empty response");
+
+            LastResponseTruncated = finishReasonIsLength;
 
             // v0.58.5: 既知の課題26.関連——以前はここでバッチ応答全体（複数候補
             // まとめて）に日本語が1文字も無ければバッチごと失敗にしていたが、

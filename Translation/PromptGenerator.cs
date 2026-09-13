@@ -786,6 +786,20 @@ public static class PromptGenerator
                 continue;
             }
 
+            // 2026-09-13: real-data investigation (gemma4:26b/Ollama,
+            // finish_reason == "length") — a batch whose response was cut off
+            // by an output-token limit ends mid-tag, silently dropping every
+            // candidate after the cutoff. Log this as a named reason instead
+            // of leaving an operator to infer truncation by eye from the raw
+            // trace-log dump below.
+            if (llm.LastResponseTruncated)
+            {
+                log.DetailAndReport($"{stepNumber}.{stepLabelJa}: モデルの応答が出力トークン数の上限で打ち切られた可能性があります",
+                    $"{stepNumber}. {stepLabelEn}: the model's response may have been cut off by an output token limit",
+                    $"[{plugin}]  {batchLabel}（finish_reason=length）",
+                    $"[{plugin}] {stepLabelEn} {batchLabel}: response may have been cut off by an output token limit (finish_reason=length)");
+            }
+
             // レスポンスを「English<TAB>Japanese」のTSV行として解析し、元の英文
             // （BuildCandidateBlockの"Target:"に書いた原文そのもの）をキーに突き
             // 合わせる——WritePrompt（手動のAI-chat向けprompt.txt）と同じ、位置では

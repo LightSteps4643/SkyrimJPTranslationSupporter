@@ -1166,6 +1166,39 @@ public class PromptGeneratorTests
     }
 
     /// <summary>
+    /// 2026-09-13: real-data investigation — a batch response cut off by an
+    /// output-token limit (confirmed via real gemma4:26b/Ollama,
+    /// finish_reason == "length") ends mid-tag, silently dropping every
+    /// candidate after the cutoff. Previously the only trace was eyeballing
+    /// the raw response dump in trace.log for a shape that "looks cut off".
+    /// When the translator reports LastResponseTruncated, ApplyLlmStep must
+    /// log a specific, named reason instead of leaving that inference to a
+    /// human reading raw text.
+    /// </summary>
+    [Fact]
+    public void RunOne_LlmBatch_TranslatorReportsResponseTruncated_LogsSpecificReason()
+    {
+        const string plugin = "SjptsTargetTagCases.esp";
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outputDir = Path.Combine(root, "out_temp");
+            using var log = OpenTestLog(root);
+            // "Target:" candidate never answered — as if the response were cut off before it.
+            var fakeLlm = FakeTextTranslator.SucceedingRawTruncated("<SJPTS_TARGET>Sjpts Format Edge Case Candidate</SJPTS_TARGET>\t訳文");
+            var stages = new TranslationStageOptions(EnableMeaning: false, EnableTransliteration: false, EnableNameFallback: false);
+
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm, stageOptions: stages);
+
+            Assert.Equal(1, log.DetailCount(
+                "5.ローカルLLM: モデルの応答が出力トークン数の上限で打ち切られた可能性があります",
+                "5. local LLM: the model's response may have been cut off by an output token limit"));
+        }
+        finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ } }
+    }
+
+    /// <summary>
     /// 2026-09-13: real-data bug — a candidate whose English text has
     /// meaningful trailing whitespace ("Sjpts Trailing Whitespace Candidate ",
     /// mirroring FloatingSubtitles' real "$FSUB_DualSubtitlesOffscreen_Text"

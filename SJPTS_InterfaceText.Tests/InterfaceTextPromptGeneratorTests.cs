@@ -12,6 +12,7 @@ public sealed class FakeTranslator : ITextTranslator
 {
     private readonly Queue<(string? Response, string Error)> _responses = new();
     public bool CircuitOpen { get; set; }
+    public bool LastResponseTruncated { get; set; }
     public List<string> PromptsReceived { get; } = new();
 
     public void Enqueue(string? response, string error = "") => _responses.Enqueue((response, error));
@@ -152,6 +153,35 @@ public class InterfaceTextPromptGeneratorTests
             InterfaceTextPromptGenerator.ApplyLlmStep(pending, fake, "TestMod", log, null, batchCharLimit: 250, modWorkDir: dir, providerLabel: "localLLM");
 
             Assert.True(fake.PromptsReceived.Count > 1);
+        }
+        finally { }
+    }
+
+    /// <summary>
+    /// 2026-09-13: real-data investigation — a batch response cut off by an
+    /// output-token limit (confirmed via real gemma4:26b/Ollama,
+    /// finish_reason == "length") ends mid-tag, silently dropping every
+    /// candidate after the cutoff. Previously the only trace was eyeballing
+    /// the raw response dump in trace.log for a shape that "looks cut off".
+    /// When the translator reports LastResponseTruncated, ApplyLlmStep must
+    /// log a specific, named reason instead of leaving that inference to a
+    /// human reading raw text.
+    /// </summary>
+    [Fact]
+    public void ApplyLlmStep_TranslatorReportsResponseTruncated_LogsSpecificReason()
+    {
+        var pending = new List<(string Key, string English)> { ("$Foo", "Hello"), ("$Bar", "World") };
+        var fake = new FakeTranslator { LastResponseTruncated = true };
+        fake.Enqueue("<SJPTS_TARGET>Hello</SJPTS_TARGET>\tこんにちは"); // "$Bar" never answered — cut off
+
+        using var log = OpenTempLog(out var dir);
+        try
+        {
+            InterfaceTextPromptGenerator.ApplyLlmStep(pending, fake, "TestMod", log, null, 12_000, dir, "localLLM");
+
+            Assert.Equal(1, log.DetailCount(
+                "モデルの応答が出力トークン数の上限で打ち切られた可能性があります",
+                "the model's response may have been cut off by an output token limit"));
         }
         finally { }
     }

@@ -16,6 +16,11 @@ public sealed class FakeTextTranslator : ITextTranslator
     private readonly string _error;
     public int CallCount { get; private set; }
 
+    /// <summary>2026-09-13: settable so a test can simulate a response that
+    /// was cut short by an output-token limit (finish_reason == "length") —
+    /// see <see cref="ITextTranslator.LastResponseTruncated"/>'s remarks.</summary>
+    public bool LastResponseTruncated { get; set; }
+
     /// <summary>The exact prompt text passed to the most recent TryTranslate
     /// call — lets a test assert against what PromptGenerator actually sent
     /// (e.g. to verify the prompt_{localLLM|cloudLLM}_batch*.txt debug files
@@ -51,6 +56,11 @@ public sealed class FakeTextTranslator : ITextTranslator
     /// around them, etc.), where <see cref="Succeeding"/>'s own wrapping would
     /// get in the way of the exact malformed shape the test needs to construct.</summary>
     public static FakeTextTranslator SucceedingRaw(string rawResponse) => new(rawResponse, "");
+
+    /// <summary>Like <see cref="SucceedingRaw"/>, but also reports
+    /// <see cref="LastResponseTruncated"/> = true — simulates a real
+    /// output-token-limited response (finish_reason == "length").</summary>
+    public static FakeTextTranslator SucceedingRawTruncated(string rawResponse) => new(rawResponse, "") { LastResponseTruncated = true };
 
     /// <summary>Always fails, as if the backend were unreachable.</summary>
     public static FakeTextTranslator Failing(string error = "simulated failure") => new(null, error);
