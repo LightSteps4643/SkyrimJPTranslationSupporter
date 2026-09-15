@@ -618,8 +618,8 @@ public static class PromptGenerator
     /// that the model correctly distinguishes this wrapper from a candidate's
     /// own embedded angle-bracket markup rather than getting confused by the
     /// visual similarity).</summary>
-    private const string TargetTagOpen = "<SJPTS_TARGET>";
-    private const string TargetTagClose = "</SJPTS_TARGET>";
+    private const string TargetTagOpen = LlmBatchTranslationEngine.TargetTagOpen;
+    private const string TargetTagClose = LlmBatchTranslationEngine.TargetTagClose;
 
     /// <summary>改行を含む候補だけに適用する——単一行の候補はそのまま
     /// <see cref="ApplyLlmStep"/>に渡す（無駄な変換を増やさない）。</summary>
@@ -649,59 +649,24 @@ public static class PromptGenerator
     /// so 6 only ever sees candidates 5 left behind — a chain, not two
     /// independent passes.
     ///
-    /// v0.52.1a: this plugin's unresolved set is sent as as few combined calls as
-    /// possible instead of one call per unique string — each `claude -p`
-    /// invocation pays a large, roughly-fixed overhead (Claude Code's own
-    /// system-prompt/tool scaffolding gets re-cached every time a fresh process
-    /// starts; measured at ~17K cache-creation + ~29K cache-read tokens per call,
-    /// essentially independent of the actual prompt content), so the number of
-    /// CALLS — not the number of candidates — is what drives real cost. Reuses
-    /// the exact "match by the literal English source text, not by position"
-    /// format already proven in <see cref="WritePrompt"/>'s manual AI-chat
-    /// prompt.txt (one TSV line per candidate, keyed by the "Target" text) — a
-    /// response that drops/reorders/garbles some lines just means those specific
-    /// candidates stay unresolved, same as any other per-candidate failure; it
-    /// doesn't need special handling.
-    ///
-    /// 2026-09-16再設計: 以前は「ラウンド」（未解決分を再集計してsameModPool・
-    /// 候補ブロックを作り直す単位）の中に「バッチ」（1回のLLM呼び出し、文字数
-    /// 上限に収まる分だけの候補）が複数ぶら下がる2階層のループだった。この
-    /// 構造だと、同一ラウンド内の後続バッチはそのラウンドの先頭で1回だけ計算
-    /// したsameModPoolしか見えず、直前のバッチ自身が解決したばかりの結果を
-    /// issue #4のcにすぐ反映できない、という簡略化を抱えていた。
-    /// ユーザー指摘により、ラウンドとバッチの区別自体をやめ、**LLM呼び出し
-    /// 1回＝1イテレーションのフラットなループ**に統合した: 未解決分の再集計・
-    /// sameModPoolの再計算・候補ブロックの組み立てを「毎回のLLM呼び出しの前に
-    /// 都度行う」ことで、文字数上限による分割（旧・バッチ）とfinish_reason=
-    /// lengthによる再送（旧・ラウンド）を区別なく同じ1本のループで扱う。
-    /// 終了条件は「未解決件数がゼロになる」か「直前の呼び出しで新規解決が
-    /// 1件もなかった（＝進捗なし、再送しても改善しないと判断）」の2つのみ
-    /// ——旧来の「3回固定リトライは妥当性がない」という却下判断を、より
-    /// シンプルな形でそのまま引き継いでいる。
-    ///
-    /// Split into multiple sub-batch calls when the built prompt would exceed
-    /// <paramref name="batchCharLimit"/> — a single huge batch risks the model's
-    /// own output being truncated before it finishes (more candidates = more TSV
-    /// answer lines to generate), which would silently lose everything after the
-    /// cutoff. Splitting by CHARACTER volume rather than candidate COUNT is
-    /// deliberate: real load-order data shows candidate length varies enormously
-    /// (a 2-character WOOP code vs. a 200-character weapon lore paragraph), so a
-    /// fixed item-count cap would either be too loose for long-text-heavy plugins
-    /// or too tight for short-word-heavy ones. (A separate item-count cap was
-    /// considered and dropped — the largest real plugin observed, 139 unique
-    /// unresolved strings, totaled only ~2,769 characters, well under any
-    /// reasonable char limit, so count alone was never actually the binding
-    /// constraint in practice.)
+    /// 2026-09-16/17: this is now a thin ESP-specific wrapper around <see
+    /// cref="LlmBatchTranslationEngine.Run{TItem}"/>, which owns the actual
+    /// pass/circuit-breaker/send/parse/match loop shared with <c>SJPTS_
+    /// InterfaceText/InterfaceTextPromptGenerator.cs</c>'s own ApplyLlmStep —
+    /// see that engine's own class remarks for why this extraction happened
+    /// (repeated maintenance drift from hand-copying the same "hard part" logic
+    /// into both files) and what it fixed. What stays here, ESP-specific: the
+    /// <see cref="Candidate"/> data model, <see cref="BuildCandidateBlock"/>
+    /// ("b" reference examples, NPC-name/glossary hints), multiline-candidate
+    /// flattening (<see cref="FlattenMultiline"/>/<see
+    /// cref="StripSpuriousBoundaryMarker"/>), and fanning the engine's
+    /// per-text answers back out onto every <see cref="Candidate"/> sharing
+    /// that text (<paramref name="resolved"/> may hold several).
     /// </summary>
     /// <param name="pluginDir">Where to write each call's actual sent prompt
     /// (instruction + candidate block(s), byte-for-byte what goes into
     /// <see cref="ITextTranslator.TryTranslate"/>) as "prompt_{localLLM|
-    /// cloudLLM}_call{N}.txt" (2026-09-12 design discussion, mirrors
-    /// SJPTS_InterfaceText/InterfaceTextPromptGenerator.cs's own — added there
-    /// first, this is the ESP-side parity follow-up; 2026-09-16: renamed from
-    /// "..._batch{N}_of_{total}[_round{R}].txt" when the round/batch split was
-    /// collapsed into one flat per-call loop, since "total batches" is no
-    /// longer known ahead of time). Distinct from this method's own
+    /// cloudLLM}_call{N}.txt". Distinct from this method's own
     /// <c>WritePrompt</c>-written prompt.txt (a human AI-chat handoff for
     /// whatever's STILL unresolved after THIS step; this one is a record of
     /// what WAS actually sent, win or lose). Only this step's own prefix
@@ -719,390 +684,38 @@ public static class PromptGenerator
         if (beforeStep.Count == 0) return resolved;
 
         var providerLabel = stepNumber == "5" ? "localLLM" : "cloudLLM";
-        var promptFilePrefix = $"prompt_{providerLabel}_call";
-        foreach (var stale in Directory.Exists(pluginDir) ? Directory.EnumerateFiles(pluginDir, $"{promptFilePrefix}*.txt") : Enumerable.Empty<string>())
-            File.Delete(stale);
 
-        var answers = new Dictionary<string, AutoTranslationResult>(StringComparer.Ordinal);
-        // issue #4 (c: same-mod hints, 2026-09-16): everything resolved so far
-        // in this run for this plugin — steps 1-4, an earlier step 5 (when this
-        // call is for step 6), and every earlier ITERATION of this very step,
-        // INCLUDING the one immediately before this — restricted to SameMod
-        // HintBlockBuilder.IsEligibleMethod's trust tier. Recomputed fresh
-        // before every single LLM call now (see the class-level remarks above),
-        // so a hint from the call immediately prior is always visible to the
-        // next one.
-        List<(Candidate Candidate, AutoTranslationResult? Auto)> ResolvedSoFar() =>
-            resolved.Select(r => r.Auto == null && answers.TryGetValue(r.Candidate.CurrentText, out var a)
-                ? (r.Candidate, Auto: (AutoTranslationResult?)a)
-                : r).ToList();
-
-        var callIndex = 0;
-        var circuitOpened = false;
-        while (true) // パス: この時点で未解決な候補全部に最低1回の送信機会を与える一続き
+        var answers = LlmBatchTranslationEngine.Run(new LlmBatchTranslationEngine.Options<Candidate>
         {
-            var passStart = beforeStep.Where(c => !answers.ContainsKey(c.CurrentText)).ToList();
-            if (passStart.Count == 0) break;
-
-            var resolvedCountBeforePass = answers.Count;
-            // 2026-09-16再設計: このパスの間だけ有効な、固定の送信待ちキュー。
-            // ある呼び出しが失敗しても「送った」候補はここから外す（解決できた
-            // かどうかは問わない）——そうしないと、先頭の候補が送るたびに
-            // 失敗し続ける限り、後ろに控えている「まだ一度も送っていない」
-            // 候補に永遠にたどり着けなくなる（文字数上限による分割で1回の
-            // 呼び出しに1件ずつしか入らないほど候補が多い場合に実際に起こる、
-            // ApplyLlmStep_OverCharLimit_SplitsIntoMultipleBatchCallsで検出）。
-            var remainingThisPass = passStart.GroupBy(c => c.CurrentText, StringComparer.Ordinal).ToList();
-
-            while (remainingThisPass.Count > 0)
-            {
-                // v0.52.1a: ClaudeCodeTranslatorは連続失敗（例: 使用上限到達）が
-                // 一定回数続くとCircuitOpenを立てる。v0.58.4: LocalLlmTranslatorにも
-                // 同じ仕組みを追加した（サーバー異常停止等の持続的な失敗を早期に
-                // 検知するため）——ITextTranslator.CircuitOpen（既定false）経由で
-                // 実装を問わず同じ形で確認できる。この状態はllm自身が保持して
-                // いるため、パス・呼び出しをまたいでも連続失敗回数は継続して
-                // カウントされる。呼び出しごとに確認し、開いていれば残りの
-                // 未解決分をまとめてスキップして完全に終了する。
-                if (llm.CircuitOpen)
-                {
-                    var stillUnresolvedTotal = beforeStep.Count(c => !answers.ContainsKey(c.CurrentText));
-                    trace?.Warning($"{stepLabelEn}: circuit breaker open, skipping remaining {stillUnresolvedTotal} candidate(s) for [{plugin}]");
-                    log.DetailAndReport($"{stepNumber}.{stepLabelJa}のサーキットブレーカー作動（残りをまとめてスキップ）",
-                        $"{stepNumber}. {stepLabelEn} circuit breaker open (remaining candidates skipped)",
-                        log.Lang == RunLogLang.Ja
-                            ? $"[{plugin}]  連続失敗のため残り{stillUnresolvedTotal}件をまとめてスキップしました"
-                            : $"[{plugin}]  circuit breaker open — skipping remaining {stillUnresolvedTotal} candidate(s)",
-                        $"[{plugin}] {stepLabelEn}: circuit breaker open — skipping remaining {stillUnresolvedTotal} candidate(s)");
-                    circuitOpened = true;
-                    break;
-                }
-
-                var sameModPool = BuildSameModHintPool(ResolvedSoFar(), plugin);
-
-                // 各グループのブロック本文を先に1回だけ組み立て、その文字数を見ながら
-                // このイテレーション1回分（＝1回のLLM呼び出し）に収まる分だけ先頭から
-                // 詰める。1件だけで上限を超えるグループも、単独で必ず含める（無限に
-                // スキップされ続けることがないように）。
-                // v0.53.0a: 原文が改行を含む候補（本の表紙テキスト等）は、そのままだと
-                // レスポンスのTSV行解析（物理行=1候補という前提）で原理上マッチしようが
-                // ない（既知の課題13.）。改行を含む候補だけ、送信前に`\n`を目印タグ
-                // MultilineBreakMarkerへ置き換えてMatchKey（1行に収まる文字列）を作り、
-                // ブロックの"Target:"行にはそちらを使う——単一行の候補は一切変更しない
-                // （指示文の複雑化・トークン消費を、実際に必要な候補だけに限定する）。
-                var remainingThisPassCountBeforeBatch = remainingThisPass.Count;
-                var blocks = remainingThisPass.Select(g =>
-                {
-                var isMultiline = g.Key.IndexOf('\n') >= 0;
-                var matchKey = isMultiline ? FlattenMultiline(g.Key) : g.Key;
-                var (block, shownReferenceEnglish) = BuildCandidateBlock(g, retriever, auto, npcNames, batchCharLimit, targetTextOverride: isMultiline ? matchKey : null);
-                return (Group: g, Block: block, MatchKey: matchKey, ShownReferenceEnglish: shownReferenceEnglish);
-            }).ToList();
-
-            // bは各候補ブロックに個別に埋め込まれる実測値（BuildCandidateBlock側で
-            // 既に25%キャップ済み）なので、このパッキングの積算（item.Block.Length）
-            // に既に正しく反映されている。まずbatchCharLimitいっぱいまで詰めて
-            // から、issue #4のc（バッチ全体で共有1個、実際にこの回に含まれる候補
-            // だけを対象に計算——中身が確定するまで実サイズが分からない）を実際に
-            // 計算し、合計がbatchCharLimitを超える場合だけ末尾の候補を1件ずつ
-            // 外して再計算する（外された候補は次のイテレーションで自然に再度
-            // 対象になる、次のwhileループを参照）。候補が1件だけになってもなお
-            // cを含めると超える場合は、その候補自体は外さず（単独候補は必ず送る、
-            // 上記コメント参照）cの方を諦める。
-            var currentBatch = new List<(IGrouping<string, Candidate> Group, string Block, string MatchKey, IReadOnlyList<string> ShownReferenceEnglish)>();
-            var currentLength = 0;
-            foreach (var item in blocks)
-            {
-                if (currentBatch.Count > 0 && currentLength + item.Block.Length > batchCharLimit) break;
-                currentBatch.Add(item);
-                currentLength += item.Block.Length;
-            }
-
-            string sameModBlock;
-            while (true)
-            {
-                var alreadyShownInBatch = currentBatch.SelectMany(b => b.ShownReferenceEnglish).ToHashSet();
-                sameModBlock = SameModHintBlockBuilder.BuildBlock(
-                    sameModPool,
-                    currentBatch.Select(b => (b.Group.Key, b.Group.First().RecordType)).ToList(),
-                    batchCharLimit,
-                    alreadyShown: alreadyShownInBatch);
-                if (currentLength + sameModBlock.Length <= batchCharLimit) break;
-                if (currentBatch.Count <= 1) { sameModBlock = ""; break; }
-                var last = currentBatch[^1];
-                currentBatch.RemoveAt(currentBatch.Count - 1);
-                currentLength -= last.Block.Length;
-            }
-
-            // このパスの送信待ちキューから、今回送る分を外す——解決できたかどうかは
-            // 問わない（このパス内での再送はしない。パス自体を再度回すかどうかは
-            // パス終了時の進捗判定に委ねる）。
-            var currentBatchKeys = currentBatch.Select(b => b.Group.Key).ToHashSet(StringComparer.Ordinal);
-            remainingThisPass = remainingThisPass.Where(g => !currentBatchKeys.Contains(g.Key)).ToList();
-
-            callIndex++;
-            var batchLabel = $"呼び出し{callIndex}";
-            var batchLabelEn = $"call {callIndex}";
-
-            log.DetailAndReport($"{stepNumber}.{stepLabelJa}のバッチ呼び出し",
-                $"{stepNumber}. {stepLabelEn} batch call",
-                log.Lang == RunLogLang.Ja
-                    ? $"[{plugin}]  {batchLabel}: 未解決{remainingThisPassCountBeforeBatch}件のうち{currentBatch.Count}件を送信（1回あたりの文字数上限: {batchCharLimit}）"
-                    : $"[{plugin}]  {batchLabelEn}: sending {currentBatch.Count} of {remainingThisPassCountBeforeBatch} unresolved string(s) (char limit: {batchCharLimit})",
-                $"[{plugin}] Step {stepNumber} ({stepLabelEn}) {batchLabelEn}: sending {currentBatch.Count} of {remainingThisPassCountBeforeBatch} unresolved string(s)...");
-
-            var promptBuilder = new System.Text.StringBuilder(LlmBatchInstruction);
-            // issue #4 (c): a single shared block for this one call, placed
-            // right after the fixed instruction and before the candidate
-            // blocks — empty on the very first call (nothing resolved yet this
-            // session for this plugin) and grows as later calls/steps add to
-            // the pool.
-            if (sameModBlock.Length > 0) promptBuilder.Append(sameModBlock);
-            foreach (var (_, block, _, _) in currentBatch)
-                promptBuilder.Append(block);
-            var promptText = promptBuilder.ToString();
-
-            Directory.CreateDirectory(pluginDir);
-            var promptBatchPath = Path.Combine(pluginDir, $"{promptFilePrefix}{callIndex}.txt");
-            File.WriteAllText(promptBatchPath, promptText, new System.Text.UTF8Encoding(false));
-
-            var response = llm.TryTranslate(promptText, out var error);
-            if (response == null)
-            {
-                // v0.52.1a: 失敗理由は、以前はTraceレベルのtrace.logにしか出ておらず
-                // （既定のログレベルはInfoのため、SKYRIMJPSP_LOG_LEVEL=Traceを付けて
-                // 再実行しない限り一切見えなかった）、実機で「⑥が0件しか解決しなかった
-                // のに原因が分からない」という事態が起きた。人間が普段読む
-                // translation.log（RunLog）側にも、既定のログレベルに関わらず必ず
-                // 残るようlog.Detailを追加し、trace.log側もWarningへ引き上げて
-                // 既定のInfoレベルで見えるようにした。
-                trace?.Warning($"{stepLabelEn} {batchLabelEn} failed [{plugin}] ({currentBatch.Count} candidate(s)): {error}");
-                log.DetailAndReport($"{stepNumber}.{stepLabelJa}のバッチが失敗（エラー理由）",
-                    $"{stepNumber}. {stepLabelEn} a batch failed (error reason)",
-                    log.Lang == RunLogLang.Ja
-                        ? $"[{plugin}]  {batchLabel}（{currentBatch.Count}件）が失敗しました  ({error})"
-                        : $"[{plugin}]  {batchLabelEn} ({currentBatch.Count} candidate(s)) failed ({error})",
-                    $"[{plugin}] {stepLabelEn} {batchLabelEn} failed ({currentBatch.Count} candidate(s)): {error}");
-            }
-            else
-            {
-                // 2026-09-13: real-data investigation (gemma4:26b/Ollama,
-                // finish_reason == "length") — a batch whose response was cut off
-                // by an output-token limit ends mid-tag, silently dropping every
-                // candidate after the cutoff. Log this as a named reason instead
-                // of leaving an operator to infer truncation by eye from the raw
-                // trace-log dump below.
-                if (llm.LastResponseTruncated)
-                    log.DetailAndReport($"{stepNumber}.{stepLabelJa}: モデルの応答が出力トークン数の上限で打ち切られた可能性があります",
-                        $"{stepNumber}. {stepLabelEn}: the model's response may have been cut off by an output token limit",
-                        log.Lang == RunLogLang.Ja
-                            ? $"[{plugin}]  {batchLabel}（finish_reason=length）"
-                            : $"[{plugin}]  {batchLabelEn} (finish_reason=length)",
-                        $"[{plugin}] {stepLabelEn} {batchLabelEn}: response may have been cut off by an output token limit (finish_reason=length)");
-
-                // レスポンスを「English<TAB>Japanese」のTSV行として解析し、元の英文
-                // （BuildCandidateBlockの"Target:"に書いた原文そのもの）をキーに突き
-                // 合わせる——WritePrompt（手動のAI-chat向けprompt.txt）と同じ、位置では
-                // なく内容一致でマッチングする方式。行の欠落・順序の入れ替わりがあっても
-                // 対応関係が崩れず、見つからなかった候補は単に未解決のまま残る。
-                var byLine = new Dictionary<string, string>(StringComparer.Ordinal);
-                // v0.58.6: 既知の課題26.関連の実機調査（unofficial skyrim special
-                // edition patch.espの"Heretical Thoughts"本文、gemma4:26b/gemma3:12b/
-                // qwen2.5:14b-instruct全てで再現）で判明した、複数行候補（原文に
-                // MultilineBreakMarkerを含む）特有の照合失敗を救済するフォールバック
-                // 辞書。原文の再掲そのものは（内容としては）正しく、翻訳も完璧なのに、
-                // 末尾に余分な1個のMultilineBreakMarker（まれに崩れた"</SJPTS_BR>"）を
-                // 付け足してから改行なしでタブへ続ける、という挙動をモデルが高確率で
-                // 取ることが実機で確認された——候補原文が閉じタグ等の目印で終わって
-                // おらず地の文のまま終わる場合に特に起きやすい。このマーカーはこちらが
-                // 独自に発明した記号（意味を持たない）なので、剥がしても翻訳内容には
-                // 影響しない。ただしPickUpTarget/out_temp/candidates.tsvの実データには、
-                // 原文が正当に改行で始まる/終わる候補が315+706件存在し、matchKey自体が
-                // 正当にこのマーカーで始まる/終わることがあるため、無条件に剥がすのは
-                // 危険——正しく再掲された場合の一致を壊しかねない。そのため、あくまで
-                // 「通常の完全一致（byLine）が失敗した場合だけ」の救済としてのみ使う
-                // （下のTryGetValueを参照）。
-                var byLineMarkerTrimmed = new Dictionary<string, string>(StringComparer.Ordinal);
-                // 2026-09-13: real-data bug (FloatingSubtitles' Interface翻訳側で
-                // 発見・確認、ESP側にも同じ形のコードがあったため合わせて修正) — a
-                // candidate whose English text has meaningful trailing whitespace
-                // is embedded VERBATIM into BuildCandidateBlock's tag, and the
-                // prompt instructs the model to copy it "unchanged". A model that
-                // does exactly that must still match — see below where matchKey
-                // is looked up UNTRIMMED against byLine first now.
-                var byLineTrimmed = new Dictionary<string, string>(StringComparer.Ordinal);
-                foreach (var rawLine in response.Replace("\r\n", "\n").Split('\n'))
-                {
-                    var line = rawLine.Trim();
-                    if (line.Length == 0) continue;
-                    var tabIndex = line.IndexOf('\t');
-                    if (tabIndex < 0) continue;
-                    var sourceColumnRaw = line[..tabIndex];
-                    var source = ExtractTaggedSource(sourceColumnRaw);
-                    if (source.Length == 0)
-                    {
-                        var issue = ClassifyTaggedSourceIssue(sourceColumnRaw);
-                        log.Detail($"{stepNumber}.{stepLabelJa}: 応答の1行がタグ形式を満たさずスキップ",
-                            $"{stepNumber}. {stepLabelEn}: a response line didn't satisfy the tag format and was skipped",
-                            $"[{plugin}]  理由: {issue} / 該当行: \"{sourceColumnRaw.Trim()}\"");
-                    }
-                    // v0.58.5: <SJPTS_TARGET>タグ方式への移行前は、境界引用符
-                    // マーカー方式の副作用で、モデルが訳文の末尾（まれに先頭）に
-                    // 自分で余分な"を片側だけ付け足すことがあった（実測6件、実機
-                    // 再検証の8+9パターンでは一切再現せず）。原文を"で囲むのを
-                    // やめたことで、その動機自体が無くなったため、片側だけを
-                    // 独立して剥がす処理は不要になった。一方、モデルが自分の回答
-                    // 全体を（ウチの区切りタグとは無関係に）両端とも"で囲んでしまう
-                    // 一般的な癖は元から別の話として存在する（v0.52.1a、実機で
-                    // Claude Code CLIの出力に対して確認済み）ため、対称な
-                    // StripSurroundingQuotesはそのまま残す。
-                    // v0.59.0: 実機（gemma4:26b、Cloaks.esp）で、モデルが原文側では
-                    // なく訳文側を<SJPTS_TARGET>...</SJPTS_TARGET>で囲んで返す
-                    // ケースを確認した——原文再掲側のタグ除去（NormalizeBatchResponse
-                    // Source）はあったが、訳文側には対応する除去処理が無く、
-                    // 保存された訳文にタグがそのまま残ってしまっていた。
-                    var japanese = StripSurroundingQuotes(StripTargetTags(line[(tabIndex + 1)..].Trim()));
-                    if (source.Length > 0 && japanese.Length > 0)
-                    {
-                        byLine[source] = japanese; // 同じキーが複数行あれば最後の行を採用
-                        byLineTrimmed[source.Trim()] = japanese;
-                        var trimmedSource = StripSpuriousBoundaryMarker(source);
-                        if (trimmedSource != source)
-                            byLineMarkerTrimmed[trimmedSource] = japanese;
-                    }
-                }
-
-                var anyUnresolvedInBatch = false;
-                foreach (var (group, _, matchKey, _) in currentBatch)
-                {
-                    // 2026-09-13訂正: 以前はここで`matchKey.Trim()`だけを使って
-                    // byLineを引いていたが、これ自体が独立したバグだった——
-                    // BuildCandidateBlockはmatchKeyを一切変更せずタグに埋め込み、
-                    // プロンプトも「一切変更せず正確にコピーすること」を明記して
-                    // いるため、モデルが指示通り前後の空白まで含めて正確に再掲した
-                    // 場合、byLine側のキーもmatchKeyと全く同じ（未Trim）はずである。
-                    // それにもかかわらず照合側だけをTrimしていたため、原文の先頭/
-                    // 末尾に意味のある空白を含む候補（実例: Interface翻訳側の
-                    // FloatingSubtitles「$FSUB_DualSubtitlesOffscreen_Text」=
-                    // "DUAL SUBTITLES "）は、モデルが完璧に応答してもモデルの性能・
-                    // 再実行回数に関係なく毎回この照合に失敗する再現性のあるバグと
-                    // なっていた。
-                    //
-                    // 修正: まず未Trimの完全一致（byLine）を試す——モデルが指示通り
-                    // 正確に再掲したケースはここで一致する。それでも見つからない
-                    // 場合のみ、双方をTrimしたbyLineTrimmed（モデルが自発的に前後の
-                    // 空白を削ってしまったケースの救済）、さらにbyLineMarkerTrimmed
-                    // （末尾の余分なMultilineBreakMarkerを剥がした版）の順にフォール
-                    // バックする。送信するブロック本文・保存先キー（answers[group.Key]、
-                    // 下のTryGetValueの外側）はどちらも変更しないため、既存の一致
-                    // 関係を壊す副作用は無い。
-                    if (!byLine.TryGetValue(matchKey, out var japaneseRaw)
-                        && !byLineTrimmed.TryGetValue(matchKey.Trim(), out japaneseRaw))
-                        byLineMarkerTrimmed.TryGetValue(matchKey.Trim(), out japaneseRaw);
-                    if (japaneseRaw != null)
-                    {
-                        // v0.53.0a: 改行を含む候補（matchKeyがgroup.Keyと異なる）の場合、
-                        // 送信時に埋め込んだMultilineBreakMarkerをここで実際の改行へ
-                        // 戻す——モデルがマーカーを翻訳文中の対応する位置にそのまま
-                        // 残していれば改行が復元される。省略・変形されていた場合は
-                        // 単に改行のない1つの訳文として扱う（安全側に倒れるだけで、
-                        // 失敗にはしない）。単一行の候補にはマーカーは含まれないため
-                        // この置換は完全なno-op。
-                        var japanese = japaneseRaw.Replace(MultilineBreakMarker, "\n");
-
-                        // v0.58.5: 既知の課題26.関連——以前はバッチ応答全体に対して
-                        // 「日本語が1文字も無ければバッチごと失敗」という粗い判定を
-                        // CallOnce側でしていたが、これは「モデルが形式通り正しく
-                        // 応答した」こと自体は失敗ではない、という実機での発見
-                        // （バニラSkyrim自身が意図的に翻訳していない文字列——
-                        // $MageScriptFont等、マスター魔法書の秘術ページ。公式日本語版
-                        // でも同じ文字列のまま確認済み——にモデルが原文をそのまま
-                        // 返してくること自体は正しい振る舞い）を踏まえ廃止した
-                        // （CallOnce側のContainsJapaneseゲート削除）。
-                        // その代わり、ここ（候補単位）で訳文に日本語が含まれるかを
-                        // 確認する。含まれない場合、「未解決として捨てる」のでも
-                        // 「翻訳成功として無条件受理する」のでもなく、専用タグ
-                        // （methodTag + "NoJapanese"）を付けて保存する——「翻訳不要
-                        // だった」のか「モデルが本当に翻訳を誤っただけ」なのかは
-                        // 機械的に区別できないため、GUIの「翻訳詳細」ウィンドウで
-                        // ユーザーが見分けてレビューできるようにする（原文のまま
-                        // 維持するか、訳文を消して再翻訳するかはユーザー判断）。
-                        if (LanguageDetector.ContainsJapanese(japanese))
-                        {
-                            answers[group.Key] = new AutoTranslationResult(japanese, methodTag, "");
-                            log.Detail($"{stepNumber}.{stepLabelJa}による自動解決（低精度・要レビュー）",
-                                $"{stepNumber}. Auto-resolved via {stepLabelEn} (low confidence, needs review)",
-                                $"[{plugin}]  \"{group.Key}\" → \"{japanese}\"");
-                        }
-                        else
-                        {
-                            var noJapaneseTag = methodTag + "NoJapanese";
-                            answers[group.Key] = new AutoTranslationResult(japanese, noJapaneseTag, "");
-                            trace?.Warning($"{stepLabelEn} [{plugin}] \"{group.Key}\": response parsed but contains no Japanese — saved as \"{noJapaneseTag}\" for review");
-                            // 2026-09-06: 従来はlog.Detailのみ（translation.logには残るが
-                            // 実行ログウィンドウにはリアルタイムで出ない）だった。他の
-                            // 未解決パターン（バッチ失敗・サーキットブレーカー・解釈不能な
-                            // レスポンス）と同様、その場で見えないと気づきにくいため
-                            // DetailAndReportへ変更した。
-                            log.DetailAndReport($"{stepNumber}.{stepLabelJa}: 応答は得られたが訳文に日本語が含まれない（翻訳不要な文字列か、翻訳失敗かは要レビュー）",
-                                $"{stepNumber}. {stepLabelEn}: response parsed but the translation contains no Japanese (needs review — may be untranslatable content, or a genuine translation failure)",
-                                $"[{plugin}]  \"{group.Key}\" → \"{japanese}\"",
-                                $"[{plugin}] {stepLabelEn}: response contained no Japanese — saved as-is for review: \"{group.Key}\" -> \"{japanese}\"");
-                        }
-                    }
-                    else
-                    {
-                        // 2026-09-06: 以前は「not found in batch response」という
-                        // 事実だけを伝えていたが、これでは「モデルが単に省略した」
-                        // 「タブ区切り形式そのものを守らなかった」「原文を書き換えて
-                        // 返した」等、複数のあり得る原因のどれなのか実行ログ
-                        // ウィンドウを見ただけでは分からなかった（ユーザー指摘）。
-                        // 生の応答本文をそのまま出す案も検討したが、「スキップに
-                        // 至る条件はコード上ほぼ固定（このelse分岐に来る時点で、
-                        // ツールが解釈できる形で該当候補を突き合わせられなかった、
-                        // という一点に尽きる）」という指摘を受け、原因ごとに分岐
-                        // させるのではなく、この分岐に来た時点の共通の理由を
-                        // 人間向けの1文で言い切ることにした。
-                        trace?.Warning($"{stepLabelEn} skip [{plugin}] \"{group.Key}\": model's response wasn't in a format this tool could interpret");
-                        log.DetailAndReport($"{stepNumber}.{stepLabelJa}で解決できなかった候補（モデルの応答形式を解釈できず）",
-                            $"{stepNumber}. {stepLabelEn} could not resolve this candidate (model's response wasn't in an interpretable format)",
-                            $"[{plugin}]  \"{group.Key}\"",
-                            $"[{plugin}] {stepLabelEn}: could not resolve \"{group.Key}\" (model's response wasn't in an interpretable format)");
-                        anyUnresolvedInBatch = true;
-                    }
-                }
-
-                // 2026-09-12: このバッチで1件でも未解決が残った場合のみ、モデルからの
-                // 生レスポンス全文をtrace.logへ1回だけ残す（バッチ全体で1回、候補ごとに
-                // 重複させない）——上のper-line診断（ClassifyTaggedSourceIssue）で
-                // 大抵の原因は分かるが、それでも特定できない場合の最終手段として。
-                // 全件成功したバッチでは出力しない（ログの肥大化を避ける）。
-                if (anyUnresolvedInBatch)
-                    trace?.Warning($"{stepLabelEn} [{plugin}] {batchLabelEn}: raw response for the batch with unresolved candidate(s):\n{response}");
-
-                // v0.49.2a由来: リトライ診断（成功はしたが1回では済まなかった旨）を
-                // 可視化——バッチ単位で1行にまとめる。
-                if (error.Length > 0)
-                    log.Detail($"{stepNumber}.{stepLabelJa}のリトライ記録（バッチの再試行結果）",
-                        $"{stepNumber}. {stepLabelEn} retry record (batch retry outcome)",
-                        log.Lang == RunLogLang.Ja
-                            ? $"[{plugin}]  {batchLabel}（{currentBatch.Count}件）  ({error})"
-                            : $"[{plugin}]  {batchLabelEn} ({currentBatch.Count} candidate(s))  ({error})");
-            }
-            } // 内側while (remainingThisPass.Count > 0) の終わり
-
-            if (circuitOpened) break;
-
-            // パス単位の自己終了条件: このパス全体を通じて新規解決が1件もなければ
-            // （＝再送しても改善しないと判断し）、これ以上パスを重ねず終了する。
-            // 1件でも解決できていれば、残りの未解決分を対象に次のパスへ進む——
-            // このパスで一度送って失敗した候補も、次のパスでは最新のsameModPool
-            // を使って改めて最初から機会を得る。
-            if (answers.Count == resolvedCountBeforePass) break;
-        } // 外側while(true)（パス）の終わり
+            Items = beforeStep,
+            TextOf = c => c.CurrentText,
+            RecordTypeOf = g => g.First().RecordType,
+            BuildBlock = (g, matchKey) => BuildCandidateBlock(g, retriever, auto, npcNames, batchCharLimit,
+                targetTextOverride: matchKey != g.Key ? matchKey : null),
+            NeedsMatchKeyFlatten = key => key.IndexOf('\n') >= 0,
+            FlattenForMatching = FlattenMultiline,
+            UnflattenAnswer = s => s.Replace(MultilineBreakMarker, "\n"),
+            StripSpuriousBoundaryMarker = StripSpuriousBoundaryMarker,
+            InstructionText = LlmBatchInstruction,
+            ExternalSameModBaseline = BuildSameModHintPool(resolved, plugin),
+            SameModSourceLabel = plugin,
+            Translator = llm,
+            BatchCharLimit = batchCharLimit,
+            DebugDir = pluginDir,
+            DebugFilePrefix = $"prompt_{providerLabel}_call",
+            MethodTag = methodTag,
+            Log = log,
+            Trace = trace,
+            LogScope = plugin,
+            StepNumber = stepNumber,
+            StepLabelJa = stepLabelJa,
+            StepLabelEn = stepLabelEn,
+        });
 
         if (answers.Count == 0) return resolved;
-        return ResolvedSoFar();
+        return resolved.Select(r => r.Auto == null && answers.TryGetValue(r.Candidate.CurrentText, out var a)
+            ? (r.Candidate, Auto: (AutoTranslationResult?)a)
+            : r).ToList();
     }
 
     /// <summary>issue #4 (c): builds the pool <see cref="SameModHintBlockBuilder.BuildBlock"/>
@@ -1117,63 +730,6 @@ public static class PromptGenerator
             .Where(r => r.Auto != null && SameModHintBlockBuilder.IsEligibleMethod(r.Auto.Method))
             .Select(r => new CorpusEntry(r.Candidate.CurrentText, r.Auto!.Japanese, plugin, r.Auto.Method, r.Candidate.RecordType))
             .ToList();
-
-    /// <summary>2026-09-12: replaces the old NormalizeBatchResponseSource's
-    /// guess-and-strip approach (leading "- ", leading "Target:", then a
-    /// tolerant tag strip) after a real-data bug (HeelsFix mod,
-    /// "$HEELSFIX_TARGET_ACTOR" = the literal string "Target:") proved that
-    /// approach unsound: unconditionally stripping a literal "Target:" prefix
-    /// destroys a candidate whose OWN text starts with that word, exactly the
-    /// same class of bug this method's own v0.58.5 history already lived
-    /// through once for boundary quotes (see the old remarks, preserved in
-    /// git history) — "a WRONG strip permanently breaks the exact-text match,
-    /// this is a genuine ambiguity, not a safe heuristic."
-    ///
-    /// The fix mirrors that same lesson: stop guessing what surrounding text
-    /// means and require an unambiguous delimiter instead. The prompt now
-    /// requires the model to echo the source WRAPPED IN THE SAME
-    /// &lt;SJPTS_TARGET&gt;/&lt;/SJPTS_TARGET&gt; tags it was sent (see
-    /// LlmBatchInstruction) rather than a bare, tag-free echo — so this
-    /// method now does the opposite of the old one: it REQUIRES the trimmed
-    /// text to start with the open tag and end with the close tag, with
-    /// nothing else (not even "Target:" or "- ") outside them. Anything that
-    /// doesn't match — no tags at all, a missing tag, or extra text around an
-    /// otherwise well-formed tag pair — returns "" and is treated as an
-    /// unparseable line by the caller (unresolved, retried on the next
-    /// `translate` run), the same as any other malformed response. Confirmed
-    /// against real gemma4:26b (reasoning off) and Claude Code CLI output
-    /// that a well-behaved model readily complies with this instruction.</summary>
-    private static string ExtractTaggedSource(string text)
-    {
-        var t = text.Trim();
-        if (!t.StartsWith(TargetTagOpen, StringComparison.Ordinal)) return "";
-        if (!t.EndsWith(TargetTagClose, StringComparison.Ordinal)) return "";
-        return t[TargetTagOpen.Length..^TargetTagClose.Length];
-    }
-
-    /// <summary>2026-09-12: diagnostic-only classification of WHY a response
-    /// line's source column failed <see cref="ExtractTaggedSource"/> — used
-    /// only for logging (translation.log), never for resolution itself. Added
-    /// after a real-data investigation (this same HeelsFix/"Target:" bug fix)
-    /// hit a wall: the existing per-candidate "could not resolve" log message
-    /// doesn't say WHY, and neither translation.log nor translation.trace.log
-    /// captured the raw response text needed to find out by hand. This gives
-    /// the common case (which of the 4 ways a line can fail the tag format)
-    /// without needing to dump the full response for every failure — see
-    /// ApplyLlmStep's own per-batch trace dump (only for a batch that
-    /// actually ends up with an unresolved candidate) for the rest.</summary>
-    private enum TaggedSourceIssue { NoTags, MissingOpeningTag, MissingClosingTag, ExtraTextOutsideTags }
-
-    private static TaggedSourceIssue ClassifyTaggedSourceIssue(string text)
-    {
-        var t = text.Trim();
-        var hasOpen = t.Contains(TargetTagOpen, StringComparison.Ordinal);
-        var hasClose = t.Contains(TargetTagClose, StringComparison.Ordinal);
-        if (!hasOpen && !hasClose) return TaggedSourceIssue.NoTags;
-        if (!hasOpen) return TaggedSourceIssue.MissingOpeningTag;
-        if (!hasClose) return TaggedSourceIssue.MissingClosingTag;
-        return TaggedSourceIssue.ExtraTextOutsideTags;
-    }
 
     /// <summary>v0.58.6: 既知の課題26.関連の実機調査（unofficial skyrim special
     /// edition patch.espの"Heretical Thoughts"、gemma4:26b/gemma3:12b/
@@ -1205,36 +761,6 @@ public static class PromptGenerator
             t = t[MultilineBreakMarker.Length..];
         return t;
     }
-
-    /// <summary>v0.52.1a: a model sometimes wraps its whole TSV field in
-    /// quotes as its own unrelated formatting habit (confirmed against real
-    /// Claude Code CLI output), independent of whatever delimiter this
-    /// project's own prompt uses. Used ONLY for the Japanese answer column —
-    /// see <see cref="ExtractTaggedSource"/>'s remarks for why the
-    /// English matching key deliberately does NOT use this any more (the
-    /// same ambiguity is far more damaging there: a wrong strip silently
-    /// breaks the exact-text match instead of just leaving a cosmetic stray
-    /// quote pair in the stored translation). Symmetric only (both ends must
-    /// be ") — restored to this simple original form in v0.58.5 once the
-    /// &lt;SJPTS_TARGET&gt; tag delimiter removed the need for the more
-    /// complex asymmetric boundary-quote-marker handling this method briefly
-    /// grew in v0.58.4.</summary>
-    private static string StripSurroundingQuotes(string text) =>
-        text.Length >= 2 && text[0] == '"' && text[^1] == '"' ? text[1..^1] : text;
-
-    /// <summary>v0.59.0: 実機（gemma4:26b、Cloaks.espの複数候補）で、モデルが
-    /// 訳文を<c>&lt;SJPTS_TARGET&gt;...&lt;/SJPTS_TARGET&gt;</c>で囲んで返す
-    /// ことを確認した——プロンプト例（"- Target: &lt;SJPTS_TARGET&gt;example
-    /// text&lt;/SJPTS_TARGET&gt;"）を「自分の回答もこの形式で囲むべき」と
-    /// 誤って一般化した可能性がある。原文再掲側（ExtractTaggedSource）
-    /// には対応する除去処理が既にあるが、訳文側には無かったため保存された訳文に
-    /// タグがそのまま残っていた。StripSurroundingQuotesと同じ「対称のみ剥がす」
-    /// 方針——片側だけタグが付くケース（原文自体に偶然この文字列が含まれる等）を
-    /// 誤って壊さないよう、両端が揃っている場合のみ剥がす。</summary>
-    private static string StripTargetTags(string text) =>
-        text.StartsWith(TargetTagOpen, StringComparison.Ordinal) && text.EndsWith(TargetTagClose, StringComparison.Ordinal)
-            ? text[TargetTagOpen.Length..^TargetTagClose.Length]
-            : text;
 
     /// <summary>
     /// v0.35.0: tallies how many of this plugin's candidates were auto-resolved by

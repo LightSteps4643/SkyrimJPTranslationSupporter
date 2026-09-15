@@ -27,6 +27,20 @@ public sealed class FakeTextTranslator : ITextTranslator
     /// it writes match byte-for-byte), without re-deriving the expected text.</summary>
     public string? LastPromptReceived { get; private set; }
 
+    /// <summary>2026-09-16: settable so a test can simulate the circuit
+    /// breaker (see <see cref="ITextTranslator.CircuitOpen"/>'s remarks)
+    /// tripping — the interface's own default is always false since a plain
+    /// fake has no consecutive-failure concept of its own.</summary>
+    public bool CircuitOpen { get; set; }
+
+    /// <summary>If set, <see cref="CircuitOpen"/> flips to true right after
+    /// this many <see cref="TryTranslate"/> calls have been made — simulates
+    /// a real backend's connection dying PARTWAY THROUGH a pass (e.g. Ollama
+    /// crashing mid-run), as opposed to one that's already broken before the
+    /// first call (which a test can instead just set <see cref="CircuitOpen"/>
+    /// to true for up front).</summary>
+    public int? TripCircuitOpenAfterCall { get; set; }
+
     private FakeTextTranslator(string? response, string error)
     {
         _response = response;
@@ -83,6 +97,8 @@ public sealed class FakeTextTranslator : ITextTranslator
     {
         CallCount++;
         LastPromptReceived = promptText;
+        if (TripCircuitOpenAfterCall.HasValue && CallCount >= TripCircuitOpenAfterCall.Value)
+            CircuitOpen = true;
         if (_queue.Count > 0)
         {
             var (queuedResponse, queuedTruncated, queuedError) = _queue.Dequeue();

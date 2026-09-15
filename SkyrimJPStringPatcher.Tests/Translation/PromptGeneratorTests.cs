@@ -704,6 +704,69 @@ public class PromptGeneratorTests
         }
     }
 
+    /// <summary>2026-09-16: the 2026-09-16 round/batch -&gt; pass redesign moved
+    /// the circuit-breaker check inside the pass's inner (per-call) loop,
+    /// needing a "circuitOpened" flag to break BOTH that loop and the outer
+    /// pass loop. The only pre-existing circuit-breaker coverage tests a
+    /// translator that's ALREADY open before the very first call — this
+    /// exercises the breaker tripping PARTWAY THROUGH a pass (mirrors a real
+    /// backend's connection dying mid-run, e.g. Ollama crashing), which is
+    /// the actual new code path added by this redesign.</summary>
+    [Fact]
+    public void RunOne_CircuitBreakerOpensMidPass_StopsWithoutSendingRemainingCandidates()
+    {
+        const string plugin = "SjptsResolutionMethods.esp";
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            using var cwd = new CurrentDirectoryScope(root);
+            SeedModGlossary(plugin, "Vrenn", "ヴレン");
+            var outputDir = Path.Combine(root, "out_temp");
+            var fakeLlm = FakeTextTranslator.Succeeding(
+                ("Sjpts Multiline Candidate<SJPTS_BR>Second Line", "マルチライン訳"),
+                ("Sjpts Batch Candidate One", "バッチ候補一"),
+                ("Sjpts Batch Candidate Two", "バッチ候補二"));
+            fakeLlm.TripCircuitOpenAfterCall = 2;
+
+            using (var log = OpenTestLog(root))
+            {
+                PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm, llmLocalBatchCharLimit: 10);
+
+                // Circuit opens right after the 2nd call — a 3rd call must
+                // never be made, even though a 3rd distinct candidate is
+                // still unresolved and waiting in this same pass.
+                Assert.Equal(2, fakeLlm.CallCount);
+
+                // 2026-09-16: without the "circuitOpened" flag breaking BOTH
+                // the inner (per-call) and outer (pass) loops, this pass would
+                // still stop at 2 calls (the following pass would see zero
+                // progress and stop on its own) — but the circuit-breaker
+                // check would fire AGAIN at the top of that next, otherwise-
+                // empty pass, logging this message a second time for no
+                // reason. Asserting exactly 1 occurrence is what actually
+                // distinguishes the flag being present from being removed
+                // (confirmed by temporarily deleting it: CallCount stayed 2,
+                // but this count became 2 as well).
+                Assert.Equal(1, log.DetailCount(
+                    "5.ローカルLLMのサーキットブレーカー作動（残りをまとめてスキップ）",
+                    "5. local LLM circuit breaker open (remaining candidates skipped)"));
+            }
+
+            var pluginDir = Path.Combine(outputDir, "SjptsResolutionMethods");
+            var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
+            Assert.Equal(("バッチ候補一", "TranslationLocalLlm"), translations["Sjpts Batch Candidate One"]);
+            // The 3rd candidate (last in file order) is the one skipped —
+            // never sent, so it stays unresolved rather than getting the
+            // canned answer the fake would otherwise have given it.
+            Assert.Equal(("", ""), translations["Sjpts Batch Candidate Two"]);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
     /// <summary>ApplyLlmStep splits a plugin's unresolved set into multiple
     /// sub-batch calls once the combined block text would exceed
     /// llmBatchCharLimit — real batches split by actual char volume on real
@@ -1518,15 +1581,13 @@ public class PromptGeneratorTests
     // a real-data investigation (HeelsFix.esp, gemma4:26b) hit a wall trying
     // to figure out WHY a candidate didn't resolve — neither translation.log
     // nor translation.trace.log captured enough to tell apart "no tags at
-    // all" from "tags present but something else was wrong". Private/no
-    // public seam, so this reflects on it directly (same pattern as
-    // TranslationDetailFormTests.cs's Escape/Unescape). ====
+    // all" from "tags present but something else was wrong". 2026-09-17:
+    // moved to the shared LlmBatchTranslationEngine (public) as part of the
+    // ESP/Interface ApplyLlmStep duplication refactor — no longer needs
+    // reflection.
 
-    private static string InvokeClassifyTaggedSourceIssue(string text)
-    {
-        var method = typeof(PromptGenerator).GetMethod("ClassifyTaggedSourceIssue", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
-        return method.Invoke(null, [text])!.ToString()!;
-    }
+    private static string InvokeClassifyTaggedSourceIssue(string text) =>
+        LlmBatchTranslationEngine.ClassifyTaggedSourceIssue(text).ToString();
 
     [Theory]
     [InlineData("Sjpts Format Edge Case Candidate", "NoTags")]

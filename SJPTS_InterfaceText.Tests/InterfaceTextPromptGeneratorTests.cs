@@ -21,11 +21,21 @@ public sealed class FakeTranslator : ITextTranslator
     public bool LastResponseTruncated { get; set; }
     public List<string> PromptsReceived { get; } = new();
 
+    /// <summary>2026-09-16: if set, <see cref="CircuitOpen"/> flips to true
+    /// right after this many <see cref="TryTranslate"/> calls have been
+    /// made — simulates a real backend's connection dying PARTWAY THROUGH a
+    /// pass (e.g. Ollama crashing mid-run), as opposed to one that's already
+    /// broken before the first call (set <see cref="CircuitOpen"/> directly
+    /// for that case instead).</summary>
+    public int? TripCircuitOpenAfterCall { get; set; }
+
     public void Enqueue(string? response, string error = "", bool? truncated = null) => _responses.Enqueue((response, error, truncated));
 
     public string? TryTranslate(string promptText, out string error)
     {
         PromptsReceived.Add(promptText);
+        if (TripCircuitOpenAfterCall.HasValue && PromptsReceived.Count >= TripCircuitOpenAfterCall.Value)
+            CircuitOpen = true;
         if (_responses.Count == 0)
         {
             error = "";
@@ -143,6 +153,58 @@ public class InterfaceTextPromptGeneratorTests
         finally { }
     }
 
+    /// <summary>2026-09-16: the round/batch -&gt; pass redesign moved the
+    /// circuit-breaker check inside the pass's inner (per-call) loop, needing
+    /// a "circuitOpened" flag to break BOTH that loop and the outer pass
+    /// loop — mirrors Translation/PromptGenerator.cs's own ApplyLlmStep and
+    /// its own test of the same name. The only pre-existing circuit-breaker
+    /// coverage (ApplyLlmStep_CircuitOpen_SkipsWithoutCallingTranslator)
+    /// tests a translator that's ALREADY open before the very first call;
+    /// this exercises the breaker tripping PARTWAY THROUGH a pass (a real
+    /// backend's connection dying mid-run, e.g. Ollama crashing).</summary>
+    [Fact]
+    public void ApplyLlmStep_CircuitBreakerOpensMidPass_StopsWithoutSendingRemainingCandidates()
+    {
+        var pending = new List<(string Key, string English)>
+        {
+            ("$A", "Alpha"), ("$B", "Bravo"), ("$C", "Charlie"),
+        };
+        var fake = new FakeTranslator();
+        fake.Enqueue("<SJPTS_TARGET>Alpha</SJPTS_TARGET>\tアルファ");
+        fake.Enqueue("<SJPTS_TARGET>Bravo</SJPTS_TARGET>\tブラボー");
+        fake.Enqueue("<SJPTS_TARGET>Charlie</SJPTS_TARGET>\tチャーリー"); // never reached
+        fake.TripCircuitOpenAfterCall = 2;
+
+        using var log = OpenTempLog(out var dir);
+        try
+        {
+            // Distinct text per entry, so dedup never merges them into one
+            // call; a tiny char limit forces exactly one candidate per call.
+            var result = InterfaceTextPromptGenerator.ApplyLlmStep(pending, fake, "TestMod", log, null, batchCharLimit: 60, modWorkDir: dir, providerLabel: "localLLM");
+
+            // Circuit opens right after the 2nd call — a 3rd call must never
+            // be made, even though "$C"/"Charlie" is still unresolved and
+            // waiting in this same pass.
+            Assert.Equal(2, fake.PromptsReceived.Count);
+            Assert.Equal("アルファ", result["$A"].Japanese);
+            Assert.Equal("ブラボー", result["$B"].Japanese);
+            Assert.False(result.ContainsKey("$C"));
+
+            // Without the "circuitOpened" flag breaking both loops, this
+            // would still stop at 2 calls (the following, otherwise-empty
+            // pass would see zero progress and stop on its own) but would
+            // log the circuit-breaker message a second time for no reason.
+            // 2026-09-17: category text now correctly says "ローカルLLM" (a
+            // bug found by independent code review — this was previously
+            // hardcoded to "生成AI翻訳"/cloud regardless of providerLabel,
+            // fixed by the LlmBatchTranslationEngine extraction).
+            Assert.Equal(1, log.DetailCount(
+                "ローカルLLMのサーキットブレーカー作動（残りをまとめてスキップ）",
+                "local LLM circuit breaker open (remaining candidates skipped)"));
+        }
+        finally { }
+    }
+
     [Fact]
     public void ApplyLlmStep_OverCharLimit_SplitsIntoMultipleBatchCalls()
     {
@@ -186,9 +248,13 @@ public class InterfaceTextPromptGeneratorTests
         {
             InterfaceTextPromptGenerator.ApplyLlmStep(pending, fake, "TestMod", log, null, 12_000, dir, "localLLM");
 
+            // 2026-09-17: LlmBatchTranslationEngineへの統合に伴い、この
+            // カテゴリ文字列にも（ESP側と同じく）どのプロバイダの実行かを
+            // 示す接頭辞が一貫して付くようになった（以前のInterface側は
+            // この特定のメッセージにだけ接頭辞が付いていなかった）。
             Assert.Equal(1, log.DetailCount(
-                "モデルの応答が出力トークン数の上限で打ち切られた可能性があります",
-                "the model's response may have been cut off by an output token limit"));
+                "ローカルLLM: モデルの応答が出力トークン数の上限で打ち切られた可能性があります",
+                "local LLM: the model's response may have been cut off by an output token limit"));
         }
         finally { }
     }
@@ -578,13 +644,12 @@ public class InterfaceTextPromptGeneratorTests
 
     // ==== 2026-09-12: ClassifyTaggedSourceIssue — mirrors the equivalent new
     // tests in SkyrimJPStringPatcher.Tests/Translation/PromptGeneratorTests.cs
-    // (ESP side). Private/no public seam, so this reflects on it directly. ====
+    // (ESP side). 2026-09-17: moved to the shared LlmBatchTranslationEngine
+    // (public) as part of the ESP/Interface ApplyLlmStep duplication
+    // refactor — no longer needs reflection. ====
 
-    private static string InvokeClassifyTaggedSourceIssue(string text)
-    {
-        var method = typeof(InterfaceTextPromptGenerator).GetMethod("ClassifyTaggedSourceIssue", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
-        return method.Invoke(null, [text])!.ToString()!;
-    }
+    private static string InvokeClassifyTaggedSourceIssue(string text) =>
+        LlmBatchTranslationEngine.ClassifyTaggedSourceIssue(text).ToString();
 
     [Theory]
     [InlineData("Sjpts Format Edge Case Candidate", "NoTags")]
