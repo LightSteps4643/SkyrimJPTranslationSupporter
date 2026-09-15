@@ -9,3 +9,12 @@ Gilded Elven Ring	金の施されたエルフの指輪	ModA.esp	vanilla	ARMO FUL
 Tempered Iron Axe	鍛えられた鉄の斧	OtherMod.esp	vanilla	MISC FULL
 Tempered Iron Lockpick	鍛えられた鉄の鍵開け具	CandidateMod.esp	vanilla	WEAP FULL
 goblin internal note text for testing	内部ゴブリンテストノート	ModA.esp	vanilla	FACT DATA
+The merchant sells quicksilver amulets near the market square.	商人は市場の近くで水銀のお守りを売っている	ModA.esp	vanilla	INFO NAM1
+Quicksilver Amulet	水銀のお守り	ModA.esp	vanilla	ARMO FULL
+Moonstone Pendant	ムーンストーンのペンダント	ModA.esp	vanilla	ARMO FULL
+Long ago, in a land far removed from the reach of any king, there lived a wandering pendant maker who traveled from village to village telling tales of ancient heroes and forgotten gods, weaving stories so vivid that children would beg for one more before the fire burned low and sleep finally took them into dreams of dragons and distant shores where the sun never set and the sea sang softly, and even the oldest among them could not recall when the tale had first been told or by whom, only that it always ended the same way, with the pendant maker vanishing into the morning mist.	昔々、ある王国の届かない遠い土地に、村から村へと渡り歩くペンダント職人がいた。	ModA.esp	vanilla	BOOK FULL
+Ember Chalice	炎の聖杯	ModA.esp	vanilla	MISC FULL
+Shrine of the Silent Watcher and the Forgotten Keeper	静寂の監視者と忘れられた番人の祠	ModA.esp	vanilla	MISC FULL
+Arcane Well	秘術の泉	ModA.esp	vanilla	ARMO FULL
+Your Loyal Guardian	あなたの忠実な守護者	ModA.esp	vanilla	NPC_ FULL
+The Loyal Guardian	忠実な守護者	ModA.esp	vanilla	NPC_ FULL

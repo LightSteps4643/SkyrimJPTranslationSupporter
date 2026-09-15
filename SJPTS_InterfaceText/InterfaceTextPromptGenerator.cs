@@ -40,8 +40,10 @@ public static class InterfaceTextPromptGenerator
     /// <summary>Mirrors <c>PromptGenerator.DefaultLlmBatchCharLimit</c> (cloud AI).</summary>
     public const int DefaultLlmBatchCharLimit = 12_000;
 
-    /// <summary>Mirrors <c>PromptGenerator.DefaultLocalLlmBatchCharLimit</c> (local LLM).</summary>
-    public const int DefaultLocalLlmBatchCharLimit = 3_000;
+    /// <summary>Mirrors <c>PromptGenerator.DefaultLocalLlmBatchCharLimit</c> (local LLM,
+    /// 2026-09-16: raised to 6,000 — see that constant's remarks for the real-LLM
+    /// verification behind the change).</summary>
+    public const int DefaultLocalLlmBatchCharLimit = 6_000;
 
     /// <summary>Wraps each unique English text on the "Target:" line so the
     /// model's answer can be matched back by exact content (not position) —

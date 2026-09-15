@@ -941,9 +941,10 @@ public sealed class InterfaceTextPanel : Form
                 // 内部思考トレースで使い切り、常に空応答で失敗する（実機で確認済み）。
                 if (_getSettings().LlmLocalReasoningOff)
                     localArgs.Add("--local-llm-reasoning-effort=none");
-                // SJPTS_InterfaceText側の内部既定値（3000、InterfaceTextPromptGenerator.
-                // DefaultLocalLlmBatchCharLimit）はGUIの既定値（6000）と異なるため、
-                // ESP側のように「既定値と同じなら省略」はできない——常に明示的に渡す。
+                // 2026-09-16: SJPTS_InterfaceText側の内部既定値とGUIの既定値は
+                // どちらも6000に統一済みだが、ユーザーがGUI上でこの値を変更する
+                // ケースがあるため、ESP側のように「既定値と同じなら省略」はせず
+                // 常に明示的に渡す。
                 localArgs.Add($"--char-limit={(int)_numLlmBatchCharLimit.Value}");
                 if (!await RunCliAsync(localArgs, modCharCounts)) return;
             }

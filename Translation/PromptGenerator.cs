@@ -104,7 +104,7 @@ public static class PromptGenerator
     }
 
     /// <summary>1つのプラグインだけを対象に実行する。</summary>
-    public static void RunOne(string candidatesTsvPath, string corpusTsvPath, string importDir, string targetPlugin, string outputDir, RunLog log, TraceLog? trace = null, int topN = 5, ITextTranslator? llmLocal = null, ITextTranslator? llmCloud = null, TranslationStageOptions? stageOptions = null, bool discardUserEdits = false, int llmLocalBatchCharLimit = DefaultLocalLlmBatchCharLimit, int llmCloudBatchCharLimit = DefaultLlmBatchCharLimit)
+    public static void RunOne(string candidatesTsvPath, string corpusTsvPath, string importDir, string targetPlugin, string outputDir, RunLog log, TraceLog? trace = null, ITextTranslator? llmLocal = null, ITextTranslator? llmCloud = null, TranslationStageOptions? stageOptions = null, bool discardUserEdits = false, int llmLocalBatchCharLimit = DefaultLocalLlmBatchCharLimit, int llmCloudBatchCharLimit = DefaultLlmBatchCharLimit)
     {
         var stages = stageOptions ?? TranslationStageOptions.Default;
         var ctx = BuildContext(candidatesTsvPath, corpusTsvPath, importDir, outputDir, log, trace, stages);
@@ -126,7 +126,7 @@ public static class PromptGenerator
             return;
         }
 
-        var (promptPath, templatePath, _, autoCount, unique, _, _, _, methodCounts) = WritePluginFilesWithDir(outputDir, targetPlugin, targetCandidates, ctx.Retriever, ctx.Auto, ctx.NameFallback, ctx.NpcNames, llmLocal, llmCloud, stages.EnableNameFallback, topN, log, trace, discardUserEdits, llmLocalBatchCharLimit, llmCloudBatchCharLimit);
+        var (promptPath, templatePath, _, autoCount, unique, _, _, _, methodCounts) = WritePluginFilesWithDir(outputDir, targetPlugin, targetCandidates, ctx.Retriever, ctx.Auto, ctx.NameFallback, ctx.NpcNames, llmLocal, llmCloud, stages.EnableNameFallback, log, trace, discardUserEdits, llmLocalBatchCharLimit, llmCloudBatchCharLimit);
         Console.WriteLine($"Target: {targetPlugin} ({targetCandidates.Count} candidates, {autoCount} resolved (①〜⑥))");
         Console.WriteLine($"Wrote AI-chat prompt: {promptPath}");
         Console.WriteLine($"Wrote translation template: {templatePath}");
@@ -162,7 +162,7 @@ public static class PromptGenerator
     /// <param name="cancelFlagPath">v0.53.0a: GUIの「キャンセル」ボタン用。1プラグイン
     /// 処理し終えるたびにこのパスの存在を確認し、あればそこで残りのプラグインを処理せず
     /// 正常終了する（DESIGN_NOTES.md既知の課題15.）。null／未指定なら一切チェックしない。</param>
-    public static void RunMany(string candidatesTsvPath, string corpusTsvPath, string importDir, IReadOnlyList<string> targetPlugins, string outputDir, RunLog log, TraceLog? trace = null, int topN = 5, ITextTranslator? llmLocal = null, ITextTranslator? llmCloud = null, TranslationStageOptions? stageOptions = null, bool discardUserEdits = false, int llmLocalBatchCharLimit = DefaultLocalLlmBatchCharLimit, int llmCloudBatchCharLimit = DefaultLlmBatchCharLimit, string? cancelFlagPath = null)
+    public static void RunMany(string candidatesTsvPath, string corpusTsvPath, string importDir, IReadOnlyList<string> targetPlugins, string outputDir, RunLog log, TraceLog? trace = null, ITextTranslator? llmLocal = null, ITextTranslator? llmCloud = null, TranslationStageOptions? stageOptions = null, bool discardUserEdits = false, int llmLocalBatchCharLimit = DefaultLocalLlmBatchCharLimit, int llmCloudBatchCharLimit = DefaultLlmBatchCharLimit, string? cancelFlagPath = null)
     {
         var stages = stageOptions ?? TranslationStageOptions.Default;
         var ctx = BuildContext(candidatesTsvPath, corpusTsvPath, importDir, outputDir, log, trace, stages);
@@ -193,7 +193,7 @@ public static class PromptGenerator
             processedCount++;
             var candidates = group.ToList();
             var (promptPath, templatePath, _, autoCount, _, _, _, _, methodCounts) =
-                WritePluginFilesWithDir(outputDir, group.Key, candidates, ctx.Retriever, ctx.Auto, ctx.NameFallback, ctx.NpcNames, llmLocal, llmCloud, stages.EnableNameFallback, topN, log, trace, discardUserEdits, llmLocalBatchCharLimit, llmCloudBatchCharLimit);
+                WritePluginFilesWithDir(outputDir, group.Key, candidates, ctx.Retriever, ctx.Auto, ctx.NameFallback, ctx.NpcNames, llmLocal, llmCloud, stages.EnableNameFallback, log, trace, discardUserEdits, llmLocalBatchCharLimit, llmCloudBatchCharLimit);
             totalCandidates += candidates.Count;
             totalAuto += autoCount;
             trace?.Debug($"{group.Key}: target {candidates.Count} entries, auto-resolved {autoCount} -> {templatePath}");
@@ -231,7 +231,7 @@ public static class PromptGenerator
     }
 
     /// <summary>ロードオーダー全体の候補を、勝者プラグインごとに一括生成する。</summary>
-    public static void RunAll(string candidatesTsvPath, string corpusTsvPath, string importDir, string outputDir, RunLog log, TraceLog? trace = null, int topN = 5, ITextTranslator? llmLocal = null, ITextTranslator? llmCloud = null, TranslationStageOptions? stageOptions = null, bool discardUserEdits = false, int llmLocalBatchCharLimit = DefaultLocalLlmBatchCharLimit, int llmCloudBatchCharLimit = DefaultLlmBatchCharLimit)
+    public static void RunAll(string candidatesTsvPath, string corpusTsvPath, string importDir, string outputDir, RunLog log, TraceLog? trace = null, ITextTranslator? llmLocal = null, ITextTranslator? llmCloud = null, TranslationStageOptions? stageOptions = null, bool discardUserEdits = false, int llmLocalBatchCharLimit = DefaultLocalLlmBatchCharLimit, int llmCloudBatchCharLimit = DefaultLlmBatchCharLimit)
     {
         var stages = stageOptions ?? TranslationStageOptions.Default;
         var ctx = BuildContext(candidatesTsvPath, corpusTsvPath, importDir, outputDir, log, trace, stages);
@@ -265,7 +265,7 @@ public static class PromptGenerator
         {
             var candidates = group.ToList();
             var (_, _, pluginDir, autoCount, unique, autoResolvedChars, remainingChars, sampleRemaining, methodCounts) =
-                WritePluginFilesWithDir(outputDir, group.Key, candidates, ctx.Retriever, ctx.Auto, ctx.NameFallback, ctx.NpcNames, llmLocal, llmCloud, stages.EnableNameFallback, topN, log, trace, discardUserEdits, llmLocalBatchCharLimit, llmCloudBatchCharLimit);
+                WritePluginFilesWithDir(outputDir, group.Key, candidates, ctx.Retriever, ctx.Auto, ctx.NameFallback, ctx.NpcNames, llmLocal, llmCloud, stages.EnableNameFallback, log, trace, discardUserEdits, llmLocalBatchCharLimit, llmCloudBatchCharLimit);
             index.Add((group.Key, candidates.Count, autoCount, pluginDir));
             autoResolveByPlugin.Add((group.Key, candidates.Count, autoCount, autoResolvedChars, remainingChars, sampleRemaining));
             uniqueForAi += unique;
@@ -422,7 +422,7 @@ public static class PromptGenerator
         (int Corpus, int Meaning, int Transliteration, int NameFallback, int Llm, int CloudLlm) MethodCounts) WritePluginFilesWithDir(
         string outputDir, string plugin, List<Candidate> candidates, PrecedentRetriever retriever, AutoTranslator auto,
         NameFallbackTranslator nameFallback, IReadOnlySet<string> npcNames, ITextTranslator? llmLocal, ITextTranslator? llmCloud, bool enableNameFallback,
-        int topN, RunLog log, TraceLog? trace = null, bool discardUserEdits = false,
+        RunLog log, TraceLog? trace = null, bool discardUserEdits = false,
         int llmLocalBatchCharLimit = DefaultLocalLlmBatchCharLimit, int llmCloudBatchCharLimit = DefaultLlmBatchCharLimit)
     {
         trace?.Trace($"Plugin processing start: {plugin} ({candidates.Count} candidates)");
@@ -542,13 +542,13 @@ public static class PromptGenerator
         // entirely) and tries a cloud AI backend — the two are independent
         // opt-ins that chain, exactly like ①〜④ already fall through to each
         // other. See ApplyLlmStep for the shared per-candidate logic.
-        resolved = ApplyLlmStep(resolved, llmLocal, "5", "ローカルLLM", "local LLM", "TranslationLocalLlm", plugin, retriever, auto, npcNames, topN, log, trace, pluginDir, llmLocalBatchCharLimit);
-        resolved = ApplyLlmStep(resolved, llmCloud, "6", "生成AI翻訳", "cloud AI", "TranslationCloudLlm", plugin, retriever, auto, npcNames, topN, log, trace, pluginDir, llmCloudBatchCharLimit);
+        resolved = ApplyLlmStep(resolved, llmLocal, "5", "ローカルLLM", "local LLM", "TranslationLocalLlm", plugin, retriever, auto, npcNames, log, trace, pluginDir, llmLocalBatchCharLimit);
+        resolved = ApplyLlmStep(resolved, llmCloud, "6", "生成AI翻訳", "cloud AI", "TranslationCloudLlm", plugin, retriever, auto, npcNames, log, trace, pluginDir, llmCloudBatchCharLimit);
 
         var unresolved = resolved.Where(r => r.Auto == null).Select(r => r.Candidate).ToList();
 
         trace?.Trace($"Write start: {promptPath} (unresolved {unresolved.Count})");
-        var uniqueForAi = WritePrompt(promptPath, plugin, unresolved, retriever, topN, auto, npcNames,
+        var uniqueForAi = WritePrompt(promptPath, plugin, unresolved, retriever, auto, npcNames,
             blockedBy.Select(kv => new ModGlossary.Blocker(kv.Key, kv.Value.Count, kv.Value.Example))
                 .OrderByDescending(b => b.BlockedCount).ThenBy(b => b.Word, StringComparer.OrdinalIgnoreCase).ToList());
         trace?.Trace($"Write done: {promptPath} (deduplicated for AI chat: {uniqueForAi})");
@@ -585,10 +585,18 @@ public static class PromptGenerator
     /// ⑤専用の実機検証（`Cloaks_SMP_Patch.esp`、gemma3:12b・gemma4:26b双方）で、
     /// 12000のままだと大きすぎて成功率が大幅に下がり（例: gemma3で7/51件→2000
     /// 文字にしただけで52/61件）、逆に500まで下げても2000と解決件数は変わらず
-    /// 実行時間だけ3倍に悪化することを確認した。ローカルLLMは⑥と違い従量課金が
-    /// 無く、「呼び出し回数を減らすために大きくまとめる」動機がそもそも弱いため、
-    /// 実測で頭打ちだった2000よりやや余裕を持たせた3000を既定値とした。</summary>
-    public const int DefaultLocalLlmBatchCharLimit = 3_000;
+    /// 実行時間だけ3倍に悪化することを確認し、実測で頭打ちだった2000よりやや
+    /// 余裕を持たせた3000を既定値としていた。
+    ///
+    /// 2026-09-16: `PrecedentRetriever`をTF-IDF＋コサイン類似度に刷新した新方式
+    /// で改めて実機検証（gemma4:26b、`reasoning_effort: "none"`）したところ、
+    /// 実際の指示文（2,692字）込みの合計で7,000字（b+d予算）までは安定して
+    /// 完璧な形式で応答したが、8,000字（合計10,453字）では`finish_reason=length`
+    /// で打ち切りが発生した。issue #4（同一MOD既訳ヒント）実装時にさらに文字数
+    /// が上乗せされる余地を残すため、7,000より余裕を持たせた6,000を新しい
+    /// 既定値とする。GUI側の既定値（`InterfaceTextPanel.cs`・`MainForm.cs`の
+    /// `DefaultLlmLocalBatchCharLimit`、既に6,000）とこれで一致する。</summary>
+    public const int DefaultLocalLlmBatchCharLimit = 6_000;
 
     /// <summary>v0.53.0a: 既知の課題13.の対応——改行を含む原文をバッチ送信する際、
     /// `\n`をこの目印タグへ一時的に置き換えて1行に収める（実データ・67件超の
@@ -685,7 +693,7 @@ public static class PromptGenerator
         List<(Candidate Candidate, AutoTranslationResult? Auto)> resolved, ITextTranslator? llm,
         string stepNumber, string stepLabelJa, string stepLabelEn, string methodTag,
         string plugin, PrecedentRetriever retriever, AutoTranslator auto, IReadOnlySet<string> npcNames,
-        int topN, RunLog log, TraceLog? trace, string pluginDir, int batchCharLimit = DefaultLlmBatchCharLimit)
+        RunLog log, TraceLog? trace, string pluginDir, int batchCharLimit = DefaultLlmBatchCharLimit)
     {
         if (llm == null) return resolved;
 
@@ -735,7 +743,7 @@ public static class PromptGenerator
         {
             var isMultiline = g.Key.IndexOf('\n') >= 0;
             var matchKey = isMultiline ? FlattenMultiline(g.Key) : g.Key;
-            var block = BuildCandidateBlock(g, retriever, topN, auto, npcNames, targetTextOverride: isMultiline ? matchKey : null);
+            var block = BuildCandidateBlock(g, retriever, auto, npcNames, targetTextOverride: isMultiline ? matchKey : null);
             return (Group: g, Block: block, MatchKey: matchKey);
         }).ToList();
         var batches = new List<List<(IGrouping<string, Candidate> Group, string Block, string MatchKey)>>();
@@ -1379,7 +1387,7 @@ public static class PromptGenerator
     /// <returns>How many UNIQUE strings the AI is actually being asked to translate,
     /// after grouping — the number that governs the real cost.</returns>
     private static int WritePrompt(
-        string path, string targetPlugin, List<Candidate> targetCandidates, PrecedentRetriever retriever, int topN,
+        string path, string targetPlugin, List<Candidate> targetCandidates, PrecedentRetriever retriever,
         AutoTranslator auto, IReadOnlySet<string> npcNames, IReadOnlyList<ModGlossary.Blocker> blockers)
     {
         var groups = targetCandidates
@@ -1410,7 +1418,7 @@ public static class PromptGenerator
         WriteGlossarySection(writer, targetPlugin, blockers);
 
         foreach (var group in groups)
-            writer.Write(BuildCandidateBlock(group, retriever, topN, auto, npcNames));
+            writer.Write(BuildCandidateBlock(group, retriever, auto, npcNames));
 
         return groups.Count;
     }
@@ -1435,7 +1443,7 @@ public static class PromptGenerator
     /// （MarkBoundaryQuotes）用の差し替えは不要になった——原文自身の引用符は
     /// タグの外側と衝突しないため、一切加工せずそのまま送れる。</param>
     private static string BuildCandidateBlock(
-        IGrouping<string, Candidate> group, PrecedentRetriever retriever, int topN, AutoTranslator auto, IReadOnlySet<string> npcNames,
+        IGrouping<string, Candidate> group, PrecedentRetriever retriever, AutoTranslator auto, IReadOnlySet<string> npcNames,
         string? targetTextOverride = null)
     {
         var sb = new System.Text.StringBuilder();
@@ -1479,7 +1487,7 @@ public static class PromptGenerator
         if (group.Count() > 1)
             sb.Append($"  (This string appears {group.Count()} times in this plugin. Answer once — the same translation applies to all occurrences.)\n");
 
-        var precedents = retriever.FindPrecedents(first.CurrentText, topN, first.RecordType, first.WinningPlugin);
+        var precedents = retriever.FindPrecedents(first.CurrentText, first.RecordType, first.WinningPlugin);
         if (precedents.Count > 0)
         {
             sb.Append("  Reference examples:\n");
