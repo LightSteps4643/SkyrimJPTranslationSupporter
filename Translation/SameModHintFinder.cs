@@ -71,7 +71,11 @@ public sealed class SameModHintFinder
 
         if (best.Count == 0) return new List<CorpusEntry>();
 
+        // 2026-09-16: a tie is broken by Notes trust tier (SameModTrustTier) —
+        // a hint from a more trustworthy source (e.g. a human's ModifiedByUser
+        // edit) should win a tie over one from a lower tier (e.g. an LLM's own
+        // earlier guess), not by incidental string length.
         var scoredList = best.Select(kv => (Index: kv.Key, Score: kv.Value)).ToList();
-        return _index.SelectByRelativeCutoff(scoredList);
+        return _index.SelectByRelativeCutoff(scoredList, priorityOf: idx => SameModTrustTier.PriorityOf(pool[idx].SourceKind));
     }
 }

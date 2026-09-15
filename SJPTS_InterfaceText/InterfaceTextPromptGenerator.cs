@@ -121,17 +121,20 @@ public static class InterfaceTextPromptGenerator
     /// resolution, or that plus "NoJapanese" for a response that came back
     /// but contained no Japanese (still accepted, flagged for review). A key
     /// not present in the result stays unresolved — never guessed.</returns>
-    /// <param name="modWorkDir">Where to write each batch's actual sent prompt
+    /// <param name="modWorkDir">Where to write each call's actual sent prompt
     /// (instruction + candidate blocks, byte-for-byte what goes into
     /// <see cref="ITextTranslator.TryTranslate"/>) as "prompt_{providerLabel}
-    /// _batch{N}_of_{total}.txt" — a debugging aid (2026-09-12 design
-    /// discussion) distinct from the ESP CLI's own prompt.txt (that one is a
-    /// human AI-chat handoff for whatever's STILL unresolved after the LLM
-    /// step; this one is a record of what WAS actually sent, win or lose).
+    /// _call{N}.txt" — a debugging aid (2026-09-12 design discussion) distinct
+    /// from the ESP CLI's own prompt.txt (that one is a human AI-chat handoff
+    /// for whatever's STILL unresolved after the LLM step; this one is a
+    /// record of what WAS actually sent, win or lose). 2026-09-16: renamed
+    /// from "..._batch{N}_of_{total}[_round{R}].txt" when the round/batch
+    /// split was collapsed into one flat per-call loop (see ApplyLlmStep's own
+    /// remarks), since "total batches" is no longer known ahead of time.
     /// Stale files under this SAME provider's prefix are cleared first — not
     /// the other provider's — so a translate run that does ローカルLLM then
     /// 生成AI（クラウド） in two calls doesn't have the second call wipe out
-    /// the first's files (both would otherwise match a shared "prompt_batch*"
+    /// the first's files (both would otherwise match a shared "prompt_call*"
     /// pattern).</param>
     /// <param name="providerLabel">"localLLM" or "cloudLLM" — which of this
     /// mod's two independent translate calls this is, mirroring the ESP CLI's
@@ -155,117 +158,120 @@ public static class InterfaceTextPromptGenerator
         // 踏襲——"TranslationLocalLlm"/"TranslationCloudLlm"。
         var methodTag = providerLabel == "localLLM" ? "TranslationLocalLlm" : "TranslationCloudLlm";
 
-        var promptFilePrefix = $"prompt_{providerLabel}_batch";
-        foreach (var stale in Directory.Exists(modWorkDir) ? Directory.EnumerateFiles(modWorkDir, $"{promptFilePrefix}*_of_*.txt") : Enumerable.Empty<string>())
+        var promptFilePrefix = $"prompt_{providerLabel}_call";
+        foreach (var stale in Directory.Exists(modWorkDir) ? Directory.EnumerateFiles(modWorkDir, $"{promptFilePrefix}*.txt") : Enumerable.Empty<string>())
             File.Delete(stale);
 
-        // 2026-09-13 (issue #2): finish_reason=length（出力トークン上限による
-        // 打ち切り）で一部の候補しか解決できなかった場合、未解決分だけを対象に
-        // 自動で再送する——ESP側（Translation/PromptGenerator.cs）とまったく
-        // 同じ設計・終了条件をこちらにもミラーする。固定回数の上限は使わず
-        // （「3回という数字には妥当性がない」という明示的な却下を受けた設計）、
-        // 「まだ未解決が残っている」「直前のラウンドで打ち切りが実際に発生
-        // した」「直前のラウンドで1件以上進捗があった」の3条件がすべて揃う
-        // 間だけラウンドを重ねる。
-        // issue #4 (c: same-mod hints), 2026-09-16: this mod's own text
-        // already resolved this session, restricted to
-        // SameModHintBlockBuilder.IsEligibleMethod's trust tier — mirrors
-        // Translation/PromptGenerator.cs's own ApplyLlmStep. No DsdType
-        // concept exists for UI strings, so the record-type bonus that
-        // matters on the ESP side never applies here (an empty type is
+        // 2026-09-16再設計: ESP側（Translation/PromptGenerator.cs）の
+        // ApplyLlmStepと同じ「パス」構造——未解決全部に最低1回の送信機会を
+        // 与える一続き（パス）を、進捗があれば繰り返す。詳細な設計理由・
+        // このパス構造が必要になった経緯（文字数上限による分割で先頭の候補が
+        // 失敗し続けると後続候補に永遠にたどり着けなくなる問題）はESP側の
+        // 同メソッドの doc comment を参照。issue #4 (c: same-mod hints),
+        // 2026-09-16: this mod's own text already resolved this session,
+        // restricted to SameModHintBlockBuilder.IsEligibleMethod's trust tier
+        // — mirrors Translation/PromptGenerator.cs's own ApplyLlmStep. No
+        // DsdType concept exists for UI strings, so the record-type bonus
+        // that matters on the ESP side never applies here (an empty type is
         // always a no-op bonus) — this is otherwise the exact same shared
         // TF-IDF+cosine engine.
         var englishByKey = pending.ToDictionary(e => e.Key, e => e.English, StringComparer.Ordinal);
 
-        var round = 0;
+        var callIndex = 0;
         var circuitOpened = false;
-        while (true)
+        while (true) // パス: この時点で未解決な候補全部に最低1回の送信機会を与える一続き
         {
-            round++;
-            var stillPending = pending.Where(e => !result.ContainsKey(e.Key)).ToList();
+            var passStart = pending.Where(e => !result.ContainsKey(e.Key)).ToList();
+            if (passStart.Count == 0) break;
 
-            // Dedup by identical English text — same rationale as PromptGenerator's
-            // own byText grouping: a meaningful share of a mod's strings repeat
-            // (short toggle/option labels), and asking once costs less while
-            // making a divergent translation of the same text structurally
-            // impossible within this mod.
-            var byText = stillPending.GroupBy(e => e.English, StringComparer.Ordinal).ToList();
-            if (byText.Count == 0) break;
+            var resultCountBeforePass = result.Count;
+            // このパスの間だけ有効な、固定の送信待ちキュー。ある呼び出しが失敗
+            // しても「送った」候補はここから外す（解決できたかどうかは問わない）
+            // ——ESP側と同じ理由（文字数上限による分割で先頭が失敗し続けると
+            // 後続に永遠にたどり着けなくなる問題への対応）。
+            var remainingThisPass = passStart.GroupBy(e => e.English, StringComparer.Ordinal).ToList();
 
-            var sameModPool = result
-                .Where(kv => SameModHintBlockBuilder.IsEligibleMethod(kv.Value.Notes))
-                .Select(kv => new CorpusEntry(englishByKey[kv.Key], kv.Value.Japanese, modName, kv.Value.Notes))
-                .GroupBy(e => e.English, StringComparer.Ordinal)
-                .Select(g => g.First())
-                .ToList();
-
-            var blocks = byText.Select(g => (Group: g, Block: BuildBlock(g))).ToList();
-
-            var batches = new List<List<(IGrouping<string, (string Key, string English)> Group, string Block)>>();
-            var current = new List<(IGrouping<string, (string Key, string English)> Group, string Block)>();
-            var currentLength = 0;
-            foreach (var item in blocks)
+            while (remainingThisPass.Count > 0)
             {
-                if (current.Count > 0 && currentLength + item.Block.Length > batchCharLimit)
+                if (translator.CircuitOpen)
                 {
-                    batches.Add(current);
-                    current = new List<(IGrouping<string, (string Key, string English)> Group, string Block)>();
-                    currentLength = 0;
+                    var stillPendingTotal = pending.Count(e => !result.ContainsKey(e.Key));
+                    log.DetailAndReport("生成AI翻訳のサーキットブレーカー作動（残りをまとめてスキップ）", "circuit breaker open (remaining candidates skipped)",
+                        log.Lang == RunLogLang.Ja
+                            ? $"[{modName}]  連続失敗のため残り{stillPendingTotal}件をまとめてスキップしました"
+                            : $"[{modName}]  circuit breaker open — skipping remaining {stillPendingTotal} candidate(s)",
+                        $"[{modName}] circuit breaker open — skipping remaining {stillPendingTotal} candidate(s)");
+                    circuitOpened = true;
+                    break;
                 }
-                current.Add(item);
-                currentLength += item.Block.Length;
-            }
-            if (current.Count > 0) batches.Add(current);
 
-            var roundLabelJa = round > 1 ? $"（再送{round}回目）" : "";
-            var roundLabelEn = round > 1 ? $" (retry round {round})" : "";
-            log.DetailAndReport($"生成AI翻訳のバッチ呼び出し件数{roundLabelJa}", $"batched call count{roundLabelEn}",
+                var sameModPool = result
+                    .Where(kv => SameModHintBlockBuilder.IsEligibleMethod(kv.Value.Notes))
+                    .Select(kv => new CorpusEntry(englishByKey[kv.Key], kv.Value.Japanese, modName, kv.Value.Notes))
+                    .GroupBy(e => e.English, StringComparer.Ordinal)
+                    .Select(g => g.First())
+                    .ToList();
+
+                var remainingThisPassCountBeforeBatch = remainingThisPass.Count;
+                var blocks = remainingThisPass.Select(g => (Group: g, Block: BuildBlock(g))).ToList();
+
+                // このイテレーション1回分（＝1回のLLM呼び出し）に、まずbatchChar
+                // Limitいっぱいまで詰める。Interfaceパイプラインには"b"の概念が
+                // ないため、詰める対象はdのみ。その後issue #4のc（バッチ全体で
+                // 共有1個、実際にこの回に含まれる候補だけを対象に計算）を実際に
+                // 計算し、合計がbatchCharLimitを超える場合だけ末尾の候補を1件ずつ
+                // 外して再計算する（外された候補は次のイテレーションで自然に再度
+                // 対象になる）。候補が1件だけになってもなおcを含めると超える場合は、
+                // その候補自体は外さずcの方を諦める。
+                var currentBatch = new List<(IGrouping<string, (string Key, string English)> Group, string Block)>();
+                var currentLength = 0;
+                foreach (var item in blocks)
+                {
+                    if (currentBatch.Count > 0 && currentLength + item.Block.Length > batchCharLimit) break;
+                    currentBatch.Add(item);
+                    currentLength += item.Block.Length;
+                }
+
+            string sameModBlock;
+            while (true)
+            {
+                sameModBlock = SameModHintBlockBuilder.BuildBlock(
+                    sameModPool,
+                    currentBatch.Select(b => (b.Group.Key, "")).ToList(),
+                    batchCharLimit);
+                if (currentLength + sameModBlock.Length <= batchCharLimit) break;
+                if (currentBatch.Count <= 1) { sameModBlock = ""; break; }
+                var last = currentBatch[^1];
+                currentBatch.RemoveAt(currentBatch.Count - 1);
+                currentLength -= last.Block.Length;
+            }
+
+            // このパスの送信待ちキューから、今回送る分を外す——解決できたかどうかは
+            // 問わない（このパス内での再送はしない。パス自体を再度回すかどうかは
+            // パス終了時の進捗判定に委ねる）。
+            var currentBatchKeys = currentBatch.Select(b => b.Group.Key).ToHashSet(StringComparer.Ordinal);
+            remainingThisPass = remainingThisPass.Where(g => !currentBatchKeys.Contains(g.Key)).ToList();
+
+            callIndex++;
+            var batchLabel = $"呼び出し{callIndex}";
+            var batchLabelEn = $"call {callIndex}";
+
+            log.DetailAndReport("生成AI翻訳のバッチ呼び出し", "batch call",
                 log.Lang == RunLogLang.Ja
-                    ? $"[{modName}]  未解決{byText.Count}件（重複排除後）を{batches.Count}回のバッチ呼び出しに分割（1回あたりの文字数上限: {batchCharLimit}）{roundLabelJa}"
-                    : $"[{modName}]  {byText.Count} unique unresolved string(s), {batches.Count} batched call(s) (char limit: {batchCharLimit}){roundLabelEn}",
-                $"[{modName}] {byText.Count} unique unresolved string(s), {batches.Count} batched call(s), char limit {batchCharLimit}{roundLabelEn}");
-
-            var roundTruncated = false;
-            var resultCountBeforeRound = result.Count;
-            for (var batchIndex = 0; batchIndex < batches.Count; batchIndex++)
-            {
-            var batch = batches[batchIndex];
-            var batchLabel = batches.Count > 1 ? $"バッチ{batchIndex + 1}/{batches.Count}" : "バッチ";
-            var batchLabelEn = batches.Count > 1 ? $"batch {batchIndex + 1}/{batches.Count}" : "batch";
-
-            if (translator.CircuitOpen)
-            {
-                var remainingBatches = batches.Count - batchIndex;
-                var remainingCandidates = batches.Skip(batchIndex).Sum(b => b.Count);
-                log.DetailAndReport("生成AI翻訳のサーキットブレーカー作動", "circuit breaker open",
-                    log.Lang == RunLogLang.Ja
-                        ? $"[{modName}]  連続失敗のため残り{remainingBatches}バッチ（{remainingCandidates}件）をまとめてスキップしました"
-                        : $"[{modName}]  circuit breaker open — skipping remaining {remainingBatches} batch(es) ({remainingCandidates} candidate(s))",
-                    $"[{modName}] circuit breaker open — skipping remaining {remainingBatches} batch(es) ({remainingCandidates} candidate(s))");
-                circuitOpened = true;
-                break;
-            }
+                    ? $"[{modName}]  {batchLabel}: 未解決（重複排除後）{remainingThisPassCountBeforeBatch}件のうち{currentBatch.Count}件を送信（1回あたりの文字数上限: {batchCharLimit}）"
+                    : $"[{modName}]  {batchLabelEn}: sending {currentBatch.Count} of {remainingThisPassCountBeforeBatch} unique unresolved string(s) (char limit: {batchCharLimit})",
+                $"[{modName}] {batchLabelEn}: sending {currentBatch.Count} of {remainingThisPassCountBeforeBatch} unique unresolved string(s)...");
 
             var promptBuilder = new System.Text.StringBuilder(BuildInstruction(modDisplayName));
-            // issue #4 (c): empty on round 1 (nothing resolved yet this
-            // session for this mod), grows as later rounds add to the pool.
-            var sameModBlock = SameModHintBlockBuilder.BuildBlock(
-                sameModPool,
-                batch.Select(b => (b.Group.Key, "")).ToList(),
-                batchCharLimit);
+            // issue #4 (c): empty on the very first call (nothing resolved
+            // yet this session for this mod), grows as later calls add to
+            // the pool.
             if (sameModBlock.Length > 0) promptBuilder.Append(sameModBlock);
-            foreach (var (_, block) in batch) promptBuilder.Append(block);
+            foreach (var (_, block) in currentBatch) promptBuilder.Append(block);
             var promptText = promptBuilder.ToString();
 
             Directory.CreateDirectory(modWorkDir);
-            // round 1（今まで通り大半のケース）ではファイル名を変えない——
-            // 既存のプロンプトデバッグファイル名をあてにする既存のテスト・運用に
-            // 影響を出さないため。再送が発生した場合のみラウンド番号を付けて
-            // 前ラウンドのファイルを上書きしないようにする。
-            var promptBatchFileName = round > 1
-                ? $"{promptFilePrefix}{batchIndex + 1}_of_{batches.Count}_round{round}.txt"
-                : $"{promptFilePrefix}{batchIndex + 1}_of_{batches.Count}.txt";
-            var promptBatchPath = Path.Combine(modWorkDir, promptBatchFileName);
+            var promptBatchPath = Path.Combine(modWorkDir, $"{promptFilePrefix}{callIndex}.txt");
             File.WriteAllText(promptBatchPath, promptText, new System.Text.UTF8Encoding(false));
 
             var response = translator.TryTranslate(promptText, out var error);
@@ -273,120 +279,119 @@ public static class InterfaceTextPromptGenerator
             {
                 log.DetailAndReport("生成AI翻訳のバッチが失敗（エラー理由）", "a batch failed (error reason)",
                     log.Lang == RunLogLang.Ja
-                        ? $"[{modName}]  {batchLabel}（{batch.Count}件）が失敗しました  ({error})"
-                        : $"[{modName}]  {batchLabelEn} ({batch.Count} candidate(s)) failed ({error})",
-                    $"[{modName}] {batchLabelEn} failed ({batch.Count} candidate(s)): {error}");
-                continue; // 自動リトライしない — 次のバッチへ（既存と同じ方針）
+                        ? $"[{modName}]  {batchLabel}（{currentBatch.Count}件）が失敗しました  ({error})"
+                        : $"[{modName}]  {batchLabelEn} ({currentBatch.Count} candidate(s)) failed ({error})",
+                    $"[{modName}] {batchLabelEn} failed ({currentBatch.Count} candidate(s)): {error}");
             }
-
-            // 2026-09-13: real-data investigation (gemma4:26b/Ollama,
-            // finish_reason == "length") — a batch whose response was cut off
-            // by an output-token limit ends mid-tag, silently dropping every
-            // candidate after the cutoff. Log this as a named reason instead
-            // of leaving an operator to infer truncation by eye from the raw
-            // trace-log dump below.
-            if (translator.LastResponseTruncated)
+            else
             {
-                roundTruncated = true;
-                log.DetailAndReport("モデルの応答が出力トークン数の上限で打ち切られた可能性があります",
-                    "the model's response may have been cut off by an output token limit",
-                    log.Lang == RunLogLang.Ja
-                        ? $"[{modName}]  {batchLabel}（finish_reason=length）"
-                        : $"[{modName}]  {batchLabelEn} (finish_reason=length)",
-                    $"[{modName}] {batchLabelEn}: response may have been cut off by an output token limit (finish_reason=length)");
-            }
+                // 2026-09-13: real-data investigation (gemma4:26b/Ollama,
+                // finish_reason == "length") — a batch whose response was cut off
+                // by an output-token limit ends mid-tag, silently dropping every
+                // candidate after the cutoff. Log this as a named reason instead
+                // of leaving an operator to infer truncation by eye from the raw
+                // trace-log dump below.
+                if (translator.LastResponseTruncated)
+                    log.DetailAndReport("モデルの応答が出力トークン数の上限で打ち切られた可能性があります",
+                        "the model's response may have been cut off by an output token limit",
+                        log.Lang == RunLogLang.Ja
+                            ? $"[{modName}]  {batchLabel}（finish_reason=length）"
+                            : $"[{modName}]  {batchLabelEn} (finish_reason=length)",
+                        $"[{modName}] {batchLabelEn}: response may have been cut off by an output token limit (finish_reason=length)");
 
-            // 2026-09-13: real-data bug (FloatingSubtitles' "$FSUB_
-            // DualSubtitlesOffscreen_Text" = "DUAL SUBTITLES ", trailing
-            // space) — BuildBlock embeds a candidate's English text VERBATIM
-            // into the prompt's tag, and the prompt explicitly instructs the
-            // model to copy it "unchanged". A model that does exactly that
-            // (confirmed against real gemma4:26b output) must still match —
-            // so byLine is keyed on the UNTRIMMED extracted source (an exact,
-            // faithful echo matches byLine directly), with byLineTrimmed as a
-            // same-shape fallback (keyed after trimming) for a model that
-            // trims incidental whitespace despite the instruction. Mirrors
-            // the exact-then-fallback pattern PromptGenerator.cs already uses
-            // for MultilineBreakMarker (byLine / byLineMarkerTrimmed).
-            var byLine = new Dictionary<string, string>(StringComparer.Ordinal);
-            var byLineTrimmed = new Dictionary<string, string>(StringComparer.Ordinal);
-            foreach (var rawLine in response.Replace("\r\n", "\n").Split('\n'))
-            {
-                var line = rawLine.Trim();
-                if (line.Length == 0) continue;
-                var tabIndex = line.IndexOf('\t');
-                if (tabIndex < 0) continue;
-                var sourceColumnRaw = line[..tabIndex];
-                var source = ExtractTaggedSource(sourceColumnRaw);
-                if (source.Length == 0)
+                // 2026-09-13: real-data bug (FloatingSubtitles' "$FSUB_
+                // DualSubtitlesOffscreen_Text" = "DUAL SUBTITLES ", trailing
+                // space) — BuildBlock embeds a candidate's English text VERBATIM
+                // into the prompt's tag, and the prompt explicitly instructs the
+                // model to copy it "unchanged". A model that does exactly that
+                // (confirmed against real gemma4:26b output) must still match —
+                // so byLine is keyed on the UNTRIMMED extracted source (an exact,
+                // faithful echo matches byLine directly), with byLineTrimmed as a
+                // same-shape fallback (keyed after trimming) for a model that
+                // trims incidental whitespace despite the instruction. Mirrors
+                // the exact-then-fallback pattern PromptGenerator.cs already uses
+                // for MultilineBreakMarker (byLine / byLineMarkerTrimmed).
+                var byLine = new Dictionary<string, string>(StringComparer.Ordinal);
+                var byLineTrimmed = new Dictionary<string, string>(StringComparer.Ordinal);
+                foreach (var rawLine in response.Replace("\r\n", "\n").Split('\n'))
                 {
-                    var issue = ClassifyTaggedSourceIssue(sourceColumnRaw);
-                    log.Detail("応答の1行がタグ形式を満たさずスキップ",
-                        "a response line didn't satisfy the tag format and was skipped",
-                        $"[{modName}]  理由: {issue} / 該当行: \"{sourceColumnRaw.Trim()}\"");
-                }
-                var japanese = StripSurroundingQuotes(StripTargetTags(line[(tabIndex + 1)..].Trim()));
-                if (source.Length > 0 && japanese.Length > 0)
-                {
-                    byLine[source] = japanese; // 同じキーが複数行あれば最後の行を採用
-                    byLineTrimmed[source.Trim()] = japanese;
-                }
-            }
-
-            var anyUnresolvedInBatch = false;
-            foreach (var (group, _) in batch)
-            {
-                if (!byLine.TryGetValue(group.Key, out var japanese) && !byLineTrimmed.TryGetValue(group.Key.Trim(), out japanese))
-                {
-                    foreach (var (key, english) in group)
+                    var line = rawLine.Trim();
+                    if (line.Length == 0) continue;
+                    var tabIndex = line.IndexOf('\t');
+                    if (tabIndex < 0) continue;
+                    var sourceColumnRaw = line[..tabIndex];
+                    var source = ExtractTaggedSource(sourceColumnRaw);
+                    if (source.Length == 0)
                     {
-                        log.DetailAndReport("解決できなかった候補（モデルの応答形式を解釈できず）",
-                            "could not resolve this candidate (model's response wasn't in an interpretable format)",
-                            $"[{modName}]  \"{key}\": \"{english}\"",
-                            $"[{modName}] could not resolve \"{key}\" (model's response wasn't in an interpretable format)");
+                        var issue = ClassifyTaggedSourceIssue(sourceColumnRaw);
+                        log.Detail("応答の1行がタグ形式を満たさずスキップ",
+                            "a response line didn't satisfy the tag format and was skipped",
+                            $"[{modName}]  理由: {issue} / 該当行: \"{sourceColumnRaw.Trim()}\"");
                     }
-                    anyUnresolvedInBatch = true;
-                    continue;
-                }
-
-                if (!LanguageDetector.ContainsJapanese(japanese))
-                {
-                    // 2026-09-12: ESP側（DsdJsonGenerator.cs）と同じ結論——モデルが
-                    // 「翻訳不要」と正しく判断した結果（例: "Ok"→"OK"）と、本当に
-                    // 翻訳を誤っただけのケースを、この段階では機械的に区別できない。
-                    // 未解決のまま毎回リトライさせ続けるより、専用タグ（methodTag+
-                    // "NoJapanese"）を付けてResolved=trueとして採用し、間違って
-                    // いれば人間がInterfaceTextDetailFormで見つけて直せるようにする
-                    // （除外せず、情報ログのみ残す——ModifiedByUserと同じ「人間が
-                    // 後から見分けられる形で受理する」扱い）。
-                    var noJapaneseTag = methodTag + "NoJapanese";
-                    foreach (var (key, english) in group)
+                    var japanese = StripSurroundingQuotes(StripTargetTags(line[(tabIndex + 1)..].Trim()));
+                    if (source.Length > 0 && japanese.Length > 0)
                     {
-                        log.DetailAndReport("応答は得られたが訳文に日本語が含まれない（要レビューとして受理）",
-                            "response parsed but the translation contains no Japanese (accepted, flagged for review)",
-                            $"[{modName}]  \"{key}\": \"{english}\" → \"{japanese}\"",
-                            $"[{modName}] \"{key}\": response contained no Japanese — accepted, flagged for review: \"{japanese}\"");
-                        result[key] = (japanese, noJapaneseTag);
+                        byLine[source] = japanese; // 同じキーが複数行あれば最後の行を採用
+                        byLineTrimmed[source.Trim()] = japanese;
                     }
-                    continue;
                 }
 
-                foreach (var (key, _) in group) result[key] = (japanese, methodTag);
-            }
+                var anyUnresolvedInBatch = false;
+                foreach (var (group, _) in currentBatch)
+                {
+                    if (!byLine.TryGetValue(group.Key, out var japanese) && !byLineTrimmed.TryGetValue(group.Key.Trim(), out japanese))
+                    {
+                        foreach (var (key, english) in group)
+                        {
+                            log.DetailAndReport("解決できなかった候補（モデルの応答形式を解釈できず）",
+                                "could not resolve this candidate (model's response wasn't in an interpretable format)",
+                                $"[{modName}]  \"{key}\": \"{english}\"",
+                                $"[{modName}] could not resolve \"{key}\" (model's response wasn't in an interpretable format)");
+                        }
+                        anyUnresolvedInBatch = true;
+                        continue;
+                    }
 
-            // 2026-09-12: このバッチで1件でも未解決が残った場合のみ、モデルからの
-            // 生レスポンス全文をtrace.logへ1回だけ残す（バッチ全体で1回、候補ごとに
-            // 重複させない）——上のper-line診断（ClassifyTaggedSourceIssue）で
-            // 大抵の原因は分かるが、それでも特定できない場合の最終手段として。
-            if (anyUnresolvedInBatch)
-                trace?.Warning($"[{modName}] {batchLabelEn}: raw response for the batch with unresolved candidate(s):\n{response}");
+                    if (!LanguageDetector.ContainsJapanese(japanese))
+                    {
+                        // 2026-09-12: ESP側（DsdJsonGenerator.cs）と同じ結論——モデルが
+                        // 「翻訳不要」と正しく判断した結果（例: "Ok"→"OK"）と、本当に
+                        // 翻訳を誤っただけのケースを、この段階では機械的に区別できない。
+                        // 未解決のまま毎回リトライさせ続けるより、専用タグ（methodTag+
+                        // "NoJapanese"）を付けてResolved=trueとして採用し、間違って
+                        // いれば人間がInterfaceTextDetailFormで見つけて直せるようにする
+                        // （除外せず、情報ログのみ残す——ModifiedByUserと同じ「人間が
+                        // 後から見分けられる形で受理する」扱い）。
+                        var noJapaneseTag = methodTag + "NoJapanese";
+                        foreach (var (key, english) in group)
+                        {
+                            log.DetailAndReport("応答は得られたが訳文に日本語が含まれない（要レビューとして受理）",
+                                "response parsed but the translation contains no Japanese (accepted, flagged for review)",
+                                $"[{modName}]  \"{key}\": \"{english}\" → \"{japanese}\"",
+                                $"[{modName}] \"{key}\": response contained no Japanese — accepted, flagged for review: \"{japanese}\"");
+                            result[key] = (japanese, noJapaneseTag);
+                        }
+                        continue;
+                    }
+
+                    foreach (var (key, _) in group) result[key] = (japanese, methodTag);
+                }
+
+                // 2026-09-12: このバッチで1件でも未解決が残った場合のみ、モデルからの
+                // 生レスポンス全文をtrace.logへ1回だけ残す（バッチ全体で1回、候補ごとに
+                // 重複させない）——上のper-line診断（ClassifyTaggedSourceIssue）で
+                // 大抵の原因は分かるが、それでも特定できない場合の最終手段として。
+                if (anyUnresolvedInBatch)
+                    trace?.Warning($"[{modName}] {batchLabelEn}: raw response for the batch with unresolved candidate(s):\n{response}");
             }
+            } // 内側while (remainingThisPass.Count > 0) の終わり
 
             if (circuitOpened) break;
 
-            var resolvedThisRound = result.Count - resultCountBeforeRound;
-            if (!roundTruncated || resolvedThisRound == 0) break;
-        }
+            // パス単位の自己終了条件: このパス全体を通じて新規解決が1件もなければ
+            // （＝再送しても改善しないと判断し）、これ以上パスを重ねず終了する。
+            if (result.Count == resultCountBeforePass) break;
+        } // 外側while(true)（パス）の終わり
 
         return result;
     }

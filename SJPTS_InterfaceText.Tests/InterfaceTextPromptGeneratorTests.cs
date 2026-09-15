@@ -81,7 +81,7 @@ public class InterfaceTextPromptGeneratorTests
         {
             InterfaceTextPromptGenerator.ApplyLlmStep(pending, fake, "TestMod", log, null, 12_000, dir, "localLLM");
 
-            var promptBatchPath = Path.Combine(dir, "prompt_localLLM_batch1_of_1.txt");
+            var promptBatchPath = Path.Combine(dir, "prompt_localLLM_call1.txt");
             Assert.True(File.Exists(promptBatchPath));
             Assert.Equal(fake.PromptsReceived[0], File.ReadAllText(promptBatchPath));
         }
@@ -108,8 +108,8 @@ public class InterfaceTextPromptGeneratorTests
             cloudFake.Enqueue("<SJPTS_TARGET>Hello</SJPTS_TARGET>\tこんにちは\n");
             InterfaceTextPromptGenerator.ApplyLlmStep(pending, cloudFake, "TestMod", log, null, 12_000, dir, "cloudLLM");
 
-            Assert.True(File.Exists(Path.Combine(dir, "prompt_localLLM_batch1_of_1.txt")));
-            Assert.True(File.Exists(Path.Combine(dir, "prompt_cloudLLM_batch1_of_1.txt")));
+            Assert.True(File.Exists(Path.Combine(dir, "prompt_localLLM_call1.txt")));
+            Assert.True(File.Exists(Path.Combine(dir, "prompt_cloudLLM_call1.txt")));
         }
         finally { }
     }
@@ -249,7 +249,11 @@ public class InterfaceTextPromptGeneratorTests
             Assert.Equal(2, fake.PromptsReceived.Count);
             Assert.DoesNotContain("Same-mod translations so far", fake.PromptsReceived[0]);
             Assert.Contains("Same-mod translations so far", fake.PromptsReceived[1]);
-            Assert.Contains("\"Frostwind Blade\" → \"氷風の刃\"", fake.PromptsReceived[1]);
+            // 2026-09-16: legend+numeric code format (validated design) —
+            // step's local LLM resolution tags with "TranslationLocalLlm",
+            // SameModTrustTier priority 7.
+            Assert.Contains("7=translated by a local LLM", fake.PromptsReceived[1]);
+            Assert.Contains("\"Frostwind Blade\"\t\"氷風の刃\"\t7", fake.PromptsReceived[1]);
         }
         finally { }
     }

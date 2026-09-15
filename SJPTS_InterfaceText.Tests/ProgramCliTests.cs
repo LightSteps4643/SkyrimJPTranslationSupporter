@@ -336,7 +336,7 @@ public class ProgramCliTests
                 "--llm-cloud-provider=http", "--llm-cloud-endpoint=http://127.0.0.1:1/", "--llm-cloud-model=test-model");
 
             Assert.Equal(0, exitCode);
-            var promptPath = Path.Combine(modWorkDir, "prompt_cloudLLM_batch1_of_1.txt");
+            var promptPath = Path.Combine(modWorkDir, "prompt_cloudLLM_call1.txt");
             Assert.True(File.Exists(promptPath), output);
             var prompt = File.ReadAllText(promptPath);
             Assert.Contains("a Skyrim SE mod named \"Heels Fix\"", prompt);
@@ -365,7 +365,7 @@ public class ProgramCliTests
                 "--llm-cloud-provider=http", "--llm-cloud-endpoint=http://127.0.0.1:1/", "--llm-cloud-model=test-model");
 
             Assert.Equal(0, exitCode);
-            var promptPath = Path.Combine(modWorkDir, "prompt_cloudLLM_batch1_of_1.txt");
+            var promptPath = Path.Combine(modWorkDir, "prompt_cloudLLM_call1.txt");
             Assert.True(File.Exists(promptPath), output);
             Assert.Contains("a Skyrim SE mod named \"TestMod\"", File.ReadAllText(promptPath));
         }

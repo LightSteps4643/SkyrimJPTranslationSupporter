@@ -134,25 +134,39 @@ public sealed class CorpusSimilarityIndex
         return results;
     }
 
-    /// <summary>Sorts descending by score (ties broken by shorter English
-    /// first) and keeps only entries scoring at least <paramref
-    /// name="relativeCutoff"/> (default 40%) of the top entry's own score —
-    /// no fixed count, no floor. See <see cref="PrecedentRetriever"/>'s
-    /// remarks for why a relative cutoff replaced a fixed topN as the
-    /// primary selection mechanism: real data showed even rank 20-30 stayed
-    /// thematically relevant once TF-IDF fixed the old noise problem, so a
-    /// fixed count left value on the table, while a floor forcing a
-    /// below-threshold entry in undermines the point of having a quality bar
-    /// at all. Scores passed in are expected to already include any bonuses
-    /// the caller wants applied — this method itself is bonus-agnostic.</summary>
-    public List<CorpusEntry> SelectByRelativeCutoff(List<(int Index, double Score)> scored, double relativeCutoff = 0.4)
+    /// <summary>Sorts descending by score (ties broken first by <paramref
+    /// name="priorityOf"/> when supplied — issue #4's "c" hint finder passes
+    /// its Notes trust-tier here, since a same-mod hint from a more
+    /// trustworthy source should win a tie over the class's own default
+    /// shorter-English-first tie-break, which still applies afterward for
+    /// any tie the priority itself doesn't resolve) and keeps only entries
+    /// scoring at least <paramref name="relativeCutoff"/> (default 40%) of
+    /// the top entry's own score — no fixed count, no floor. See <see
+    /// cref="PrecedentRetriever"/>'s remarks for why a relative cutoff
+    /// replaced a fixed topN as the primary selection mechanism: real data
+    /// showed even rank 20-30 stayed thematically relevant once TF-IDF fixed
+    /// the old noise problem, so a fixed count left value on the table, while
+    /// a floor forcing a below-threshold entry in undermines the point of
+    /// having a quality bar at all. Scores passed in are expected to already
+    /// include any bonuses the caller wants applied — this method itself is
+    /// bonus-agnostic.</summary>
+    /// <param name="priorityOf">Optional: maps an entry's index to a
+    /// tie-break priority (lower wins). Omit for plain shorter-first tie-break
+    /// (b's own use — <see cref="PrecedentRetriever"/> has no such concept).</param>
+    public List<CorpusEntry> SelectByRelativeCutoff(List<(int Index, double Score)> scored, double relativeCutoff = 0.4, Func<int, int>? priorityOf = null)
     {
         if (scored.Count == 0) return new List<CorpusEntry>();
 
         scored.Sort((a, b) =>
         {
             var byScore = b.Score.CompareTo(a.Score);
-            return byScore != 0 ? byScore : _entries[a.Index].English.Length.CompareTo(_entries[b.Index].English.Length);
+            if (byScore != 0) return byScore;
+            if (priorityOf != null)
+            {
+                var byPriority = priorityOf(a.Index).CompareTo(priorityOf(b.Index));
+                if (byPriority != 0) return byPriority;
+            }
+            return _entries[a.Index].English.Length.CompareTo(_entries[b.Index].English.Length);
         });
 
         var cutoff = scored[0].Score * relativeCutoff;

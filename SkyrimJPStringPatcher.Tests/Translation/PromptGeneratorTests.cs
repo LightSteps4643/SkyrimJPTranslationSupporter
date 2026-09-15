@@ -138,7 +138,12 @@ public class PromptGeneratorTests
 
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), TargetPlugin, outputDir, log, llmLocal: fakeLlm);
 
-            Assert.Equal(1, fakeLlm.CallCount);
+            // 2026-09-16: このフィクスチャにはSjptsTestMod向けに未解決候補が
+            // 4件あり、fakeが解決できるのは"Sjpts Llm Candidate"だけ。1回目の
+            // 呼び出しでそれが解決されて進捗ありと判定されるため（進捗ベースの
+            // 自己終了条件——finish_reason=lengthの有無は問わない）、残り3件を
+            // 対象に2回目の呼び出しが行われる（そこでは解決0件のため終了）。
+            Assert.Equal(2, fakeLlm.CallCount);
             var pluginDir = Path.Combine(outputDir, "SjptsTestMod");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
             Assert.Equal(("LLMによる訳", "TranslationLocalLlm"), translations["Sjpts Llm Candidate"]);
@@ -175,15 +180,28 @@ public class PromptGeneratorTests
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), TargetPlugin, outputDir, log, llmLocal: fakeLlm);
 
             var pluginDir = Path.Combine(outputDir, "SjptsTestMod");
-            var promptBatchPath = Path.Combine(pluginDir, "prompt_localLLM_batch1_of_1.txt");
-            Assert.True(File.Exists(promptBatchPath));
-            var promptBatchContent = File.ReadAllText(promptBatchPath);
-            Assert.Equal(fakeLlm.LastPromptReceived, promptBatchContent);
-            Assert.Contains("Target: <SJPTS_TARGET>Sjpts Llm Candidate</SJPTS_TARGET>", promptBatchContent);
+            // 2026-09-16: このフィクスチャは未解決4件のうちfakeが1件しか解決
+            // できないため、進捗ベースの自己終了条件により2回目の呼び出しが
+            // 発生する（RunOne_LocalLlmSucceeds_ResolvesWithTranslationLocalLlmTag
+            // 参照）。ファイル名は「呼び出し番号のみ」（合計回数は事前に分から
+            // ないため「_of_総数」は付かない）——LastPromptReceivedは直近
+            // （2回目）の呼び出しを指すので、それに対応する2回目のファイルと
+            // 突き合わせる。2回目の送信対象には既に解決済みの
+            // "Sjpts Llm Candidate"は含まれない。
+            var promptCallPath = Path.Combine(pluginDir, "prompt_localLLM_call2.txt");
+            Assert.True(File.Exists(promptCallPath));
+            var promptCallContent = File.ReadAllText(promptCallPath);
+            Assert.Equal(fakeLlm.LastPromptReceived, promptCallContent);
+            Assert.Contains("Target: <SJPTS_TARGET>Sjpts Unresolved Candidate</SJPTS_TARGET>", promptCallContent);
+            // "Sjpts Llm Candidate" itself is no longer sent as a translation
+            // target (already resolved in call 1) — it may legitimately still
+            // appear inside issue #4's same-mod hint block, since the other
+            // candidates share vocabulary with it.
+            Assert.DoesNotContain("Target: <SJPTS_TARGET>Sjpts Llm Candidate</SJPTS_TARGET>", promptCallContent);
 
             // Only this run's own step-5 file exists — no leftover step-6
             // (cloudLLM) file from a run that never enabled step 6.
-            Assert.Empty(Directory.GetFiles(pluginDir, "prompt_cloudLLM_batch*.txt"));
+            Assert.Empty(Directory.GetFiles(pluginDir, "prompt_cloudLLM_call*.txt"));
         }
         finally
         {
@@ -236,7 +254,12 @@ public class PromptGeneratorTests
                 Console.SetOut(originalOut);
             }
 
-            Assert.Equal(1, fakeLlm.CallCount);
+            // 2026-09-16: this plugin's 6 fixture candidates used to fit in a
+            // single batch under the old 100%-of-batchCharLimit packing
+            // budget; now that packing reserves ~25% for issue #4's "c" block
+            // (SameModHintBudgetRatio) even when c ends up empty, they split
+            // into 2 sub-batches, so the local LLM is called twice.
+            Assert.Equal(2, fakeLlm.CallCount);
             var pluginDir = Path.Combine(outputDir, "SjptsMatchingEdgeCases");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
@@ -716,8 +739,13 @@ public class PromptGeneratorTests
             Assert.Equal(("バッチ候補一", "TranslationLocalLlm"), translations["Sjpts Batch Candidate One"]);
             Assert.Equal(("バッチ候補二", "TranslationLocalLlm"), translations["Sjpts Batch Candidate Two"]);
 
+            // 2026-09-16: ラウンド/バッチの2階層をやめ、LLM呼び出し1回=1
+            // イテレーションのフラットなループにしたため、「合計何回のバッチ
+            // 呼び出しに分割するか」を事前にまとめて報告するログは無くなり、
+            // 呼び出しのたびに「未解決N件のうちM件を送信」と報告するように
+            // なった。3回目の呼び出しが実際に行われたことを確認する。
             var logText = File.ReadAllText(Path.Combine(root, "Translation", "translation.log"));
-            Assert.Contains("3回のバッチ呼び出しに分割", logText);
+            Assert.Contains("呼び出し3", logText);
         }
         finally
         {
@@ -1301,12 +1329,19 @@ public class PromptGeneratorTests
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm, stageOptions: stages);
 
             var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases");
-            var round1Prompt = File.ReadAllText(Path.Combine(pluginDir, "prompt_localLLM_batch1_of_1.txt"));
-            var round2Prompt = File.ReadAllText(Path.Combine(pluginDir, "prompt_localLLM_batch1_of_1_round2.txt"));
+            // 2026-09-16: ラウンド/バッチの2階層をやめたため、ファイル名は
+            // 呼び出し番号のみ（"call1.txt"/"call2.txt"、"_of_総数"や
+            // "_round番号"は付かない）。
+            var round1Prompt = File.ReadAllText(Path.Combine(pluginDir, "prompt_localLLM_call1.txt"));
+            var round2Prompt = File.ReadAllText(Path.Combine(pluginDir, "prompt_localLLM_call2.txt"));
 
             Assert.DoesNotContain("Same-mod translations so far", round1Prompt);
             Assert.Contains("Same-mod translations so far", round2Prompt);
-            Assert.Contains("\"Sjpts Format Edge Case Candidate\" → \"訳文\"", round2Prompt);
+            // 2026-09-16: legend+numeric code format (validated design) —
+            // step 5's local LLM resolution tags with "TranslationLocalLlm",
+            // SameModTrustTier priority 7.
+            Assert.Contains("7=translated by a local LLM", round2Prompt);
+            Assert.Contains("\"Sjpts Format Edge Case Candidate\"\t\"訳文\"\t7", round2Prompt);
         }
         finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ } }
     }
