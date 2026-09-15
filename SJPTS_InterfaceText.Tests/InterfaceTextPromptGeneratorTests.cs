@@ -225,6 +225,35 @@ public class InterfaceTextPromptGeneratorTests
         finally { }
     }
 
+    /// <summary>
+    /// issue #4 (c: same-mod hints), 2026-09-16 — mirrors
+    /// PromptGeneratorTests' own ESP-side retry-round test. Round 1 resolves
+    /// "$Foo" ("Frostwind Blade") and truncates before "$Bar" ("Frostwind
+    /// Shield", sharing "Frostwind"); round 2's automatic retry prompt must
+    /// carry a "Same-mod translations so far" block naming round 1's own
+    /// result, and round 1's own prompt must not have one (nothing was
+    /// resolved yet this session when it was built).</summary>
+    [Fact]
+    public void ApplyLlmStep_RetryRound_IncludesSameModHintFromEarlierRoundsOwnResult()
+    {
+        var pending = new List<(string Key, string English)> { ("$Foo", "Frostwind Blade"), ("$Bar", "Frostwind Shield") };
+        var fake = new FakeTranslator();
+        fake.Enqueue("<SJPTS_TARGET>Frostwind Blade</SJPTS_TARGET>\t氷風の刃", truncated: true); // round 1: "$Bar" never answered
+        fake.Enqueue("<SJPTS_TARGET>Frostwind Shield</SJPTS_TARGET>\t氷風の盾", truncated: false); // round 2: the automatic retry
+
+        using var log = OpenTempLog(out var dir);
+        try
+        {
+            InterfaceTextPromptGenerator.ApplyLlmStep(pending, fake, "TestMod", log, null, 12_000, dir, "localLLM");
+
+            Assert.Equal(2, fake.PromptsReceived.Count);
+            Assert.DoesNotContain("Same-mod translations so far", fake.PromptsReceived[0]);
+            Assert.Contains("Same-mod translations so far", fake.PromptsReceived[1]);
+            Assert.Contains("\"Frostwind Blade\" → \"氷風の刃\"", fake.PromptsReceived[1]);
+        }
+        finally { }
+    }
+
     /// <summary>2026-09-13: real bug — `batchLabel` ("バッチ1/2"/"バッチ") is
     /// Japanese, but was embedded verbatim into English-only strings (the
     /// DetailAndReport consoleText param and trace.Warning, both meant to be

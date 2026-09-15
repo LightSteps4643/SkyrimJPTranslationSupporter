@@ -167,6 +167,16 @@ public static class InterfaceTextPromptGenerator
         // 「まだ未解決が残っている」「直前のラウンドで打ち切りが実際に発生
         // した」「直前のラウンドで1件以上進捗があった」の3条件がすべて揃う
         // 間だけラウンドを重ねる。
+        // issue #4 (c: same-mod hints), 2026-09-16: this mod's own text
+        // already resolved this session, restricted to
+        // SameModHintBlockBuilder.IsEligibleMethod's trust tier — mirrors
+        // Translation/PromptGenerator.cs's own ApplyLlmStep. No DsdType
+        // concept exists for UI strings, so the record-type bonus that
+        // matters on the ESP side never applies here (an empty type is
+        // always a no-op bonus) — this is otherwise the exact same shared
+        // TF-IDF+cosine engine.
+        var englishByKey = pending.ToDictionary(e => e.Key, e => e.English, StringComparer.Ordinal);
+
         var round = 0;
         var circuitOpened = false;
         while (true)
@@ -181,6 +191,13 @@ public static class InterfaceTextPromptGenerator
             // impossible within this mod.
             var byText = stillPending.GroupBy(e => e.English, StringComparer.Ordinal).ToList();
             if (byText.Count == 0) break;
+
+            var sameModPool = result
+                .Where(kv => SameModHintBlockBuilder.IsEligibleMethod(kv.Value.Notes))
+                .Select(kv => new CorpusEntry(englishByKey[kv.Key], kv.Value.Japanese, modName, kv.Value.Notes))
+                .GroupBy(e => e.English, StringComparer.Ordinal)
+                .Select(g => g.First())
+                .ToList();
 
             var blocks = byText.Select(g => (Group: g, Block: BuildBlock(g))).ToList();
 
@@ -230,6 +247,13 @@ public static class InterfaceTextPromptGenerator
             }
 
             var promptBuilder = new System.Text.StringBuilder(BuildInstruction(modDisplayName));
+            // issue #4 (c): empty on round 1 (nothing resolved yet this
+            // session for this mod), grows as later rounds add to the pool.
+            var sameModBlock = SameModHintBlockBuilder.BuildBlock(
+                sameModPool,
+                batch.Select(b => (b.Group.Key, "")).ToList(),
+                batchCharLimit);
+            if (sameModBlock.Length > 0) promptBuilder.Append(sameModBlock);
             foreach (var (_, block) in batch) promptBuilder.Append(block);
             var promptText = promptBuilder.ToString();
 

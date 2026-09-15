@@ -720,6 +720,19 @@ public static class PromptGenerator
         //   3. 直前のラウンドで1件以上、新規に解決できた（＝進捗がゼロなら
         //      無限ループになり得るため、固定回数の上限の代わりに使う）
         var answers = new Dictionary<string, AutoTranslationResult>(StringComparer.Ordinal);
+        // issue #4 (c: same-mod hints, 2026-09-16): everything resolved so
+        // far in this run for this plugin — steps 1-4, an earlier step 5 (when
+        // this call is for step 6), and earlier ROUNDS of this very step —
+        // restricted to SameModHintBlockBuilder.IsEligibleMethod's trust
+        // tier. Recomputed once per ROUND (not per sub-batch within a round,
+        // for simplicity — a sub-batch later in the same round doesn't see
+        // an earlier sub-batch's own brand-new answers from that same round,
+        // only prior rounds'/steps').
+        List<(Candidate Candidate, AutoTranslationResult? Auto)> ResolvedSoFar() =>
+            resolved.Select(r => r.Auto == null && answers.TryGetValue(r.Candidate.CurrentText, out var a)
+                ? (r.Candidate, Auto: (AutoTranslationResult?)a)
+                : r).ToList();
+
         var round = 0;
         var circuitOpened = false;
         while (true)
@@ -728,6 +741,8 @@ public static class PromptGenerator
             var stillUnresolved = beforeStep.Where(c => !answers.ContainsKey(c.CurrentText)).ToList();
             var byTextThisRound = stillUnresolved.GroupBy(c => c.CurrentText, StringComparer.Ordinal).ToList();
             if (byTextThisRound.Count == 0) break;
+
+            var sameModPool = BuildSameModHintPool(ResolvedSoFar(), plugin);
 
         // 各グループのブロック本文を先に1回だけ組み立て、その文字数を見ながら
         // batchCharLimit以下になるようサブバッチへ分割する。1件だけで上限を
@@ -802,6 +817,15 @@ public static class PromptGenerator
             }
 
             var promptBuilder = new System.Text.StringBuilder(LlmBatchInstruction);
+            // issue #4 (c): a single shared block for this whole batch, placed
+            // right after the fixed instruction and before the candidate
+            // blocks — empty on round 1 (nothing resolved yet this session for
+            // this plugin) and grows as later rounds/steps add to the pool.
+            var sameModBlock = SameModHintBlockBuilder.BuildBlock(
+                sameModPool,
+                batch.Select(b => (b.Group.Key, b.Group.First().RecordType)).ToList(),
+                batchCharLimit);
+            if (sameModBlock.Length > 0) promptBuilder.Append(sameModBlock);
             foreach (var (_, block, _) in batch)
                 promptBuilder.Append(block);
             var promptText = promptBuilder.ToString();
@@ -1051,12 +1075,21 @@ public static class PromptGenerator
         }
 
         if (answers.Count == 0) return resolved;
-        return resolved
-            .Select(r => r.Auto == null && answers.TryGetValue(r.Candidate.CurrentText, out var a)
-                ? (r.Candidate, Auto: (AutoTranslationResult?)a)
-                : r)
-            .ToList();
+        return ResolvedSoFar();
     }
+
+    /// <summary>issue #4 (c): builds the pool <see cref="SameModHintBlockBuilder.BuildBlock"/>
+    /// draws hints from — this plugin's own candidates already resolved this
+    /// session, restricted to <see cref="SameModHintBlockBuilder.IsEligibleMethod"/>'s
+    /// trust tier (excludes the `AutoCorpus`* family, already reachable via
+    /// "Reference examples", and the `*NoJapanese` variants, a possible
+    /// translation failure).</summary>
+    private static List<CorpusEntry> BuildSameModHintPool(
+        IEnumerable<(Candidate Candidate, AutoTranslationResult? Auto)> resolved, string plugin) =>
+        resolved
+            .Where(r => r.Auto != null && SameModHintBlockBuilder.IsEligibleMethod(r.Auto.Method))
+            .Select(r => new CorpusEntry(r.Candidate.CurrentText, r.Auto!.Japanese, plugin, r.Auto.Method, r.Candidate.RecordType))
+            .ToList();
 
     /// <summary>2026-09-12: replaces the old NormalizeBatchResponseSource's
     /// guess-and-strip approach (leading "- ", leading "Target:", then a

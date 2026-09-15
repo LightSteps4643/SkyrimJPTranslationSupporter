@@ -1272,6 +1272,46 @@ public class PromptGeneratorTests
     }
 
     /// <summary>
+    /// issue #4 (c: same-mod hints), 2026-09-16 — the actual bug this exists
+    /// to fix: within a single run, a re-batch after a truncated round must
+    /// see what THIS SAME session already translated for THIS SAME mod, so a
+    /// shared word doesn't drift to a different rendering between rounds.
+    /// Round 1's batch has all 3 of this fixture's candidates; the fake
+    /// always resolves only "Sjpts Format Edge Case Candidate" and reports
+    /// truncation, so round 2 retries the other two ("Target:" and "Sjpts
+    /// Trailing Whitespace Candidate ") — the latter shares "Sjpts" and
+    /// "Candidate" with what round 1 just resolved, so round 2's prompt (the
+    /// LAST call made, since round 2 makes zero further progress and the
+    /// retry loop then stops) must carry a "Same-mod translations so far"
+    /// block naming it. Round 1's own prompt must NOT have one — nothing was
+    /// resolved yet this session when it was built.</summary>
+    [Fact]
+    public void RunOne_RetryRound_IncludesSameModHintFromEarlierRoundsOwnResult()
+    {
+        const string plugin = "SjptsTargetTagCases.esp";
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outputDir = Path.Combine(root, "out_temp");
+            using var log = OpenTestLog(root);
+            var fakeLlm = FakeTextTranslator.SucceedingRawTruncated("<SJPTS_TARGET>Sjpts Format Edge Case Candidate</SJPTS_TARGET>\t訳文");
+            var stages = new TranslationStageOptions(EnableMeaning: false, EnableTransliteration: false, EnableNameFallback: false);
+
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm, stageOptions: stages);
+
+            var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases");
+            var round1Prompt = File.ReadAllText(Path.Combine(pluginDir, "prompt_localLLM_batch1_of_1.txt"));
+            var round2Prompt = File.ReadAllText(Path.Combine(pluginDir, "prompt_localLLM_batch1_of_1_round2.txt"));
+
+            Assert.DoesNotContain("Same-mod translations so far", round1Prompt);
+            Assert.Contains("Same-mod translations so far", round2Prompt);
+            Assert.Contains("\"Sjpts Format Edge Case Candidate\" → \"訳文\"", round2Prompt);
+        }
+        finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ } }
+    }
+
+    /// <summary>
     /// 2026-09-13: real bug — `batchLabel` ("バッチ1/2"/"バッチ", built once
     /// per batch) is Japanese, but it was being embedded verbatim into
     /// English-only strings (trace.Warning and the DetailAndReport consoleText
