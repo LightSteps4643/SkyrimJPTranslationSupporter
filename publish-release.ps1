@@ -127,6 +127,13 @@ New-Item -ItemType Directory -Force -Path $importDir | Out-Null
 $interfaceTextImportDir = Join-Path $OutputDir "InterfaceText\Translation\import"
 New-Item -ItemType Directory -Force -Path $interfaceTextImportDir | Out-Null
 
+# 2026-09-16: DSD出力先の"out"フォルダも、Translation/import等と同様に配布物へ
+# 空フォルダとして同梱する。CLI（DsdWriter）は生成成功時に自動作成するが、
+# 初回生成前や生成失敗後にGUIの「DSD出力フォルダを開く」を押すと
+# フォルダが存在せず「フォルダがまだありません」と誤って警告されるため。
+$outDir = Join-Path $OutputDir "out"
+New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+
 # v0.54.0: 謝辞・クレジット表記。エンドユーザーの目に触れる配布物に必ず含める。
 Copy-Item -Path (Join-Path $root "CREDITS.md") -Destination $OutputDir -Force
 
@@ -140,7 +147,7 @@ if (-not (Test-Path $zipPath)) { throw "zipの作成に失敗しました: $zipP
 Write-Host ""
 Write-Host "完了: $OutputDir"
 Write-Host "  Skyrim_JP_Translation_Supporter.exe（直下） / SJPTS_InGameText\SJPTS_InGameText.exe（サブフォルダ） /"
-Write-Host "  SJPTS_InterfaceText\SJPTS_InterfaceText.exe（サブフォルダ） / Data/ / Translation/import/ / InterfaceText/Translation/import/ を含む"
+Write-Host "  SJPTS_InterfaceText\SJPTS_InterfaceText.exe（サブフォルダ） / Data/ / Translation/import/ / InterfaceText/Translation/import/ / out/ を含む"
 Write-Host "  ソースコード・開発用ドキュメント（DESIGN_NOTES.md等）は含まれない"
 Write-Host "  起動は直下の「Skyrim_JP_Translation_Supporter.exe」から（CLIは通常直接使わない）"
 Write-Host "  zip: $zipPath"
