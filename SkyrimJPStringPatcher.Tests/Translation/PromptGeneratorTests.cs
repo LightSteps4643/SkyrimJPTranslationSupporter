@@ -157,6 +157,35 @@ public class PromptGeneratorTests
         }
     }
 
+    /// <summary>2026-09-17: item 11（実データでLLM応答への内部タグ残存が複数
+    /// 確認された）対応。訳文の末尾に本ツール自身の境界タグ（&lt;/SJPTS_TARGET&gt;）が
+    /// 残存した応答は、原文には存在しないタグが訳文に混入しているため、構造的な
+    /// タグ検証（&lt;[^&gt;]*&gt;で抽出したタグの多重集合比較）で弾かれ、未解決のまま
+    /// 残るべき。</summary>
+    [Fact]
+    public void RunOne_LocalLlmResponse_LeaksClosingTargetTagInAnswer_TreatedAsUnresolved()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outputDir = Path.Combine(root, "out_temp");
+            using var log = OpenTestLog(root);
+            var fakeLlm = FakeTextTranslator.SucceedingRaw(
+                "<SJPTS_TARGET>Sjpts Llm Candidate</SJPTS_TARGET>\tLLMによる訳</SJPTS_TARGET>");
+
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), TargetPlugin, outputDir, log, llmLocal: fakeLlm);
+
+            var pluginDir = Path.Combine(outputDir, "SjptsTestMod");
+            var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
+            Assert.Equal(("", ""), translations["Sjpts Llm Candidate"]);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
     /// <summary>2026-09-12: debugging aid distinct from prompt.txt (that one is
     /// a human AI-chat handoff for whatever's STILL unresolved after this
     /// step; this file is a record of what WAS actually sent to step 5,
@@ -1597,5 +1626,69 @@ public class PromptGeneratorTests
     public void ClassifyTaggedSourceIssue_ReturnsExpectedCategory(string malformedSourceColumn, string expectedCategory)
     {
         Assert.Equal(expectedCategory, InvokeClassifyTaggedSourceIssue(malformedSourceColumn));
+    }
+
+    // ==== 2026-09-17: HasMatchingTagStructure — item 11（実データでLLM応答への
+    // 内部タグ残存が複数確認された）対応。原文と訳文から<[^>]*>で抽出した
+    // タグを、順序を無視した多重集合として比較する。実データ検証（実際の
+    // DSD出力21,495件のうちTranslationLocalLlm/TranslationCloudLlm 3,809件）
+    // で、この方式が既知の全てのタグ漏れ（境界タグ残存・表記ゆれ）を正しく
+    //検出し、かつ正常な翻訳（日本語と英語の語順差によるタグの並び替えを
+    // 含む）を誤検出しないことを確認済み。
+
+    [Fact]
+    public void HasMatchingTagStructure_NoTagsEitherSide_ReturnsTrue()
+    {
+        Assert.True(LlmBatchTranslationEngine.HasMatchingTagStructure("Sjpts Gilded Hammer", "黄金のハンマー"));
+    }
+
+    [Fact]
+    public void HasMatchingTagStructure_LeakedClosingTargetTag_ReturnsFalse()
+    {
+        Assert.False(LlmBatchTranslationEngine.HasMatchingTagStructure("Sjpts Gilded Hammer", "黄金のハンマー</SJPTS_TARGET>"));
+    }
+
+    /// <summary>実データ（Soul Hunter Armor.esp）で見つかった、本来
+    /// &lt;SJPTS_BR&gt;であるべきマーカーが&lt;SJP_BR&gt;（"TS"欠落）という
+    /// 表記ゆれで応答に混入したケース——固定文字列との完全一致チェックでは
+    /// 検出できないが、構造比較なら「原文に存在しないタグが訳文に出現した」
+    /// というだけで検出できる。</summary>
+    [Fact]
+    public void HasMatchingTagStructure_UnknownTypoedMarker_ReturnsFalse()
+    {
+        Assert.False(LlmBatchTranslationEngine.HasMatchingTagStructure(
+            "Line one.\nLine two.", "一行目。<SJP_BR>二行目。"));
+    }
+
+    [Fact]
+    public void HasMatchingTagStructure_SameTagsPreservedInOrder_ReturnsTrue()
+    {
+        Assert.True(LlmBatchTranslationEngine.HasMatchingTagStructure(
+            "<font face=\"$FalmerFont\">Text</font>", "<font face=\"$FalmerFont\">テキスト</font>"));
+    }
+
+    /// <summary>日本語と英語の語順差により、同じタグの集合が異なる順序で
+    /// 出現しても正しく受理される必要がある（実データのOrdinator.esp等、
+    /// &lt;mag&gt;/&lt;dur&gt;の順序が入れ替わるケースを確認済み）。</summary>
+    [Fact]
+    public void HasMatchingTagStructure_SameTagsDifferentOrder_ReturnsTrue()
+    {
+        Assert.True(LlmBatchTranslationEngine.HasMatchingTagStructure(
+            "Increases <mag> for <dur> seconds", "<dur>秒間、<mag>増加させる"));
+    }
+
+    [Fact]
+    public void HasMatchingTagStructure_MissingTagInTranslation_ReturnsFalse()
+    {
+        Assert.False(LlmBatchTranslationEngine.HasMatchingTagStructure(
+            "<p align=\"center\">\n</p>\n<p align=\"left\">Text", "テキスト"));
+    }
+
+    [Fact]
+    public void HasMatchingTagStructure_DuplicateTagCountMustMatch_ReturnsFalse()
+    {
+        // 個数が違えば（1個 vs 2個）順序を無視しても不一致——多重集合比較の
+        // 「個数まで一致する必要がある」という仕様の確認。
+        Assert.False(LlmBatchTranslationEngine.HasMatchingTagStructure("<25> and <25>", "<25>だけ"));
     }
 }

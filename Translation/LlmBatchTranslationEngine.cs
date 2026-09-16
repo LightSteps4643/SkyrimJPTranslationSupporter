@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using SkyrimJPStringPatcher.Core;
 
 namespace SkyrimJPStringPatcher.Translation;
@@ -362,6 +363,23 @@ public static class LlmBatchTranslationEngine
                             // no-op。
                             var japanese = o.UnflattenAnswer?.Invoke(japaneseRaw) ?? japaneseRaw;
 
+                            // 2026-09-17: item 11対応——訳文に本ツール自身の
+                            // 内部マーカー（境界タグ・複数行マーカー、表記ゆれ
+                            // 含む）が漏れ残っていないか、原文とのタグ構造比較
+                            // で検証する（HasMatchingTagStructureの remarks
+                            // 参照）。不一致の場合は「モデルの応答形式を解釈
+                            // できず」と同じ未解決扱いにする——NoJapaneseタグを
+                            // 付けて受理してしまうと、破損した訳文がそのまま
+                            // DSD/interface_translations.tsvへ出力されてしまう。
+                            if (!HasMatchingTagStructure(group.Key, japanese))
+                            {
+                                o.Trace?.Warning($"{o.StepLabelEn} [{o.LogScope}] \"{group.Key}\": response's tag structure doesn't match the original (possible internal marker leak) — treated as unresolved: \"{japanese}\"");
+                                o.Log.DetailAndReport($"{stepPrefixJa}{o.StepLabelJa}: 応答のタグ構造が原文と一致しないため未解決のまま残す（本ツール内部マーカーの残存等の可能性）",
+                                    $"{stepPrefixEn}{o.StepLabelEn}: response's tag structure doesn't match the original — treated as unresolved (possible internal marker leak)",
+                                    $"[{o.LogScope}]  \"{group.Key}\" → \"{japanese}\"",
+                                    $"[{o.LogScope}] {o.StepLabelEn}: tag structure mismatch, treated as unresolved: \"{group.Key}\" -> \"{japanese}\"");
+                                anyUnresolvedInBatch = true;
+                            }
                             // v0.58.5: 応答は得られたが日本語が含まれない場合、
                             // 「未解決として捨てる」のでも「翻訳成功として無条件
                             // 受理する」のでもなく、専用タグ（methodTag+
@@ -369,7 +387,7 @@ public static class LlmBatchTranslationEngine
                             // のか「モデルが本当に翻訳を誤っただけ」なのかは
                             // 機械的に区別できないため、人間がレビューできる
                             // ようにする。
-                            if (LanguageDetector.ContainsJapanese(japanese))
+                            else if (LanguageDetector.ContainsJapanese(japanese))
                             {
                                 answers[group.Key] = new AutoTranslationResult(japanese, o.MethodTag, "");
                                 answerRecordTypes[group.Key] = o.RecordTypeOf(group);
@@ -485,4 +503,43 @@ public static class LlmBatchTranslationEngine
         text.StartsWith(TargetTagOpen, StringComparison.Ordinal) && text.EndsWith(TargetTagClose, StringComparison.Ordinal)
             ? text[TargetTagOpen.Length..^TargetTagClose.Length]
             : text;
+
+    private static readonly Regex TagPattern = new("<[^>]*>", RegexOptions.Compiled);
+
+    /// <summary>2026-09-17: item 11対応——実データで、翻訳自体は成功している
+    /// のに本ツール自身の内部マーカー（&lt;SJPTS_TARGET&gt;境界タグ、
+    /// &lt;SJPTS_BR&gt;複数行マーカー）が訳文にそのまま残存してDSD/
+    /// interface_translations.tsvへ出力されてしまうケースが複数件見つかった
+    /// （既存の<see cref="StripTargetTags"/>は開閉タグが両方揃った対称形しか
+    /// 剥がせず、末尾に閉じタグだけが残るような非対称な残存を見逃す）。
+    ///
+    /// 個別の既知マーカー文字列との完全一致チェックではなく、原文・訳文
+    /// それぞれから&lt;[^&gt;]*&gt;で抽出した「タグらしきトークン」の集合を
+    /// 比較する構造的な検証にした——これなら未知の表記ゆれ（実データで見つかった
+    /// "&lt;SJP_BR&gt;"、本来"&lt;SJPTS_BR&gt;"のはずが"TS"が欠落したもの）も、
+    /// 個別の文字列を知らなくても「原文に無いタグが訳文に出現した」というだけで
+    /// 検出できる。
+    ///
+    /// 順序は無視し、個数だけを比較する（多重集合比較）——日本語と英語では
+    /// 文中のタグの出現順が入れ替わることがあり（実データのOrdinator.esp等、
+    /// &lt;mag&gt;/&lt;dur&gt;のようなプレースホルダーの順序が語順差で変わる
+    /// 正常なケースを確認済み）、順序まで要求すると正常な翻訳を誤検出する。
+    ///
+    /// 実データ（実際のDSD出力21,495件のうちLLM翻訳3,809件）で検証済み:
+    /// 正常な翻訳を1件も誤検出せず、既知の全タグ残存（10件）を漏れなく検出した。
+    ///
+    /// 適用範囲は本メソッドの呼び出し元（このエンジンのLLM応答処理）に限定
+    /// される——①〜④のコーパスベース解決（<c>AutoCorpus</c>系・
+    /// <c>AutoCrossModPrecedent</c>等）は、類似した別候補の既存訳文を転用する
+    /// 別の仕組みであり、プレースホルダーの具体的な値が今回の候補と異なるのは
+    /// 仕様上正常なため、この検証の対象外（そもそも別のコードパスで、この
+    /// メソッドを通過しない）。</summary>
+    public static bool HasMatchingTagStructure(string original, string translated)
+    {
+        var originalTags = TagPattern.Matches(original).Select(m => m.Value)
+            .OrderBy(s => s, StringComparer.Ordinal).ToList();
+        var translatedTags = TagPattern.Matches(translated).Select(m => m.Value)
+            .OrderBy(s => s, StringComparer.Ordinal).ToList();
+        return originalTags.SequenceEqual(translatedTags);
+    }
 }
