@@ -341,7 +341,7 @@ public sealed class TranslationDetailForm : Form
         foreach (var row in _rows)
         {
             var key = RowKey(row);
-            var japanese = _edits.TryGetValue(key, out var edited) ? Escape(edited) : row.GetValueOrDefault("Japanese", "");
+            var japanese = _edits.TryGetValue(key, out var edited) ? TsvEscaping.Escape(edited) : row.GetValueOrDefault("Japanese", "");
             var notes = _edits.ContainsKey(key) ? "ModifiedByUser" : row.GetValueOrDefault("Notes", "");
             lines.Add(string.Join('\t',
                 row.GetValueOrDefault("FormId", ""),
@@ -356,43 +356,30 @@ public sealed class TranslationDetailForm : Form
         File.WriteAllLines(_path, lines, new System.Text.UTF8Encoding(true)); // BOM付きUTF-8 — CLI側の出力と同じ形式
     }
 
-    // Mirrors Core/TsvEscaping.cs's Escape/Unescape exactly — GUI has no reference
-    // to Core, so this is a small deliberate duplication of two pure string
-    // functions, not a copy of pipeline logic. v0.55.4: Unescape rewritten to a
-    // single left-to-right scan — see Core/TsvEscaping.cs's remarks for why the
-    // old sequential-Replace version corrupted a literal backslash immediately
-    // followed by a literal 'n'/'t' (e.g. a Windows path).
+    // 2026-09-17: the round-trip-safety logic (backslash/tab/newline escaping)
+    // is now shared with Core/TsvEscaping.cs via the file-level link already
+    // set up for InterfaceTextPanel.cs/InterfaceTextDetailForm.cs (see
+    // SkyrimJPStringPatcherGui.csproj) — GUI still has zero project references
+    // to Core, only this one source file is compiled a second time. `Escape`
+    // calls `TsvEscaping.Escape` directly at its one call site (identical
+    // behavior, no wrapper needed); only `Unescape` still needs a form-local
+    // method, for the reason below.
     //
-    // v0.59.0: emits "\r\n" (not a bare "\n") — the resting (non-edit) grid cell
-    // paint (GDI+) renders a bare "\n" as a line break fine, but the native
-    // Win32 multiline EDIT control behind the editing TextBox (see
-    // Grid_EditingControlShowing's tb.Multiline) does not; a bare "\n" was
-    // rendered as no line break at all once a multiline cell entered edit mode,
-    // even though the underlying value/translations.tsv were already correct
-    // (confirmed by inspecting the raw file — this was purely a display-only
-    // bug in the editing control). Escape()'s existing ".Replace("\r", "")"
-    // already strips the "\r" back out on save, so "\r\n" round-trips to the
-    // same single "\n" escape sequence as before — no format change to
-    // translations.tsv.
-    private static string Unescape(string s)
-    {
-        var sb = new System.Text.StringBuilder(s.Length);
-        for (var i = 0; i < s.Length; i++)
-        {
-            if (s[i] == '\\' && i + 1 < s.Length)
-            {
-                switch (s[i + 1])
-                {
-                    case 'n': sb.Append("\r\n"); i++; continue;
-                    case 't': sb.Append('\t'); i++; continue;
-                    case '\\': sb.Append('\\'); i++; continue;
-                }
-            }
-            sb.Append(s[i]);
-        }
-        return sb.ToString();
-    }
-    private static string Escape(string s) => s.Replace("\\", "\\\\").Replace("\t", "\\t").Replace("\n", "\\n").Replace("\r", "");
+    // v0.59.0: this form still needs its OWN display-only adjustment on top of
+    // the shared Unescape — the resting (non-edit) grid cell paint (GDI+)
+    // renders a bare "\n" as a line break fine, but the native Win32 multiline
+    // EDIT control behind the editing TextBox (see Grid_EditingControlShowing's
+    // tb.Multiline) does not; a bare "\n" was rendered as no line break at all
+    // once a multiline cell entered edit mode, even though the underlying
+    // value/translations.tsv were already correct (confirmed by inspecting the
+    // raw file — this was purely a display-only bug in the editing control).
+    // `TsvEscaping.Escape`'s existing ".Replace("\r", "")" already strips the
+    // "\r" back out on save, so "\r\n" round-trips to the same single "\n"
+    // escape sequence as before — no format change to translations.tsv. This
+    // adjustment is intentionally NOT part of the shared Core logic (Interface
+    // 翻訳's own values can never contain a newline in the first place, so it
+    // would be meaningless there) — kept as this form's own thin wrapper.
+    private static string Unescape(string s) => TsvEscaping.Unescape(s).Replace("\n", "\r\n");
 
     private void ApplyFilter()
     {

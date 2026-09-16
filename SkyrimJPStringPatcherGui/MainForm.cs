@@ -838,36 +838,13 @@ public sealed class MainForm : Form
     {
         var untranslatedRows = rows.Where(r => string.IsNullOrEmpty(r.GetValueOrDefault("Japanese"))).ToList();
         var untranslatedCount = untranslatedRows.Count;
-        var untranslatedChars = untranslatedRows.Sum(r => (long)Unescape(r.GetValueOrDefault("EnglishText", "")).Length);
-        var totalChars = rows.Sum(r => (long)Unescape(r.GetValueOrDefault("EnglishText", "")).Length);
+        var untranslatedChars = untranslatedRows.Sum(r => (long)TsvEscaping.Unescape(r.GetValueOrDefault("EnglishText", "")).Length);
+        var totalChars = rows.Sum(r => (long)TsvEscaping.Unescape(r.GetValueOrDefault("EnglishText", "")).Length);
         var ratio = rows.Count == 0 ? 100.0 : 100.0 * (rows.Count - untranslatedCount) / rows.Count;
         var charsRatio = totalChars == 0 ? 100.0 : 100.0 * (totalChars - untranslatedChars) / totalChars;
         return (rows.Count, untranslatedCount, ratio, untranslatedChars, charsRatio);
     }
 
-    // Mirrors Core/TsvEscaping.cs's Unescape — see TranslationDetailForm's identical
-    // helper for why this is duplicated rather than referencing Core. v0.55.4:
-    // rewritten to a single left-to-right scan — see Core/TsvEscaping.cs's
-    // remarks for why the old sequential-Replace version corrupted a literal
-    // backslash immediately followed by a literal 'n'/'t' (e.g. a Windows path).
-    private static string Unescape(string s)
-    {
-        var sb = new System.Text.StringBuilder(s.Length);
-        for (var i = 0; i < s.Length; i++)
-        {
-            if (s[i] == '\\' && i + 1 < s.Length)
-            {
-                switch (s[i + 1])
-                {
-                    case 'n': sb.Append('\n'); i++; continue;
-                    case 't': sb.Append('\t'); i++; continue;
-                    case '\\': sb.Append('\\'); i++; continue;
-                }
-            }
-            sb.Append(s[i]);
-        }
-        return sb.ToString();
-    }
 
     private void Grid_CellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
     {

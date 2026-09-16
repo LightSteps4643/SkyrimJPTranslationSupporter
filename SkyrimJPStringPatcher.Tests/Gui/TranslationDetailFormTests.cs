@@ -1,24 +1,31 @@
 using System.Reflection;
 using SkyrimJPStringPatcherGui;
+using SkyrimJPStringPatcherGui.Services;
 
 namespace SkyrimJPStringPatcher.Tests.Gui;
 
 /// <summary>
-/// TranslationDetailForm.Unescape/Escape are private static string helpers
-/// (a deliberate small duplication of Core/TsvEscaping.cs — see their own
-/// remarks) with no public seam, so this reflects on them directly rather
-/// than instantiating the WinForms Form itself.
+/// 2026-09-17: TranslationDetailForm.Escape/Unescape used to be a deliberate
+/// small duplication of Core/TsvEscaping.cs's own logic (GUI has no project
+/// reference to Core). Now `Escape` calls `TsvEscaping.Escape` (via the
+/// file-level link already used by InterfaceTextPanel.cs/InterfaceTextDetailForm.cs
+/// — see SkyrimJPStringPatcherGui.csproj) directly at its one call site, so
+/// there's no `TranslationDetailForm.Escape` left to reflect on — tests that
+/// need the escaped form call `TsvEscaping.Escape` directly instead. Only
+/// `Unescape` remains a private static helper on `TranslationDetailForm`
+/// itself, since it layers a form-specific display adjustment (CRLF for the
+/// Win32 multiline edit control) on top of the shared `TsvEscaping.Unescape`
+/// — that one still has no public seam, so this reflects on it directly
+/// rather than instantiating the WinForms Form itself. Plain tab/backslash/
+/// newline round-tripping (no CRLF quirk involved) is Core's own
+/// responsibility now and is covered by Core/TsvEscapingTests.cs instead of
+/// being re-tested here.
 /// </summary>
 public class TranslationDetailFormTests
 {
     private static string InvokeUnescape(string s) =>
         (string)typeof(TranslationDetailForm)
             .GetMethod("Unescape", BindingFlags.NonPublic | BindingFlags.Static)!
-            .Invoke(null, [s])!;
-
-    private static string InvokeEscape(string s) =>
-        (string)typeof(TranslationDetailForm)
-            .GetMethod("Escape", BindingFlags.NonPublic | BindingFlags.Static)!
             .Invoke(null, [s])!;
 
     /// <summary>v0.59.0: real-machine report — a multiline translation
@@ -38,23 +45,20 @@ public class TranslationDetailFormTests
         Assert.Equal("line one\r\nline two", result);
     }
 
-    /// <summary>Escape must still round-trip a CRLF-containing value (as
-    /// Unescape now produces, and as a user's own Shift+Enter keystroke in
-    /// the multiline editing TextBox naturally inserts) back to the exact
-    /// same single "\n" escape sequence used before this fix — no format
-    /// change to translations.tsv, no double-escaping.</summary>
+    /// <summary>`TsvEscaping.Escape` must still round-trip a CRLF-containing
+    /// value (as this form's own Unescape now produces, and as a user's own
+    /// Shift+Enter keystroke in the multiline editing TextBox naturally
+    /// inserts) back to the exact same single "\n" escape sequence used
+    /// before this form ever needed the CRLF adjustment — no format change to
+    /// translations.tsv, no double-escaping. Exercises the actual boundary
+    /// between the shared Escape and this form's own Unescape, not just
+    /// Core's own Escape/Unescape pair in isolation (already covered by
+    /// Core/TsvEscapingTests.cs).</summary>
     [Fact]
     public void Escape_CarriageReturnLineFeed_RoundTripsToSingleEscapedNewline()
     {
-        var escaped = InvokeEscape("line one\r\nline two");
+        var escaped = TsvEscaping.Escape("line one\r\nline two");
         Assert.Equal("line one\\nline two", escaped);
         Assert.Equal("line one\r\nline two", InvokeUnescape(escaped));
-    }
-
-    [Fact]
-    public void Escape_Then_Unescape_RoundTrips_ForTabsAndBackslashesToo()
-    {
-        const string original = "path\\to\\file.txt\tafter a tab\r\nsecond line";
-        Assert.Equal(original, InvokeUnescape(InvokeEscape(original)));
     }
 }
