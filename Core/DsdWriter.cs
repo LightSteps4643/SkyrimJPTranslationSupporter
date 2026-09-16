@@ -34,21 +34,33 @@ public static class DsdWriter
     // successive incremental batches coexist as separate, non-colliding files DSD
     // merges together, instead of replacing/shadowing each other.
     //
-    // Residual risk (accepted, not solved by this alone — see DESIGN_NOTES.md's
-    // v0.57.4 entry): DSD's own duplicate-(FormID,Type) resolution is "first file
-    // processed wins" (confirmed by reading Manager.cpp directly — see the v0.4.0
-    // section of DESIGN_HISTORY.md), and directory_iterator's order is not something
-    // this filename scheme controls. So a RE-translation of an already-covered
-    // record (e.g. via --include-stale after the source mod's text changed) isn't
-    // guaranteed to take effect just by adding a new timestamped file — the OLD
-    // entry may still win. This only matters for correcting an existing record, not
-    // for adding newly-translated ones (the common case, and now safe); the user
-    // decided this trade-off is worth it as-is.
-    private static string BuildOutputFileName(DateTime timestamp) => $"SkyrimJPStringPatcher_{timestamp:yyyyMMddHHmmss}.json";
+    // 2026-09-17: confirmed by reading Manager.cpp (processFiles()) directly —
+    // DSD's own duplicate-(FormID,Type) resolution is NOT actually OS/filesystem-
+    // order-dependent as the note below originally assumed. Files within one
+    // plugin folder are explicitly re-sorted by filename in REVERSE alphabetical
+    // order ("reverse order Z first, A last", per Manager.cpp's own comment)
+    // before being processed, and the FIRST one processed for a given key wins
+    // (checked via a "does this key already exist" guard before insert, or
+    // try_emplace, depending on the TranslationType). This means the winner is
+    // fully deterministic and IS controllable via filename: whichever file sorts
+    // alphabetically LAST gets processed FIRST and wins.
+    //
+    // The "zzz_" prefix below exploits this: a lowercase-letter-led name sorts
+    // after (byte-comparison-wise) the vast majority of real-world community
+    // translation-patch names, which are typically plugin-name-led or uppercase-
+    // led (see DsdWriterTests.WriteAll_OutputFileName_SortsAfterTypicalCommunityPatchNames).
+    // Combined with the pre-existing per-run timestamp (below), this makes a
+    // re-translation of an already-covered record (e.g. via --include-stale)
+    // reliably win over BOTH this tool's own earlier output (guaranteed — the
+    // timestamp always increases) AND, in most but not all cases, another mod's
+    // differently-named DSD file (not guaranteed — a third-party file using the
+    // same or a later-sorting trick could still win; this remains a residual,
+    // accepted risk per the original v0.57.4 note, just a smaller one now).
+    private static string BuildOutputFileName(DateTime timestamp) => $"zzz_SkyrimJPStringPatcher_{timestamp:yyyyMMddHHmmss}.json";
 
     /// <summary>
     /// Writes one DSD json per winning plugin under
-    /// &lt;outputRoot&gt;/SKSE/Plugins/DynamicStringDistributor/&lt;WinningPlugin&gt;/SkyrimJPStringPatcher_&lt;timestamp&gt;.json,
+    /// &lt;outputRoot&gt;/SKSE/Plugins/DynamicStringDistributor/&lt;WinningPlugin&gt;/zzz_SkyrimJPStringPatcher_&lt;timestamp&gt;.json,
     /// wiping outputRoot first so every run produces a clean, reproducible result.
     /// Deliberately additive alongside any other mod's DSD json in the same
     /// plugin folder, AND alongside an earlier run's own output once both are

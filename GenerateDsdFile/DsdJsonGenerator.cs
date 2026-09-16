@@ -195,8 +195,8 @@ public static class DsdJsonGenerator
             "* See the output .json for each entry's actual content");
 
         log.Section("特殊な出力処理の記録", "Special output handling notes");
-        log.Line("ファイル名: プラグイン名ではなく、ツール固有の名前＋実行時刻 SkyrimJPStringPatcher_<タイムスタンプ>.json で出力している。",
-            "File name: a tool-specific name plus a run timestamp, SkyrimJPStringPatcher_<timestamp>.json, not the plugin name.");
+        log.Line("ファイル名: プラグイン名ではなく、ツール固有の名前＋実行時刻 zzz_SkyrimJPStringPatcher_<タイムスタンプ>.json で出力している。",
+            "File name: a tool-specific name plus a run timestamp, zzz_SkyrimJPStringPatcher_<timestamp>.json, not the plugin name.");
         log.Line("           固定名だと、既存の翻訳MODが同名ファイルを持つ場合にVFSで上書きし既存訳を消してしまう事故が",
             "           A fixed name risks an existing translation mod with a same-named file getting overwritten in the VFS,");
         log.Line("           実際に起きたため（DESIGN_HISTORYの該当節を参照）。タイムスタンプを付けることで、複数回に",

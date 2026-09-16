@@ -748,6 +748,25 @@ public static class PickUpTargetRunner
                 _ => coverage.ByFormTypeIndex.TryGetValue((formKey, dsdType, index), out var byIdx) ? byIdx : null,
             };
 
+            // 2026-09-17: DSDエントリのstatusが"SJPTS_"接頭辞を持つ場合（＝本ツール
+            // 自身が過去に確定させた値）は、内容（日本語を含むか）を問わず無条件で
+            // カバー済みとして扱う。GenerateDsdFile/DsdJsonGenerator.csの設計上、
+            // TranslationLocalLlmNoJapanese・ModifiedByUser・AutoCorpusOverride等、
+            // 本ツール自身が正当に非日本語値を許容するケースが複数あり、従来は
+            // ContainsJapanese判定だけに頼っていたため、これらが再読込のたびに
+            // 未翻訳候補として検出され続けてしまっていた（実データで確認済み）。
+            // 接頭辞を持たない場合（他modのDSD等）は、従来通りContainsJapaneseで
+            // 判定する——本ツールの決定でない以上、勝手に「意図的」と判断しない
+            // 安全側のデフォルトを維持する。
+            if (cov != null && cov.Status?.StartsWith("SJPTS_", StringComparison.Ordinal) == true)
+            {
+                alreadyCoveredByDsd++;
+                trace?.Trace($"Skip [{dsdType}] {formKey}: already covered by DSD, this tool's own decision (status={cov.Status}) — accepted as-is regardless of content (\"{winner.Text}\" -> \"{cov.TranslatedString}\" in {Path.GetFileName(cov.SourceFile)})");
+                var pluginTallyOwn = coveredByPlugin.GetValueOrDefault(winner.Source.FileName);
+                coveredByPlugin[winner.Source.FileName] = (pluginTallyOwn.Count + 1, pluginTallyOwn.Chars + winner.Text.Length);
+                continue;
+            }
+
             if (cov != null && LanguageDetector.ContainsJapanese(cov.TranslatedString))
             {
                 alreadyCoveredByDsd++;

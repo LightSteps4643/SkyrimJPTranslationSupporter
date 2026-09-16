@@ -286,7 +286,7 @@ public class ProgramCliTests
             foreach (var file in writtenFiles)
             {
                 var name = Path.GetFileName(file);
-                Assert.Matches(@"^SkyrimJPStringPatcher_\d{14}\.json$", name);
+                Assert.Matches(@"^zzz_SkyrimJPStringPatcher_\d{14}\.json$", name);
             }
         }
         finally

@@ -4,7 +4,7 @@ using Mutagen.Bethesda.Plugins;
 
 namespace SkyrimJPStringPatcher.Core;
 
-public sealed record DsdCoverageEntry(string TranslatedString, string? OriginalRecorded, string SourceFile, int Index = 0, string? EditorId = null);
+public sealed record DsdCoverageEntry(string TranslatedString, string? OriginalRecorded, string SourceFile, int Index = 0, string? EditorId = null, string? Status = null);
 
 /// <summary>
 /// v0.3.0: three views over the same scanned coverage, since different DSD
@@ -83,7 +83,7 @@ public static class DsdCoverageScanner
                     // generates candidates for) — restricting to a subset would make
                     // PickUpTarget blind to existing coverage for types outside its
                     // current scope, which future scope expansion will need to see.
-                    var coverageEntry = new DsdCoverageEntry(entry.String, entry.Original, physicalPath, entry.Index, entry.EditorId);
+                    var coverageEntry = new DsdCoverageEntry(entry.String, entry.Original, physicalPath, entry.Index, entry.EditorId, entry.Status);
 
                     if (!string.IsNullOrWhiteSpace(entry.EditorId))
                     {

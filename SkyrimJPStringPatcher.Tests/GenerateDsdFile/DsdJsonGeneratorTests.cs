@@ -20,7 +20,7 @@ public class DsdJsonGeneratorTests
     // value so the filename stays deterministic and matches the checked-in
     // golden fixture below.
     private static readonly DateTime TestTimestamp = new(2026, 1, 1, 0, 0, 0);
-    private const string TestOutputFileName = "SkyrimJPStringPatcher_20260101000000.json";
+    private const string TestOutputFileName = "zzz_SkyrimJPStringPatcher_20260101000000.json";
 
     private static string Normalize(string text) => text.Replace("\r\n", "\n");
 

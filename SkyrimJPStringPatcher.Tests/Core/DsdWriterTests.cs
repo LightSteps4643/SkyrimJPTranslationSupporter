@@ -20,7 +20,7 @@ public class DsdWriterTests
     private static readonly DateTime TestTimestamp = new(2026, 1, 1, 0, 0, 0);
 
     private static string ExpectedJsonPath(string outputRoot, string plugin) =>
-        Path.Combine(outputRoot, "SKSE", "Plugins", "DynamicStringDistributor", plugin, "SkyrimJPStringPatcher_20260101000000.json");
+        Path.Combine(outputRoot, "SKSE", "Plugins", "DynamicStringDistributor", plugin, "zzz_SkyrimJPStringPatcher_20260101000000.json");
 
     [Fact]
     public void WriteAll_OneEntry_WritesExpectedJsonAtThePluginSpecificPath()
@@ -133,6 +133,49 @@ public class DsdWriterTests
             Assert.False(Directory.Exists(staleDir));
             Assert.False(File.Exists(Path.Combine(root, "leftover_marker.txt")));
             Assert.True(File.Exists(ExpectedJsonPath(root, "CurrentMod.esp")));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>2026-09-17: DSD自身のファイル処理順序はファイル名のアルファベット
+    /// 降順（Z→A、Manager.cpp直接確認済み）で、同一レコードに複数のDSDエントリが
+    /// ある場合は先に処理された方が勝つ——つまりファイル名が辞書順で「大きい」
+    /// （小文字始まり等）方が優先される。既存のファイル名の前に小文字始まりの
+    /// 接頭辞"zzz_"を追加することで、他modのコミュニティ翻訳パッチ（多くは
+    /// プラグイン名や大文字始まりで命名される）より優先されやすくする——100%の
+    /// 保証ではないが、大半のケースで上書きに成功する見込み（DsdWriter.cs自身の
+    /// remarks参照）。</summary>
+    [Fact]
+    public void WriteAll_OutputFileName_SortsAfterTypicalCommunityPatchNames()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_dsdwriter_{Guid.NewGuid():N}");
+        try
+        {
+            var entries = new Dictionary<string, List<DsdEntry>>
+            {
+                ["TestMod.esp"] = new() { new DsdEntry { FormId = "0x001~TestMod.esp", Type = "WEAP FULL", Original = "Steel Sword", String = "鋼の剣" } },
+            };
+
+            DsdWriter.WriteAll(root, entries, timestamp: TestTimestamp);
+
+            var pluginDir = Path.Combine(root, "SKSE", "Plugins", "DynamicStringDistributor", "TestMod.esp");
+            var ourFileName = Path.GetFileName(Directory.GetFiles(pluginDir).Single());
+
+            // Typical real-world community-patch naming conventions, all
+            // plugin-name or uppercase-letter led (per DsdWriter.cs's own
+            // remarks on the residual risk this can't solve: another mod using
+            // the SAME trick would still win).
+            string[] typicalCommunityPatchNames =
+            {
+                "TestMod.esp.json", "TestMod_japanese.json", "Japanese Patch.json",
+                "JP_Translation.json", "0_TestMod_JP.json",
+            };
+            foreach (var other in typicalCommunityPatchNames)
+                Assert.True(string.CompareOrdinal(ourFileName, other) > 0,
+                    $"'{ourFileName}' should sort after '{other}' so DSD's Z-first processing order picks ours first.");
         }
         finally
         {
