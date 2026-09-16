@@ -157,8 +157,8 @@ public static class InterfaceTextPromptGenerator
         if (pending.Count == 0) return result;
 
         // Notes値はESP側（Translation/PromptGenerator.cs）の命名規則をそのまま
-        // 踏襲——"TranslationLocalLlm"/"TranslationCloudLlm"。
-        var methodTag = providerLabel == "localLLM" ? "TranslationLocalLlm" : "TranslationCloudLlm";
+        // 踏襲——"SJPTS_TranslationLocalLlm"/"SJPTS_TranslationCloudLlm"。
+        var methodTag = providerLabel == "localLLM" ? "SJPTS_TranslationLocalLlm" : "SJPTS_TranslationCloudLlm";
         // 2026-09-16: 独立レビューで発覚したバグの修正——以前はここのログ見出しが
         // providerLabelを無視して常に「生成AI翻訳」固定だったため、ローカルLLM
         // 実行時でもログには「生成AI翻訳」と誤表示されていた。ESP側の

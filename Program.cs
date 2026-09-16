@@ -221,7 +221,7 @@ if (noMeaning || noTranslit || noNameFallback)
 // v0.50.1a〜v0.52.1a: opt out of carrying forward ANY already-translated row
 // (see PromptGenerator's class remarks) — a clean-slate ①のみ reset. Despite
 // the flag's name (kept for compatibility), this now discards every prior
-// resolution, not just a human's ModifiedByUser edit — including ⑤/⑥ AI
+// resolution, not just a human's SJPTS_ModifiedByUser edit — including ⑤/⑥ AI
 // results, which otherwise get silently redone (and re-billed) on every run.
 var discardUserEdits = args.Any(a => a.Equals("--discard-user-edits", StringComparison.OrdinalIgnoreCase));
 args = args.Where(a => !a.Equals("--discard-user-edits", StringComparison.OrdinalIgnoreCase)).ToArray();
@@ -580,7 +580,7 @@ static void PrintUsage()
     Console.WriteLine("              1.完全一致には無効化オプションが無い（正解データそのものであり、無効化すべき状況が無いため）");
     Console.WriteLine("      --discard-user-edits : 既存translations.tsvの翻訳済み行を（手法を問わず）保持せず、");
     Console.WriteLine("              全て①バニラコーパスのみの状態に上書きする（既定は既存の翻訳を保持し、未翻訳の");
-    Console.WriteLine("              候補だけ埋める）。人手編集（ModifiedByUser）を含め完全にリセットしたいときに使う");
+    Console.WriteLine("              候補だけ埋める）。人手編集（SJPTS_ModifiedByUser）を含め完全にリセットしたいときに使う");
     Console.WriteLine("  SkyrimJPStringPatcher generatedsdfile [input = Translation/out_temp] [final DSD output dir = out]");
     Console.WriteLine("      input can be a single completed translations.tsv, or a directory containing many");
     Console.WriteLine("      -> out/SKSE/Plugins/DynamicStringDistributor/...");

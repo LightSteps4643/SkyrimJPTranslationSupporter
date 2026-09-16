@@ -621,7 +621,7 @@ public sealed class MainForm : Form
 
     /// <summary>「翻訳状況を初期化」— resets ONE plugin back to the same ①のみ
     /// baseline as a fresh scan (--no-meaning/--no-translit/--no-namefallback),
-    /// and discards any "ModifiedByUser" rows for it (--discard-user-edits) —
+    /// and discards any "SJPTS_ModifiedByUser" rows for it (--discard-user-edits) —
     /// the per-plugin equivalent of "as if I had just scanned and never touched
     /// this plugin at all."</summary>
     private async Task ResetPlugin(string plugin)
@@ -1007,7 +1007,7 @@ public sealed class MainForm : Form
     /// <summary>「MO2再読込＆初期化」— pickuptarget＋translation --allを実行し、
     /// 新規プラグインの取り込みやコーパス更新（xTranslatorインポート等）を
     /// 反映する。これは対象プラグイン全ての translations.tsv を①バニラコーパス
-    /// のみの状態へ書き戻す破壊的操作（ModifiedByUser行を含め全て）——⑤⑥の生成AI・
+    /// のみの状態へ書き戻す破壊的操作（SJPTS_ModifiedByUser行を含め全て）——⑤⑥の生成AI・
     /// ローカルLLM翻訳結果もここで消えるため、「翻訳状況を初期化」等と同様に
     /// 実行前に確認する。
     /// v0.60.0: バックアップ直後、pickuptarget再実行前にTranslation/out_temp

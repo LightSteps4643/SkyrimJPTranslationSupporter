@@ -126,7 +126,7 @@ public class PickUpTargetTranslationCrossModTests
     ///
     /// Currently RED (2026-08-29): confirmed to fail, but NOT by leaving the
     /// row blank as might be assumed -- ④NameFallbackTranslator's own
-    /// word-by-word glossary fallback (Notes="TranslationNameFallback")
+    /// word-by-word glossary fallback (Notes="SJPTS_TranslationNameFallback")
     /// silently steps in and produces "テスト X 剣" (grammatically wrong,
     /// no corpus backing) instead. This is a worse outcome than a blank row:
     /// it LOOKS translated and would not be flagged for review, silently

@@ -84,7 +84,7 @@ public class PromptGeneratorTests
             var pluginDir = Path.Combine(outputDir, "SjptsTestMod");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
-            Assert.Equal(("テスト用の剣", "AutoCorpus"), translations["Sjpts Test Sword"]);
+            Assert.Equal(("テスト用の剣", "SJPTS_AutoCorpus"), translations["Sjpts Test Sword"]);
 
             // It may still appear as a PRECEDENT EXAMPLE surfaced for some
             // other unresolved candidate's prompt block (that's the intended
@@ -146,7 +146,7 @@ public class PromptGeneratorTests
             Assert.Equal(2, fakeLlm.CallCount);
             var pluginDir = Path.Combine(outputDir, "SjptsTestMod");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
-            Assert.Equal(("LLMによる訳", "TranslationLocalLlm"), translations["Sjpts Llm Candidate"]);
+            Assert.Equal(("LLMによる訳", "SJPTS_TranslationLocalLlm"), translations["Sjpts Llm Candidate"]);
 
             var prompt = File.ReadAllText(Path.Combine(pluginDir, "prompt.txt"));
             Assert.DoesNotContain("Target: <SJPTS_TARGET>Sjpts Llm Candidate</SJPTS_TARGET>", prompt);
@@ -222,7 +222,7 @@ public class PromptGeneratorTests
     /// untranslatable, not a translation failure). That whole-batch gate is
     /// gone; ApplyLlmStep now judges Japanese-content PER CANDIDATE and tags a
     /// non-Japanese-but-successfully-matched result with methodTag+"NoJapanese"
-    /// (here "TranslationLocalLlmNoJapanese") instead of either discarding it
+    /// (here "SJPTS_TranslationLocalLlmNoJapanese") instead of either discarding it
     /// (wasting a retry that would just reproduce the same result) or silently
     /// accepting it under the ordinary tag (risking a genuine failure looking
     /// identical to a real translation) — a human can tell the two apart in
@@ -265,8 +265,8 @@ public class PromptGeneratorTests
 
             // Resolved (not left unresolved -- no point retrying, it'll just
             // reproduce the same answer), but tagged distinctly from a normal
-            // TranslationLocalLlm success so it surfaces for human review.
-            Assert.Equal(("Sjpts Scrambled Gibberish Candidate", "TranslationLocalLlmNoJapanese"),
+            // SJPTS_TranslationLocalLlm success so it surfaces for human review.
+            Assert.Equal(("Sjpts Scrambled Gibberish Candidate", "SJPTS_TranslationLocalLlmNoJapanese"),
                 translations["Sjpts Scrambled Gibberish Candidate"]);
 
             // 2026-09-06: this used to be log.Detail-only (translation.log
@@ -335,7 +335,7 @@ public class PromptGeneratorTests
             // costly ⑥ cloud AI call had already answered this one.
             File.WriteAllText(Path.Combine(pluginDir, "translations.tsv"),
                 "FormId\tWinningPlugin\tRecordType\tEnglishText\tJapanese\tNotes\tIndex\tEditorId\n" +
-                "000803:SjptsTestMod.esp\tSjptsTestMod.esp\tWEAP FULL\tSjpts Preserved Candidate\t前回のAI訳\tTranslationCloudLlm\t0\t\n");
+                "000803:SjptsTestMod.esp\tSjptsTestMod.esp\tWEAP FULL\tSjpts Preserved Candidate\t前回のAI訳\tSJPTS_TranslationCloudLlm\t0\t\n");
 
             using var log = OpenTestLog(root);
             // If RunOne incorrectly re-ran the LLM for the preserved candidate,
@@ -346,7 +346,7 @@ public class PromptGeneratorTests
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), TargetPlugin, outputDir, log, llmLocal: fakeLlm);
 
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
-            Assert.Equal(("前回のAI訳", "TranslationCloudLlm"), translations["Sjpts Preserved Candidate"]);
+            Assert.Equal(("前回のAI訳", "SJPTS_TranslationCloudLlm"), translations["Sjpts Preserved Candidate"]);
         }
         finally
         {
@@ -366,7 +366,7 @@ public class PromptGeneratorTests
             Directory.CreateDirectory(pluginDir);
             File.WriteAllText(Path.Combine(pluginDir, "translations.tsv"),
                 "FormId\tWinningPlugin\tRecordType\tEnglishText\tJapanese\tNotes\tIndex\tEditorId\n" +
-                "000803:SjptsTestMod.esp\tSjptsTestMod.esp\tWEAP FULL\tSjpts Preserved Candidate\t前回の訳\tModifiedByUser\t0\t\n");
+                "000803:SjptsTestMod.esp\tSjptsTestMod.esp\tWEAP FULL\tSjpts Preserved Candidate\t前回の訳\tSJPTS_ModifiedByUser\t0\t\n");
 
             using var log = OpenTestLog(root);
 
@@ -447,11 +447,11 @@ public class PromptGeneratorTests
             var pluginDir = Path.Combine(outputDir, "SjptsResolutionMethods");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
-            Assert.Equal(("きらめきの指輪", "AutoCorpusMeaning"), translations["Glimmeroot Ring"]);
-            Assert.Equal(("ネムラスコル", "AutoCorpusTransliterate"), translations["NemraSkol"]);
+            Assert.Equal(("きらめきの指輪", "SJPTS_AutoCorpusMeaning"), translations["Glimmeroot Ring"]);
+            Assert.Equal(("ネムラスコル", "SJPTS_AutoCorpusTransliterate"), translations["NemraSkol"]);
 
             var (vrennJapanese, vrennMethod) = translations["Vrenn Ring"];
-            Assert.Equal("TranslationNameFallback", vrennMethod);
+            Assert.Equal("SJPTS_TranslationNameFallback", vrennMethod);
             Assert.NotEmpty(vrennJapanese);
 
             var logText = File.ReadAllText(Path.Combine(root, "Translation", "translation.log"));
@@ -578,7 +578,7 @@ public class PromptGeneratorTests
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
             var (japanese, method) = translations["Sjpts Multiline Candidate\nSecond Line"];
-            Assert.Equal("TranslationLocalLlm", method);
+            Assert.Equal("SJPTS_TranslationLocalLlm", method);
             Assert.Equal("マルチライン訳\n二行目訳", japanese);
         }
         finally
@@ -621,7 +621,7 @@ public class PromptGeneratorTests
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
             var (japanese, method) = translations["Sjpts Spurious Marker Candidate\nSecond Line"];
-            Assert.Equal("TranslationLocalLlm", method);
+            Assert.Equal("SJPTS_TranslationLocalLlm", method);
             Assert.Equal("スプリアスマーカー訳\n二行目訳", japanese);
         }
         finally
@@ -657,7 +657,7 @@ public class PromptGeneratorTests
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
             var (japanese, method) = translations["Sjpts Legit Trailing Newline\n"];
-            Assert.Equal("TranslationLocalLlm", method);
+            Assert.Equal("SJPTS_TranslationLocalLlm", method);
             Assert.Equal("正当な訳文\n", japanese);
         }
         finally
@@ -695,7 +695,7 @@ public class PromptGeneratorTests
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
             var (japanese, method) = translations["Sjpts Target Tag Wrapped Answer"];
-            Assert.Equal("TranslationLocalLlm", method);
+            Assert.Equal("SJPTS_TranslationLocalLlm", method);
             Assert.Equal("タグ付き訳", japanese);
         }
         finally
@@ -755,7 +755,7 @@ public class PromptGeneratorTests
 
             var pluginDir = Path.Combine(outputDir, "SjptsResolutionMethods");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
-            Assert.Equal(("バッチ候補一", "TranslationLocalLlm"), translations["Sjpts Batch Candidate One"]);
+            Assert.Equal(("バッチ候補一", "SJPTS_TranslationLocalLlm"), translations["Sjpts Batch Candidate One"]);
             // The 3rd candidate (last in file order) is the one skipped —
             // never sent, so it stays unresolved rather than getting the
             // canned answer the fake would otherwise have given it.
@@ -799,8 +799,8 @@ public class PromptGeneratorTests
 
             var pluginDir = Path.Combine(outputDir, "SjptsResolutionMethods");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
-            Assert.Equal(("バッチ候補一", "TranslationLocalLlm"), translations["Sjpts Batch Candidate One"]);
-            Assert.Equal(("バッチ候補二", "TranslationLocalLlm"), translations["Sjpts Batch Candidate Two"]);
+            Assert.Equal(("バッチ候補一", "SJPTS_TranslationLocalLlm"), translations["Sjpts Batch Candidate One"]);
+            Assert.Equal(("バッチ候補二", "SJPTS_TranslationLocalLlm"), translations["Sjpts Batch Candidate Two"]);
 
             // 2026-09-16: ラウンド/バッチの2階層をやめ、LLM呼び出し1回=1
             // イテレーションのフラットなループにしたため、「合計何回のバッチ
@@ -979,7 +979,7 @@ public class PromptGeneratorTests
             // the game data) must resolve -- the trailing space itself is NOT
             // expected to be preserved in the Japanese translation (steps ①-④
             // don't preserve it either; this is pre-existing, unrelated behavior).
-            Assert.Equal(("末尾空白の訳", "TranslationLocalLlm"), translations["Sjpts Trailing Space Candidate "]);
+            Assert.Equal(("末尾空白の訳", "SJPTS_TranslationLocalLlm"), translations["Sjpts Trailing Space Candidate "]);
         }
         finally
         {
@@ -1020,9 +1020,9 @@ public class PromptGeneratorTests
             var pluginDir = Path.Combine(outputDir, "SjptsMatchingEdgeCases");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
-            Assert.Equal(("「両側引用の訳」", "TranslationLocalLlm"), translations["\"Sjpts Quoted Both Sides\""]);
-            Assert.Equal(("「先頭のみ引用の訳", "TranslationLocalLlm"), translations["\"Sjpts Leading Quote Only"]);
-            Assert.Equal(("末尾のみ引用の訳」", "TranslationLocalLlm"), translations["Sjpts Trailing Quote Only\""]);
+            Assert.Equal(("「両側引用の訳」", "SJPTS_TranslationLocalLlm"), translations["\"Sjpts Quoted Both Sides\""]);
+            Assert.Equal(("「先頭のみ引用の訳", "SJPTS_TranslationLocalLlm"), translations["\"Sjpts Leading Quote Only"]);
+            Assert.Equal(("末尾のみ引用の訳」", "SJPTS_TranslationLocalLlm"), translations["Sjpts Trailing Quote Only\""]);
         }
         finally
         {
@@ -1057,7 +1057,7 @@ public class PromptGeneratorTests
             var pluginDir = Path.Combine(outputDir, "SjptsMatchingEdgeCases");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
-            Assert.Equal(("引用符無し候補の訳", "TranslationLocalLlm"), translations["Sjpts Plain No Quote Candidate"]);
+            Assert.Equal(("引用符無し候補の訳", "SJPTS_TranslationLocalLlm"), translations["Sjpts Plain No Quote Candidate"]);
         }
         finally
         {
@@ -1115,7 +1115,7 @@ public class PromptGeneratorTests
             var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
-            Assert.Equal(("対象", "TranslationLocalLlm"), translations["Target:"]);
+            Assert.Equal(("対象", "SJPTS_TranslationLocalLlm"), translations["Target:"]);
         }
         finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ } }
     }
@@ -1259,7 +1259,7 @@ public class PromptGeneratorTests
             var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
-            Assert.Equal(("訳文", "TranslationLocalLlm"), translations["Sjpts Format Edge Case Candidate"]);
+            Assert.Equal(("訳文", "SJPTS_TranslationLocalLlm"), translations["Sjpts Format Edge Case Candidate"]);
         }
         finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ } }
     }
@@ -1315,9 +1315,9 @@ public class PromptGeneratorTests
             var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
-            Assert.Equal(("ターゲット", "TranslationLocalLlm"), translations["Target:"]);
-            Assert.Equal(("訳文", "TranslationLocalLlm"), translations["Sjpts Format Edge Case Candidate"]);
-            Assert.Equal(("末尾空白の訳文", "TranslationLocalLlm"), translations["Sjpts Trailing Whitespace Candidate "]);
+            Assert.Equal(("ターゲット", "SJPTS_TranslationLocalLlm"), translations["Target:"]);
+            Assert.Equal(("訳文", "SJPTS_TranslationLocalLlm"), translations["Sjpts Format Edge Case Candidate"]);
+            Assert.Equal(("末尾空白の訳文", "SJPTS_TranslationLocalLlm"), translations["Sjpts Trailing Whitespace Candidate "]);
         }
         finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ } }
     }
@@ -1401,7 +1401,7 @@ public class PromptGeneratorTests
             Assert.DoesNotContain("Same-mod translations so far", round1Prompt);
             Assert.Contains("Same-mod translations so far", round2Prompt);
             // 2026-09-16: legend+numeric code format (validated design) —
-            // step 5's local LLM resolution tags with "TranslationLocalLlm",
+            // step 5's local LLM resolution tags with "SJPTS_TranslationLocalLlm",
             // SameModTrustTier priority 7.
             Assert.Contains("7=translated by a local LLM", round2Prompt);
             Assert.Contains("\"Sjpts Format Edge Case Candidate\"\t\"訳文\"\t7", round2Prompt);
@@ -1511,7 +1511,7 @@ public class PromptGeneratorTests
             var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
-            Assert.Equal(("訳文", "TranslationLocalLlm"), translations["Sjpts Trailing Whitespace Candidate "]);
+            Assert.Equal(("訳文", "SJPTS_TranslationLocalLlm"), translations["Sjpts Trailing Whitespace Candidate "]);
         }
         finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ } }
     }
@@ -1537,7 +1537,7 @@ public class PromptGeneratorTests
             var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
-            Assert.Equal(("訳文", "TranslationLocalLlm"), translations["Sjpts Trailing Whitespace Candidate "]);
+            Assert.Equal(("訳文", "SJPTS_TranslationLocalLlm"), translations["Sjpts Trailing Whitespace Candidate "]);
         }
         finally { try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ } }
     }

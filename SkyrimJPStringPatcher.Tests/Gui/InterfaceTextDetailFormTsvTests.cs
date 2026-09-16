@@ -30,7 +30,7 @@ public class InterfaceTextDetailFormTsvTests
         {
             var rows = new List<InterfaceTranslationRow>
             {
-                new("$Multi", "line one\nline two\twith a tab", "一行目\n二行目\tタブ入り", true, "ModifiedByUser"),
+                new("$Multi", "line one\nline two\twith a tab", "一行目\n二行目\tタブ入り", true, "SJPTS_ModifiedByUser"),
             };
             InvokeWriteTsv(path, rows);
 

@@ -77,7 +77,7 @@ public static class DsdJsonGenerator
 
         foreach (var row in translated)
         {
-            // v0.50.1: AutoCorpusOverride rows come from Data/phrase_overrides.tsv —
+            // v0.50.1: SJPTS_AutoCorpusOverride rows come from Data/phrase_overrides.tsv —
             // a human-curated table that DELIBERATELY keeps some values non-Japanese
             // (v0.48.1: "OK"->"OK", "pts"->"pt", matching Japanese UI convention for
             // short game-UI vocabulary). The check below exists to catch xTranslator
@@ -86,21 +86,21 @@ public static class DsdJsonGenerator
             // dropped from the DSD output, leaving the untranslated "pts" on screen
             // despite phrase_overrides.tsv having the correct answer all along.
             //
-            // v0.56.0: ModifiedByUser (a human's own edit via TranslationDetailForm)
+            // v0.56.0: SJPTS_ModifiedByUser (a human's own edit via TranslationDetailForm)
             // gets the same exemption, for the same reason — a person who typed
             // this value in and saved it decided it belongs there as-is, even if it
             // doesn't look like Japanese (e.g. a proper noun, a number, "OK"). This
             // check exists to catch machine mistakes, not to second-guess a
             // deliberate human decision — so it's included as-is either way. Unlike
-            // AutoCorpusOverride (a curated table where a non-Japanese value is
-            // fully expected, nothing to flag), a ModifiedByUser row still gets a
+            // SJPTS_AutoCorpusOverride (a curated table where a non-Japanese value is
+            // fully expected, nothing to flag), a SJPTS_ModifiedByUser row still gets a
             // logged NOTE (not an exclusion, not a [warn]) — a manual edit could
             // just as easily be a genuine oversight as a deliberate choice, so it's
             // worth surfacing for the user to spot-check later without second-
             // guessing it now.
             // v0.58.5: ⑤⑥（PromptGenerator.ApplyLlmStep）が「応答は得られたが
             // 訳文に日本語が含まれない」候補に付ける専用タグ（例:
-            // "TranslationLocalLlmNoJapanese"）——ModifiedByUserと同じ扱い
+            // "SJPTS_TranslationLocalLlmNoJapanese"）——SJPTS_ModifiedByUserと同じ扱い
             // （除外せず、そのまま出力しつつ情報ログを残す）にする。バニラ
             // Skyrim自身が意図的に翻訳していない文字列にモデルが原文をそのまま
             // 返した可能性と、モデルが本当に翻訳を誤っただけの可能性を、この
@@ -108,27 +108,27 @@ public static class DsdJsonGenerator
             // 残る）でも無警告の受理でもなく、ユーザーが後から見分けられる形で
             // DSDへ出力する。
             //
-            // 2026-09-06: ①〜④（AutoCorpus/AutoCorpusDsd/AutoCorpusImported/
-            // AutoCorpusReferenceTaiyaku/AutoCorpusMeaning/AutoCorpusTransliterate/
-            // TranslationNameFallback）とAutoCrossModPrecedentも、上記と同じ
+            // 2026-09-06: ①〜④（SJPTS_AutoCorpus/SJPTS_AutoCorpusDsd/SJPTS_AutoCorpusImported/
+            // SJPTS_AutoCorpusReferenceTaiyaku/SJPTS_AutoCorpusMeaning/SJPTS_AutoCorpusTransliterate/
+            // SJPTS_TranslationNameFallback）とSJPTS_AutoCrossModPrecedentも、上記と同じ
             // 「除外せず情報ログのみ」の扱いに統一した。②③④は構造上、部分的な
             // 非日本語混在を返す経路が無い（全部解決 or 未解決のオールオア
             // ナッシング）ため、非日本語になり得るのは人間が編集した用語集
             // （Data/mod_glossary/*.tsv・Data/name_glossary.tsv）に誤りが
-            // 混入した場合のみ——ModifiedByUserと同じ「人間の責任範疇」。
-            // ①系（AutoCorpus/AutoCorpusDsd/AutoCorpusImported/
-            // AutoCorpusReferenceTaiyaku/AutoCrossModPrecedent）も、ツール自身の
+            // 混入した場合のみ——SJPTS_ModifiedByUserと同じ「人間の責任範疇」。
+            // ①系（SJPTS_AutoCorpus/SJPTS_AutoCorpusDsd/SJPTS_AutoCorpusImported/
+            // SJPTS_AutoCorpusReferenceTaiyaku/SJPTS_AutoCrossModPrecedent）も、ツール自身の
             // 生成物ではなく外部の人間が作った翻訳データ（実データ・既存DSD・
             // xTranslatorインポート・対訳リファレンス）そのものという点で
-            // AutoCorpusOverrideと同じ性質を持つため、意図的な非日本語値
+            // SJPTS_AutoCorpusOverrideと同じ性質を持つため、意図的な非日本語値
             // （"OK"→"OK"等）を正当に含みうる。
             // 除外して黙って消してしまうより、警告ログで見えるようにした上で
-            // 出力を継続するほうが安全側——唯一の例外はAutoCorpusOverride
+            // 出力を継続するほうが安全側——唯一の例外はSJPTS_AutoCorpusOverride
             // （`Data/phrase_overrides.tsv`という人手管理の対訳表からの
             // 完全一致）で、これは非日本語値が出ること自体が仕様として
             // 織り込み済みのため、警告ログすら出さない完全サイレント扱いを
             // 維持する。
-            if (!LanguageDetector.ContainsJapanese(row.Japanese) && row.Notes != "AutoCorpusOverride")
+            if (!LanguageDetector.ContainsJapanese(row.Japanese) && row.Notes != "SJPTS_AutoCorpusOverride")
             {
                 // v0.55.2: promoted to a console [warn] too (previously log-file-
                 // only) — a user who ran generatedsdfile and never opened
@@ -160,7 +160,7 @@ public static class DsdJsonGenerator
                 entriesByPlugin[row.WinningPlugin] = list;
             }
 
-            trace?.Trace($"Include {dsdFormId} [{row.RecordType}] -> {row.WinningPlugin}: \"{row.EnglishText}\" -> \"{row.Japanese}\" (status={(string.IsNullOrWhiteSpace(row.Notes) ? "TranslationProposed" : row.Notes)})");
+            trace?.Trace($"Include {dsdFormId} [{row.RecordType}] -> {row.WinningPlugin}: \"{row.EnglishText}\" -> \"{row.Japanese}\" (status={(string.IsNullOrWhiteSpace(row.Notes) ? "SJPTS_TranslationProposed" : row.Notes)})");
             list.Add(new DsdEntry
             {
                 EditorId = row.EditorId,
@@ -169,7 +169,7 @@ public static class DsdJsonGenerator
                 Type = row.RecordType,
                 Original = row.EnglishText,
                 String = row.Japanese,
-                Status = string.IsNullOrWhiteSpace(row.Notes) ? "TranslationProposed" : row.Notes,
+                Status = string.IsNullOrWhiteSpace(row.Notes) ? "SJPTS_TranslationProposed" : row.Notes,
             });
         }
 
@@ -211,8 +211,8 @@ public static class DsdJsonGenerator
             "             source text changed) may not take effect unless the old file's matching row is removed first —");
         log.Line("             （新規追加分については問題なし）",
             "             DSD's own duplicate resolution is first-file-wins (newly-added, previously-untranslated rows are unaffected).");
-        log.Line("status欄 : Notes列が空の行は TranslationProposed、埋まっている行はその値をそのまま使用",
-            "status   : rows with an empty Notes column get TranslationProposed; otherwise the Notes value is used as-is");
+        log.Line("status欄 : Notes列が空の行は SJPTS_TranslationProposed、埋まっている行はその値をそのまま使用",
+            "status   : rows with an empty Notes column get SJPTS_TranslationProposed; otherwise the Notes value is used as-is");
         log.Line("FormId   : Mutagenの \"XXXXXX:Plugin.esp\" 形式を、DSDが要求する \"XXXXXX|Plugin.esp\" に変換",
             "FormId   : converted from Mutagen's \"XXXXXX:Plugin.esp\" form to the \"XXXXXX|Plugin.esp\" DSD requires");
     }

@@ -18,7 +18,7 @@ namespace SkyrimJPStringPatcher.Translation;
 ///
 /// v0.50.1a〜v0.52.1a: a deliberate exception to "fully stateless" — any row
 /// that already has a translation in the existing translations.tsv (whatever
-/// method produced it — ①〜⑥ auto-resolution, or a human's ModifiedByUser edit)
+/// method produced it — ①〜⑥ auto-resolution, or a human's SJPTS_ModifiedByUser edit)
 /// is carried forward into the freshly-regenerated file as-is, never re-run.
 /// This is NOT the old reflux mechanism back from the dead — reflux propagated
 /// the pipeline's OWN unverified output across DIFFERENT plugins/sessions
@@ -436,9 +436,9 @@ public static class PromptGenerator
 
         // v0.52.1a: a candidate that already has SOME translation in the
         // existing translations.tsv (any method — ①〜⑥ auto-resolution or a
-        // human's ModifiedByUser edit) is carried straight through and never
+        // human's SJPTS_ModifiedByUser edit) is carried straight through and never
         // re-run — see ReadExistingTranslations's remarks for why this changed
-        // from "only preserve ModifiedByUser" to "preserve anything already
+        // from "only preserve SJPTS_ModifiedByUser" to "preserve anything already
         // resolved" (⑤/⑥ cost real tokens; silently redoing them on every
         // `translation` run was the bug). discardUserEdits (the GUI's
         // "初期化"/"MO2再読込＆初期化") skips this entirely for a clean ①のみ
@@ -456,7 +456,7 @@ public static class PromptGenerator
                     // v0.56.0: a cross-mod precedent (PickUpTargetRunner.cs's
                     // FindCrossModPrecedent) is keyed on record identity, not
                     // text -- it takes priority even over ①コーパス完全一致.
-                    ? (Candidate: c, Auto: (AutoTranslationResult?)new AutoTranslationResult(c.CrossModPrecedentJapanese, "AutoCrossModPrecedent", ""))
+                    ? (Candidate: c, Auto: (AutoTranslationResult?)new AutoTranslationResult(c.CrossModPrecedentJapanese, "SJPTS_AutoCrossModPrecedent", ""))
                     : (Candidate: c, Auto: auto.TryTranslate(c.CurrentText, c.RecordType, trace)))
             .ToList();
 
@@ -468,17 +468,17 @@ public static class PromptGenerator
         {
             switch (autoResult?.Method)
             {
-                case "AutoCorpusMeaning" or "AutoCorpusMeaningTranslit":
+                case "SJPTS_AutoCorpusMeaning" or "SJPTS_AutoCorpusMeaningTranslit":
                     log.Detail("2.意味合成による自動解決（要レビュー）",
                         "2. Auto-resolved via meaning composition (needs review)",
                         $"[{plugin}]  \"{candidate.CurrentText}\" → \"{autoResult.Japanese}\"  [{candidate.RecordType}]  {autoResult.Detail}");
                     break;
-                case "AutoCorpusTransliterate":
+                case "SJPTS_AutoCorpusTransliterate":
                     log.Detail("3.音訳分解による自動解決（要レビュー）",
                         "3. Auto-resolved via transliteration decomposition (needs review)",
                         $"[{plugin}]  \"{candidate.CurrentText}\" → \"{autoResult.Japanese}\"  [{candidate.RecordType}]  {autoResult.Detail}");
                     break;
-                case "AutoCrossModPrecedent" when candidate.CrossModPrecedentNeedsReview:
+                case "SJPTS_AutoCrossModPrecedent" when candidate.CrossModPrecedentNeedsReview:
                     // v0.56.0: this tool doesn't adjudicate whether a
                     // precedent translation is still objectively correct for
                     // the current text (mirrors the existing DSD stale-
@@ -542,8 +542,8 @@ public static class PromptGenerator
         // entirely) and tries a cloud AI backend — the two are independent
         // opt-ins that chain, exactly like ①〜④ already fall through to each
         // other. See ApplyLlmStep for the shared per-candidate logic.
-        resolved = ApplyLlmStep(resolved, llmLocal, "5", "ローカルLLM", "local LLM", "TranslationLocalLlm", plugin, retriever, auto, npcNames, log, trace, pluginDir, llmLocalBatchCharLimit);
-        resolved = ApplyLlmStep(resolved, llmCloud, "6", "生成AI翻訳", "cloud AI", "TranslationCloudLlm", plugin, retriever, auto, npcNames, log, trace, pluginDir, llmCloudBatchCharLimit);
+        resolved = ApplyLlmStep(resolved, llmLocal, "5", "ローカルLLM", "local LLM", "SJPTS_TranslationLocalLlm", plugin, retriever, auto, npcNames, log, trace, pluginDir, llmLocalBatchCharLimit);
+        resolved = ApplyLlmStep(resolved, llmCloud, "6", "生成AI翻訳", "cloud AI", "SJPTS_TranslationCloudLlm", plugin, retriever, auto, npcNames, log, trace, pluginDir, llmCloudBatchCharLimit);
 
         var unresolved = resolved.Where(r => r.Auto == null).Select(r => r.Candidate).ToList();
 
@@ -721,7 +721,7 @@ public static class PromptGenerator
     /// <summary>issue #4 (c): builds the pool <see cref="SameModHintBlockBuilder.BuildBlock"/>
     /// draws hints from — this plugin's own candidates already resolved this
     /// session, restricted to <see cref="SameModHintBlockBuilder.IsEligibleMethod"/>'s
-    /// trust tier (excludes the `AutoCorpus`* family, already reachable via
+    /// trust tier (excludes the `SJPTS_AutoCorpus`* family, already reachable via
     /// "Reference examples", and the `*NoJapanese` variants, a possible
     /// translation failure).</summary>
     private static List<CorpusEntry> BuildSameModHintPool(
@@ -780,22 +780,22 @@ public static class PromptGenerator
         {
             switch (auto?.Method)
             {
-                case "AutoCorpus" or "AutoCorpusDsd" or "AutoCorpusImported" or "AutoCorpusReferenceTaiyaku" or "AutoCorpusOverride" or "AutoCrossModPrecedent":
+                case "SJPTS_AutoCorpus" or "SJPTS_AutoCorpusDsd" or "SJPTS_AutoCorpusImported" or "SJPTS_AutoCorpusReferenceTaiyaku" or "SJPTS_AutoCorpusOverride" or "SJPTS_AutoCrossModPrecedent":
                     corpus++;
                     break;
-                case "AutoCorpusMeaning" or "AutoCorpusMeaningTranslit":
+                case "SJPTS_AutoCorpusMeaning" or "SJPTS_AutoCorpusMeaningTranslit":
                     meaning++;
                     break;
-                case "AutoCorpusTransliterate":
+                case "SJPTS_AutoCorpusTransliterate":
                     transliteration++;
                     break;
-                case "TranslationNameFallback":
+                case "SJPTS_TranslationNameFallback":
                     nameFallback++;
                     break;
-                case "TranslationLocalLlm":
+                case "SJPTS_TranslationLocalLlm":
                     llm++;
                     break;
-                case "TranslationCloudLlm":
+                case "SJPTS_TranslationCloudLlm":
                     cloudLlm++;
                     break;
             }
@@ -1194,13 +1194,13 @@ public static class PromptGenerator
 
     /// <summary>v0.52.1a: reads an existing translations.tsv (if any) and returns
     /// every row that already has SOME Japanese translation, whatever method
-    /// produced it (①〜⑥ auto-resolution, ModifiedByUser, or a translation
+    /// produced it (①〜⑥ auto-resolution, SJPTS_ModifiedByUser, or a translation
     /// carried forward from a still-earlier run by this same method) — keyed the
     /// same way the GUI's own editor identifies a row (FormId+RecordType+Index —
     /// FormId alone repeats within a plugin whenever one FormKey carries multiple
     /// translatable fields, e.g. a WEAP's FULL and DESC).
     ///
-    /// v0.50.1a〜v0.52.1a: originally scoped to ONLY "Notes == ModifiedByUser"
+    /// v0.50.1a〜v0.52.1a: originally scoped to ONLY "Notes == SJPTS_ModifiedByUser"
     /// (a human's manual edit) — every other row, INCLUDING a candidate ⑤/⑥ had
     /// just spent real tokens resolving, was silently discarded and recomputed
     /// from scratch on the next run (the "fully stateless" design from v0.33.0).

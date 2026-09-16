@@ -1,14 +1,14 @@
 === (未解決 unresolved) ===
 [PriorityModPatch] "Iron Guardian" -> ""
 [SjptsUnresolvableTarget] "Sjpts Quorvenith Blazrukk" -> ""
-=== AutoCorpus ===
+=== SJPTS_AutoCorpus ===
 [SjptsUnrelatedMod] "Sjpts Ornate Blade" -> "装飾の刃"
-=== AutoCorpusMeaning ===
+=== SJPTS_AutoCorpusMeaning ===
 [SjptsMeaningTarget] "Glimmeroot Ring" -> "きらめきの指輪"
-=== AutoCorpusTransliterate ===
+=== SJPTS_AutoCorpusTransliterate ===
 [SjptsMeaningTarget] "Nemraskol" -> "ネムラスコル"
-=== AutoCrossModPrecedent ===
+=== SJPTS_AutoCrossModPrecedent ===
 [BigQuestMod] "Sword of Test X" -> "テストXの剣"
 [TestXMod2] "Sword of Test X" -> "テストXの剣"
-=== TranslationNameFallback ===
+=== SJPTS_TranslationNameFallback ===
 [SjptsGlossaryTarget] "Vrenn" -> "ヴレン"

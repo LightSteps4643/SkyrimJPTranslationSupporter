@@ -285,8 +285,8 @@ public class InterfaceTextPromptGeneratorTests
             var result = InterfaceTextPromptGenerator.ApplyLlmStep(pending, fake, "TestMod", log, null, 12_000, dir, "localLLM");
 
             Assert.Equal(2, fake.PromptsReceived.Count);
-            Assert.Equal(("こんにちは", "TranslationLocalLlm"), result["$Foo"]);
-            Assert.Equal(("世界", "TranslationLocalLlm"), result["$Bar"]);
+            Assert.Equal(("こんにちは", "SJPTS_TranslationLocalLlm"), result["$Foo"]);
+            Assert.Equal(("世界", "SJPTS_TranslationLocalLlm"), result["$Bar"]);
         }
         finally { }
     }
@@ -316,7 +316,7 @@ public class InterfaceTextPromptGeneratorTests
             Assert.DoesNotContain("Same-mod translations so far", fake.PromptsReceived[0]);
             Assert.Contains("Same-mod translations so far", fake.PromptsReceived[1]);
             // 2026-09-16: legend+numeric code format (validated design) —
-            // step's local LLM resolution tags with "TranslationLocalLlm",
+            // step's local LLM resolution tags with "SJPTS_TranslationLocalLlm",
             // SameModTrustTier priority 7.
             Assert.Contains("7=translated by a local LLM", fake.PromptsReceived[1]);
             Assert.Contains("\"Frostwind Blade\"\t\"氷風の刃\"\t7", fake.PromptsReceived[1]);
@@ -407,7 +407,7 @@ public class InterfaceTextPromptGeneratorTests
             var result = InterfaceTextPromptGenerator.ApplyLlmStep(pending, fake, "TestMod", log, null, 12_000, dir, "localLLM");
 
             Assert.Equal("Hello", result["$Foo"].Japanese);
-            Assert.Equal("TranslationLocalLlmNoJapanese", result["$Foo"].Notes);
+            Assert.Equal("SJPTS_TranslationLocalLlmNoJapanese", result["$Foo"].Notes);
         }
         finally { }
     }

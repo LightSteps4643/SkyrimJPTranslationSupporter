@@ -135,7 +135,7 @@ public sealed class InterfaceTextDetailForm : Form
             var edited = _edits.TryGetValue(row.Key, out var editedJapanese);
             var japanese = edited ? editedJapanese! : row.Japanese;
             var resolved = edited || row.Resolved;
-            var notes = edited ? "ModifiedByUser" : row.Notes;
+            var notes = edited ? "SJPTS_ModifiedByUser" : row.Notes;
 
             var idx = _grid.Rows.Add(row.Key, row.English, japanese, resolved, notes);
             var gridRow = _grid.Rows[idx];
@@ -170,7 +170,7 @@ public sealed class InterfaceTextDetailForm : Form
         {
             _edits[key] = newValue;
             gridRow.Cells["Resolved"].Value = true;
-            gridRow.Cells["Notes"].Value = "ModifiedByUser";
+            gridRow.Cells["Notes"].Value = "SJPTS_ModifiedByUser";
             gridRow.DefaultCellStyle.BackColor = Color.FromArgb(235, 245, 255);
         }
         UpdateEditCountLabel();
@@ -284,7 +284,7 @@ public sealed class InterfaceTextDetailForm : Form
     private void SaveChanges()
     {
         var updated = _rows.Select(r =>
-            _edits.TryGetValue(r.Key, out var jp) ? r with { Japanese = jp, Resolved = true, Notes = "ModifiedByUser" } : r
+            _edits.TryGetValue(r.Key, out var jp) ? r with { Japanese = jp, Resolved = true, Notes = "SJPTS_ModifiedByUser" } : r
         ).ToList();
         WriteTsv(_path, updated);
         _rows = updated;

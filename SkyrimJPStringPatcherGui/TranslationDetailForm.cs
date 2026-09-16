@@ -7,7 +7,7 @@ namespace SkyrimJPStringPatcherGui;
 /// editable; "OK" writes the whole file back (with any edits) so it round-trips
 /// cleanly into "DSDファイル生成" — exactly the CLI's own file format and nothing
 /// else, so this stays a plain file editor and not a second copy of pipeline
-/// logic. An edited row's Notes becomes "ModifiedByUser", overriding whatever
+/// logic. An edited row's Notes becomes "SJPTS_ModifiedByUser", overriding whatever
 /// auto-resolution method (or lack of one) produced it before.</summary>
 public sealed class TranslationDetailForm : Form
 {
@@ -247,7 +247,7 @@ public sealed class TranslationDetailForm : Form
             var key = RowKey(row);
             var edited = _edits.TryGetValue(key, out var editedJapanese);
             var japanese = edited ? editedJapanese! : Unescape(row.GetValueOrDefault("Japanese", ""));
-            var notes = edited ? "ModifiedByUser" : row.GetValueOrDefault("Notes", "");
+            var notes = edited ? "SJPTS_ModifiedByUser" : row.GetValueOrDefault("Notes", "");
 
             var idx = _grid.Rows.Add(
                 row.GetValueOrDefault("FormId", ""),
@@ -287,7 +287,7 @@ public sealed class TranslationDetailForm : Form
         else
         {
             _edits[key] = newValue;
-            gridRow.Cells["Notes"].Value = "ModifiedByUser";
+            gridRow.Cells["Notes"].Value = "SJPTS_ModifiedByUser";
             gridRow.DefaultCellStyle.BackColor = Color.FromArgb(235, 245, 255);
         }
         UpdateEditCountLabel();
@@ -342,7 +342,7 @@ public sealed class TranslationDetailForm : Form
         {
             var key = RowKey(row);
             var japanese = _edits.TryGetValue(key, out var edited) ? TsvEscaping.Escape(edited) : row.GetValueOrDefault("Japanese", "");
-            var notes = _edits.ContainsKey(key) ? "ModifiedByUser" : row.GetValueOrDefault("Notes", "");
+            var notes = _edits.ContainsKey(key) ? "SJPTS_ModifiedByUser" : row.GetValueOrDefault("Notes", "");
             lines.Add(string.Join('\t',
                 row.GetValueOrDefault("FormId", ""),
                 row.GetValueOrDefault("WinningPlugin", ""),

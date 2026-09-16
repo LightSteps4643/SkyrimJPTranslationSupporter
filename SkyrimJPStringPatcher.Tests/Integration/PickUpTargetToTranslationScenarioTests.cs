@@ -353,7 +353,7 @@ public class PickUpTargetToTranslationScenarioTests
             Assert.True(translations.ContainsKey("Sjpts Ornate Blade"));
             var (japanese, notes) = translations["Sjpts Ornate Blade"];
             Assert.Equal("装飾の刃", japanese);
-            Assert.StartsWith("AutoCorpus", notes);
+            Assert.StartsWith("SJPTS_AutoCorpus", notes);
         }
         finally
         {
@@ -381,7 +381,7 @@ public class PickUpTargetToTranslationScenarioTests
             Assert.True(translations.ContainsKey("Bronze Blade"));
             var (japanese, notes) = translations["Bronze Blade"];
             Assert.Equal("青銅の刃", japanese);
-            Assert.Equal("AutoCorpusImported", notes);
+            Assert.Equal("SJPTS_AutoCorpusImported", notes);
         }
         finally
         {
@@ -476,7 +476,7 @@ public class PickUpTargetToTranslationScenarioTests
             Assert.True(translations.ContainsKey("Vrenn"));
             var (japanese, notes) = translations["Vrenn"];
             Assert.Equal("ヴレン", japanese);
-            Assert.Equal("TranslationNameFallback", notes);
+            Assert.Equal("SJPTS_TranslationNameFallback", notes);
         }
         finally
         {
@@ -537,7 +537,7 @@ public class PickUpTargetToTranslationScenarioTests
             Assert.True(translations.ContainsKey(english));
             var (resolvedJapanese, notes) = translations[english];
             Assert.Equal(japanese, resolvedJapanese);
-            Assert.Equal("TranslationNameFallback", notes);
+            Assert.Equal("SJPTS_TranslationNameFallback", notes);
         }
         finally
         {
@@ -607,12 +607,12 @@ public class PickUpTargetToTranslationScenarioTests
             Assert.True(translations.ContainsKey("Glimmeroot Ring"));
             var (meaningJapanese, meaningNotes) = translations["Glimmeroot Ring"];
             Assert.Equal("きらめきの指輪", meaningJapanese);
-            Assert.Equal("AutoCorpusMeaning", meaningNotes);
+            Assert.Equal("SJPTS_AutoCorpusMeaning", meaningNotes);
 
             Assert.True(translations.ContainsKey("Nemraskol"));
             var (translitJapanese, translitNotes) = translations["Nemraskol"];
             Assert.Equal("ネムラスコル", translitJapanese);
-            Assert.Equal("AutoCorpusTransliterate", translitNotes);
+            Assert.Equal("SJPTS_AutoCorpusTransliterate", translitNotes);
         }
         finally
         {
@@ -707,7 +707,7 @@ public class PickUpTargetToTranslationScenarioTests
             // source that can resolve it -- no corpus precedent otherwise).
             var (_, round1Translations, _) = RunPickUpTargetThenTranslation(mo2Dir, root, "StaleTest.esp", stageOptions: stageOptions,
                 xTranslatorImports: [("StaleTest.esp", "WEAP FULL", "Bronze Blade", "青銅の剣")]);
-            Assert.Equal(("青銅の剣", "AutoCorpusImported"), round1Translations["Bronze Blade"]);
+            Assert.Equal(("青銅の剣", "SJPTS_AutoCorpusImported"), round1Translations["Bronze Blade"]);
 
             // The xTranslator import XML written by round 1 must actually be
             // gone before round 2 -- RunPickUpTargetThenTranslation's importDir
@@ -755,7 +755,7 @@ public class PickUpTargetToTranslationScenarioTests
             // source that can resolve it -- no corpus precedent otherwise).
             var (_, round1Translations, _) = RunPickUpTargetThenTranslation(mo2Dir, root, "StaleTest.esp", stageOptions: stageOptions,
                 xTranslatorImports: [("StaleTest.esp", "WEAP FULL", "Bronze Blade", "青銅の剣")]);
-            Assert.Equal(("青銅の剣", "AutoCorpusImported"), round1Translations["Bronze Blade"]);
+            Assert.Equal(("青銅の剣", "SJPTS_AutoCorpusImported"), round1Translations["Bronze Blade"]);
 
             // Round 2: re-run with the EXACT "翻訳状況を初期化"/"選択プラグインを
             // 一括初期化" argv shape (--no-meaning --no-translit --no-namefallback

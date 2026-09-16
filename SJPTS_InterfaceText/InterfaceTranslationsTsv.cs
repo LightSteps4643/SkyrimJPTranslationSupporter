@@ -9,11 +9,11 @@ namespace SJPTS_InterfaceText;
 /// the LLM) and is only reset by an explicit `detect` run, mirroring the
 /// existing tool's "①のみ discardUserEdits" behavior.</summary>
 /// <param name="Notes">2026-09-12: mirrors translations.tsv's own Notes column
-/// (ESP side) — "TranslationLocalLlm"/"TranslationCloudLlm" for a normal LLM
-/// resolution, "TranslationLocalLlmNoJapanese"/"TranslationCloudLlmNoJapanese"
+/// (ESP side) — "SJPTS_TranslationLocalLlm"/"SJPTS_TranslationCloudLlm" for a normal LLM
+/// resolution, "SJPTS_TranslationLocalLlmNoJapanese"/"SJPTS_TranslationCloudLlmNoJapanese"
 /// for a response that came back but contained no Japanese (still marked
 /// Resolved=true — see InterfaceTextPromptGenerator.ApplyLlmStep's remarks for
-/// why treating this as a failure was wrong), "ModifiedByUser" for a human's
+/// why treating this as a failure was wrong), "SJPTS_ModifiedByUser" for a human's
 /// own edit via InterfaceTextDetailForm. Empty for a row resolved from the
 /// load order's own/imported _japanese.txt, the MOD-name-exact-match
 /// exclusion, or one still unresolved.</param>

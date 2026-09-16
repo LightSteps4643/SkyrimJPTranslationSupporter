@@ -26,16 +26,16 @@ public class DsdJsonGeneratorTests
 
     /// <summary>Fixtures/translations_basic.tsv exercises, in one pass: a normal
     /// translated row (正常系); a still-blank row, which is the normal
-    /// work-in-progress state, not an error (準正常系); the AutoCorpusOverride
+    /// work-in-progress state, not an error (準正常系); the SJPTS_AutoCorpusOverride
     /// exemption that deliberately keeps a non-Japanese value like "pts"
     /// (準正常系, a real historical special case); the same exemption for
-    /// ModifiedByUser (準正常系 — a human's own deliberate edit via
+    /// SJPTS_ModifiedByUser (準正常系 — a human's own deliberate edit via
     /// TranslationDetailForm, e.g. keeping a proper noun like "Bob" as-is,
     /// deserves the same trust as a curated override, not a second-guess); a
     /// translated row whose Japanese column isn't actually Japanese AND carries
-    /// no resolution-method/ModifiedByUser tag at all (準正常系 — 2026-09-06: no
+    /// no resolution-method/SJPTS_ModifiedByUser tag at all (準正常系 — 2026-09-06: no
     /// longer excluded either, since the exclusion branch was removed entirely
-    /// in favor of the same informational-note treatment ModifiedByUser/
+    /// in favor of the same informational-note treatment SJPTS_ModifiedByUser/
     /// *NoJapanese already get; see Run_NonJapaneseAutoResolutionTags_
     /// ShouldBeIncludedWithNoteNotExcluded for the tag-by-tag coverage). This
     /// row's blank Notes still can't actually arise through this tool's own
@@ -128,7 +128,7 @@ public class DsdJsonGeneratorTests
         }
     }
 
-    /// <summary>v0.56.0: a ModifiedByUser row whose translation doesn't contain
+    /// <summary>v0.56.0: a SJPTS_ModifiedByUser row whose translation doesn't contain
     /// Japanese (Fixtures/translations_basic.tsv's "Bob" row) must be INCLUDED
     /// as-is (already covered by the golden-file check above) AND get a logged
     /// NOTE — distinct from the [warn]+exclude path used for untrusted rows —
@@ -189,11 +189,11 @@ public class DsdJsonGeneratorTests
     /// <summary>v0.58.5: PromptGenerator.ApplyLlmStep now tags a candidate whose
     /// LLM response parsed fine but whose translation contains no Japanese with
     /// a dedicated "&lt;method&gt;NoJapanese" Notes value (e.g.
-    /// "TranslationLocalLlmNoJapanese") instead of silently discarding it or
+    /// "SJPTS_TranslationLocalLlmNoJapanese") instead of silently discarding it or
     /// accepting it as an ordinary success — see that method's own remarks for
     /// why (a real example: vanilla Skyrim's own untranslated "arcane script"
     /// spell-tome flavor text). DsdJsonGenerator must treat ANY Notes value
-    /// ending in "NoJapanese" the same way it already treats ModifiedByUser —
+    /// ending in "NoJapanese" the same way it already treats SJPTS_ModifiedByUser —
     /// included as-is with an informational note, not excluded with a [warn] —
     /// since this may be genuinely untranslatable content, not a mistake.
     /// Uses its own self-contained fixture (not translations_basic.tsv) so it
@@ -246,25 +246,25 @@ public class DsdJsonGeneratorTests
     }
 
     /// <summary>2026-09-06 TODO investigation (management repo's
-    /// todo/active.md): ①②③④ (and AutoCrossModPrecedent, once implemented) are
+    /// todo/active.md): ①②③④ (and SJPTS_AutoCrossModPrecedent, once implemented) are
     /// ALL either structurally incapable of returning partial non-Japanese
     /// output (②③④ — see design/translation_resolution_chain.md's all-or-
-    /// nothing invariant) or, like AutoCorpusOverride, back themselves with
-    /// human-authored external translation data (AutoCorpus/AutoCorpusDsd/
-    /// AutoCorpusImported/AutoCorpusReferenceTaiyaku — real DSD files,
+    /// nothing invariant) or, like SJPTS_AutoCorpusOverride, back themselves with
+    /// human-authored external translation data (SJPTS_AutoCorpus/SJPTS_AutoCorpusDsd/
+    /// SJPTS_AutoCorpusImported/SJPTS_AutoCorpusReferenceTaiyaku — real DSD files,
     /// xTranslator imports, a bilingual reference table) where a legitimately
     /// non-Japanese value is exactly as plausible as it is for
-    /// AutoCorpusOverride's curated "pts"->"pts". Current behavior instead
+    /// SJPTS_AutoCorpusOverride's curated "pts"->"pts". Current behavior instead
     /// EXCLUDES all of these from DSD output (silently dropping a real,
     /// intentional entry) whenever the sole non-Japanese-safe channel — a typo
     /// in a human-edited glossary (Data/mod_glossary/*.tsv,
     /// Data/name_glossary.tsv) — happens to fire. This test documents that
     /// CURRENT (undesired) behavior as a RED characterization: every one of
     /// these tags should end up INCLUDED with an informational note (the same
-    /// treatment ModifiedByUser/*NoJapanese already get), not excluded. It is
+    /// treatment SJPTS_ModifiedByUser/*NoJapanese already get), not excluded. It is
     /// expected to FAIL until DsdJsonGenerator's exclusion branch is removed
     /// in favor of widening the info-note branch's condition.
-    /// AutoCorpusOverride itself (row 9 in the fixture) is included as a
+    /// SJPTS_AutoCorpusOverride itself (row 9 in the fixture) is included as a
     /// regression guard: it must stay fully silent — no exclusion AND no info
     /// log — exactly as before, since that curated-exemption behavior isn't
     /// changing.</summary>
@@ -296,19 +296,19 @@ public class DsdJsonGeneratorTests
 
             var taggedNonJapaneseValues = new[]
             {
-                "Iron Dagger Corpus",       // AutoCorpus
-                "Steel Shield Dsd",         // AutoCorpusDsd
-                "Fireball Imported",        // AutoCorpusImported
-                "Ancient Tome Reference",   // AutoCorpusReferenceTaiyaku
-                "Frost Breath Meaning",     // AutoCorpusMeaning
-                "Silver Ingot Translit",    // AutoCorpusTransliterate
-                "John Namefallback",        // TranslationNameFallback
-                "Dragon Quest Precedent",   // AutoCrossModPrecedent
+                "Iron Dagger Corpus",       // SJPTS_AutoCorpus
+                "Steel Shield Dsd",         // SJPTS_AutoCorpusDsd
+                "Fireball Imported",        // SJPTS_AutoCorpusImported
+                "Ancient Tome Reference",   // SJPTS_AutoCorpusReferenceTaiyaku
+                "Frost Breath Meaning",     // SJPTS_AutoCorpusMeaning
+                "Silver Ingot Translit",    // SJPTS_AutoCorpusTransliterate
+                "John Namefallback",        // SJPTS_TranslationNameFallback
+                "Dragon Quest Precedent",   // SJPTS_AutoCrossModPrecedent
             };
             foreach (var value in taggedNonJapaneseValues)
                 Assert.Contains(value, json);
 
-            // AutoCorpusOverride's "pts" must also still be included (unchanged).
+            // SJPTS_AutoCorpusOverride's "pts" must also still be included (unchanged).
             Assert.Contains("pts", json);
 
             // None of the 8 auto-resolution-tagged rows should have gone through
@@ -317,12 +317,12 @@ public class DsdJsonGeneratorTests
                 "除外: Japanese列に日本語が含まれていない（訳し忘れ・貼り付けミスの可能性）",
                 "Excluded: the Japanese column doesn't contain Japanese (possibly a missed translation or a paste mistake)"));
 
-            // Each should instead carry the same informational note ModifiedByUser/*NoJapanese get.
+            // Each should instead carry the same informational note SJPTS_ModifiedByUser/*NoJapanese get.
             Assert.Equal(8, log.DetailCount(
                 "情報: 訳文に日本語が含まれていないが、そのまま出力する（意図的な可能性があるため除外しない）",
                 "Note: a translation doesn't contain Japanese — included as-is (not excluded, since this may be intentional)"));
 
-            // AutoCorpusOverride stays fully silent — no [warn] line for "pts" at all.
+            // SJPTS_AutoCorpusOverride stays fully silent — no [warn] line for "pts" at all.
             Assert.DoesNotContain("'00000009:TagsMod.esp'", capturedError.ToString());
         }
         finally

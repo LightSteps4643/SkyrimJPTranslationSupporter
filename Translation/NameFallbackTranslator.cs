@@ -309,7 +309,7 @@ public sealed class NameFallbackTranslator
         // v0.39.0: a unit may now show several original words joined by a space
         // (the phrase/negation it was matched as a whole), not just one.
         var detail = string.Join(" + ", displayWords.Select((w, i) => $"\"{w}\"→\"{pieces[i]}\"({sources[i]})"));
-        return new NameFallbackResult(prefix + body, "TranslationNameFallback", detail);
+        return new NameFallbackResult(prefix + body, "SJPTS_TranslationNameFallback", detail);
     }
 
     /// <summary>Resolves ONE original word via the same three-source chain the

@@ -30,7 +30,7 @@ public class InterfaceTextPanelTsvTests
             File.WriteAllLines(path, new[]
             {
                 "Key\tEnglish\tJapanese\tResolved\tNotes",
-                "$Multi\tline one\\nline two\\twith a tab\t一行目\\n二行目\\tタブ入り\t1\tTranslationLocalLlm",
+                "$Multi\tline one\\nline two\\twith a tab\t一行目\\n二行目\\tタブ入り\t1\tSJPTS_TranslationLocalLlm",
             });
 
             var rows = InvokeRead(path);

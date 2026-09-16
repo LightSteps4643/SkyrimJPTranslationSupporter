@@ -8,7 +8,7 @@ namespace SkyrimJPStringPatcher.Tests.Translation;
 /// outside SameModHintFinder's own relevance logic: (1) which already-
 /// resolved candidates are trustworthy enough to draw hints from at all —
 /// see <see cref="SameModHintBlockBuilder.IsEligibleMethod"/>'s remarks for
-/// why the AutoCorpus* family and the *NoJapanese variants are excluded —
+/// why the SJPTS_AutoCorpus* family and the *NoJapanese variants are excluded —
 /// (2) formatting the result into the actual prompt text (a legend + numeric
 /// code per line, only for trust tiers actually present, validated against
 /// real large-scale LLM testing), trimmed to a character budget (25% of the
@@ -17,25 +17,25 @@ namespace SkyrimJPStringPatcher.Tests.Translation;
 /// </summary>
 public class SameModHintBlockBuilderTests
 {
-    private static CorpusEntry Entry(string en, string ja, string method = "TranslationLocalLlm", string dsdType = "MISC FULL") =>
+    private static CorpusEntry Entry(string en, string ja, string method = "SJPTS_TranslationLocalLlm", string dsdType = "MISC FULL") =>
         new(en, ja, "SomeMod.esp", method, dsdType);
 
     [Theory]
-    [InlineData("ModifiedByUser", true)]
-    [InlineData("AutoCorpusMeaning", true)]
-    [InlineData("AutoCorpusMeaningTranslit", true)]
-    [InlineData("AutoCorpusTransliterate", true)]
-    [InlineData("AutoCrossModPrecedent", true)]
-    [InlineData("TranslationCloudLlm", true)]
-    [InlineData("TranslationLocalLlm", true)]
-    [InlineData("TranslationNameFallback", true)]
-    [InlineData("AutoCorpus", false)]
-    [InlineData("AutoCorpusDsd", false)]
-    [InlineData("AutoCorpusImported", false)]
-    [InlineData("AutoCorpusReferenceTaiyaku", false)]
-    [InlineData("AutoCorpusOverride", false)]
-    [InlineData("TranslationLocalLlmNoJapanese", false)]
-    [InlineData("TranslationCloudLlmNoJapanese", false)]
+    [InlineData("SJPTS_ModifiedByUser", true)]
+    [InlineData("SJPTS_AutoCorpusMeaning", true)]
+    [InlineData("SJPTS_AutoCorpusMeaningTranslit", true)]
+    [InlineData("SJPTS_AutoCorpusTransliterate", true)]
+    [InlineData("SJPTS_AutoCrossModPrecedent", true)]
+    [InlineData("SJPTS_TranslationCloudLlm", true)]
+    [InlineData("SJPTS_TranslationLocalLlm", true)]
+    [InlineData("SJPTS_TranslationNameFallback", true)]
+    [InlineData("SJPTS_AutoCorpus", false)]
+    [InlineData("SJPTS_AutoCorpusDsd", false)]
+    [InlineData("SJPTS_AutoCorpusImported", false)]
+    [InlineData("SJPTS_AutoCorpusReferenceTaiyaku", false)]
+    [InlineData("SJPTS_AutoCorpusOverride", false)]
+    [InlineData("SJPTS_TranslationLocalLlmNoJapanese", false)]
+    [InlineData("SJPTS_TranslationCloudLlmNoJapanese", false)]
     public void IsEligibleMethod_MatchesTheDesignedTrustTierList(string method, bool expected)
     {
         Assert.Equal(expected, SameModHintBlockBuilder.IsEligibleMethod(method));
@@ -78,13 +78,13 @@ public class SameModHintBlockBuilderTests
     public void BuildBlock_RelevantHint_IncludesLegendCodeAndTheHintLine()
     {
         var block = SameModHintBlockBuilder.BuildBlock(
-            new List<CorpusEntry> { Entry("Frostwind Blade", "氷風の刃", "TranslationLocalLlm") },
+            new List<CorpusEntry> { Entry("Frostwind Blade", "氷風の刃", "SJPTS_TranslationLocalLlm") },
             new[] { ("Frostwind Dagger", "MISC FULL") },
             batchCharLimit: 6000);
 
         Assert.Contains("Same-mod translations", block);
         Assert.Contains("defer to \"Reference examples\"", block);
-        // legend entry for TranslationLocalLlm (priority 7)
+        // legend entry for SJPTS_TranslationLocalLlm (priority 7)
         Assert.Contains("7=translated by a local LLM", block);
         // hint line references the same code, tab-separated
         Assert.Contains("\"Frostwind Blade\"\t\"氷風の刃\"\t7", block);
@@ -96,7 +96,7 @@ public class SameModHintBlockBuilderTests
     public void BuildBlock_LegendOnlyListsTrustTiersActuallyPresent()
     {
         var block = SameModHintBlockBuilder.BuildBlock(
-            new List<CorpusEntry> { Entry("Frostwind Blade", "氷風の刃", "TranslationLocalLlm") },
+            new List<CorpusEntry> { Entry("Frostwind Blade", "氷風の刃", "SJPTS_TranslationLocalLlm") },
             new[] { ("Frostwind Dagger", "MISC FULL") },
             batchCharLimit: 6000);
 
@@ -106,7 +106,7 @@ public class SameModHintBlockBuilderTests
     }
 
     /// <summary>A tie in content score is broken by trust tier, not string
-    /// length — a human's ModifiedByUser edit outranks an LLM's own earlier
+    /// length — a human's SJPTS_ModifiedByUser edit outranks an LLM's own earlier
     /// guess even though it is the LONGER string here (deliberately, so a
     /// pass can only mean priority actually won, not an accidental length
     /// tie-break in the same direction).</summary>
@@ -118,8 +118,8 @@ public class SameModHintBlockBuilderTests
         // entries get identical idf-based norms and tie exactly on score.
         var pool = new List<CorpusEntry>
         {
-            Entry("Frostwind Ward", "氷風の盾", "TranslationLocalLlm"),
-            Entry("Frostwind Benediction", "氷風の祝福", "ModifiedByUser"),
+            Entry("Frostwind Ward", "氷風の盾", "SJPTS_TranslationLocalLlm"),
+            Entry("Frostwind Benediction", "氷風の祝福", "SJPTS_ModifiedByUser"),
         };
 
         var block = SameModHintBlockBuilder.BuildBlock(pool, new[] { ("Frostwind Dagger", "MISC FULL") }, batchCharLimit: 6000);
@@ -127,7 +127,7 @@ public class SameModHintBlockBuilderTests
         var userLineIndex = block.IndexOf("Frostwind Benediction", StringComparison.Ordinal);
         var llmLineIndex = block.IndexOf("Frostwind Ward", StringComparison.Ordinal);
         Assert.True(userLineIndex >= 0 && llmLineIndex >= 0 && userLineIndex < llmLineIndex,
-            "the longer ModifiedByUser hint (higher trust tier) should still be listed before the shorter, same-scoring TranslationLocalLlm hint");
+            "the longer SJPTS_ModifiedByUser hint (higher trust tier) should still be listed before the shorter, same-scoring SJPTS_TranslationLocalLlm hint");
     }
 
     /// <summary>A hint already shown verbatim in some candidate's own

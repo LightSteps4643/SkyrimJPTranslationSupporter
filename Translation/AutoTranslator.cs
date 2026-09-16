@@ -340,16 +340,16 @@ public sealed class AutoTranslator
         // order was affected (Courage itself) — see DESIGN_NOTES.md.
         if (_corpusExact.TryGetValue(text, out var corpusHit) && !(recordType == "NPC_ FULL" && !corpusHit.SeenAsNpcName))
         {
-            // v0.38.0: "dsd" now gets its own method tag (AutoCorpusDsd) instead of
-            // being silently folded into "AutoCorpus" (vanilla) — see _corpusExact's
+            // v0.38.0: "dsd" now gets its own method tag (SJPTS_AutoCorpusDsd) instead of
+            // being silently folded into "SJPTS_AutoCorpus" (vanilla) — see _corpusExact's
             // remarks and DESIGN_HISTORY.md's v0.38.0 section.
             var method = corpusHit.SourceKind switch
             {
-                "dsd" => "AutoCorpusDsd",
-                "imported" => "AutoCorpusImported",
-                "reference" => "AutoCorpusReferenceTaiyaku",
-                "override" => "AutoCorpusOverride",
-                _ => "AutoCorpus",
+                "dsd" => "SJPTS_AutoCorpusDsd",
+                "imported" => "SJPTS_AutoCorpusImported",
+                "reference" => "SJPTS_AutoCorpusReferenceTaiyaku",
+                "override" => "SJPTS_AutoCorpusOverride",
+                _ => "SJPTS_AutoCorpus",
             };
             trace?.Trace($"Resolve \"{text}\": {method} -> \"{corpusHit.Japanese}\" [{corpusHit.SourceKind}:{corpusHit.Source}]");
             return new AutoTranslationResult(corpusHit.Japanese, method);
@@ -366,7 +366,7 @@ public sealed class AutoTranslator
             // Labelled apart so the two kinds stay separable in the log and in
             // translations.tsv: a fully meaning-composed name and one whose
             // modifier was transliterated carry different amounts of evidence.
-            var method = viaTransliteration ? "AutoCorpusMeaningTranslit" : "AutoCorpusMeaning";
+            var method = viaTransliteration ? "SJPTS_AutoCorpusMeaningTranslit" : "SJPTS_AutoCorpusMeaning";
             var modifierSrc = meaningBreakdown.ModifierSource.Length > 0 ? $"[{meaningBreakdown.ModifierSource}]" : "";
             var headSrc = meaningBreakdown.HeadSource.Length > 0 ? $"[{meaningBreakdown.HeadSource}]" : "";
             var detail = $"修飾語\"{meaningBreakdown.ModifierWord}\"→\"{meaningBreakdown.ModifierJapanese}\"({meaningBreakdown.ModifierVia}){modifierSrc} " +
@@ -399,8 +399,8 @@ public sealed class AutoTranslator
                     {
                         var detail = string.Join(" + ", wordPieces.Select(p =>
                             $"\"{p.Piece}\"→\"{p.Kana}\"" + (p.Source.Length > 0 ? $"[{p.Source}]" : "(derived: 複数語からの切り出し・単独の出典なし)")));
-                        trace?.Trace($"Resolve \"{text}\": AutoCorpusTransliterate -> \"{decomposed}\" ({detail})");
-                        return new AutoTranslationResult(decomposed, "AutoCorpusTransliterate", detail);
+                        trace?.Trace($"Resolve \"{text}\": SJPTS_AutoCorpusTransliterate -> \"{decomposed}\" ({detail})");
+                        return new AutoTranslationResult(decomposed, "SJPTS_AutoCorpusTransliterate", detail);
                     }
                 }
             }
@@ -449,8 +449,8 @@ public sealed class AutoTranslator
                     // is reviewable without re-deriving it by hand.
                     var detail = "複数語の固有名詞句として音訳（人名用の結合規則・意味合成は不成立）: " + string.Join(" ・ ", wordDetails);
                     var joined = string.Join("・", pieces);
-                    trace?.Trace($"Resolve \"{text}\": AutoCorpusTransliterate (proper-noun phrase) -> \"{joined}\" ({detail})");
-                    return new AutoTranslationResult(joined, "AutoCorpusTransliterate", detail);
+                    trace?.Trace($"Resolve \"{text}\": SJPTS_AutoCorpusTransliterate (proper-noun phrase) -> \"{joined}\" ({detail})");
+                    return new AutoTranslationResult(joined, "SJPTS_AutoCorpusTransliterate", detail);
                 }
             }
         }

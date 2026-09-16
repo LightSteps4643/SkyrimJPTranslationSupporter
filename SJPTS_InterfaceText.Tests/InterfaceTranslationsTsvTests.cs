@@ -41,7 +41,7 @@ public class InterfaceTranslationsTsvTests
         {
             var rows = new List<InterfaceTranslationRow>
             {
-                new("$Multi", "line one\nline two\twith a tab", "一行目\n二行目\tタブ入り", true, "TranslationLocalLlm"),
+                new("$Multi", "line one\nline two\twith a tab", "一行目\n二行目\tタブ入り", true, "SJPTS_TranslationLocalLlm"),
             };
             InterfaceTranslationsTsv.Write(path, rows);
 

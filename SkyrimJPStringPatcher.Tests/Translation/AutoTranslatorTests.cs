@@ -42,13 +42,13 @@ public class AutoTranslatorTests
 
         Assert.NotNull(result);
         Assert.Equal("鉄の剣", result!.Japanese);
-        Assert.Equal("AutoCorpus", result.Method);
+        Assert.Equal("SJPTS_AutoCorpus", result.Method);
     }
 
     [Theory]
-    [InlineData("Ebony Sword", "黒檀の剣", "AutoCorpusDsd")]
-    [InlineData("Glass Sword", "ガラスの剣", "AutoCorpusImported")]
-    [InlineData("Steel Sword", "鋼の剣", "AutoCorpusReferenceTaiyaku")]
+    [InlineData("Ebony Sword", "黒檀の剣", "SJPTS_AutoCorpusDsd")]
+    [InlineData("Glass Sword", "ガラスの剣", "SJPTS_AutoCorpusImported")]
+    [InlineData("Steel Sword", "鋼の剣", "SJPTS_AutoCorpusReferenceTaiyaku")]
     public void TryTranslate_TagsMethodBySourceKind(string english, string expectedJapanese, string expectedMethod)
     {
         var result = BuildFromFixture().TryTranslate(english, "WEAP FULL");
@@ -71,7 +71,7 @@ public class AutoTranslatorTests
 
         Assert.NotNull(result);
         Assert.Equal("鉄の短剣", result!.Japanese);
-        Assert.Equal("AutoCorpus", result.Method);
+        Assert.Equal("SJPTS_AutoCorpus", result.Method);
     }
 
     /// <summary>The real v0.49.2 incident, reproduced directly: "Courage" is a
@@ -128,11 +128,11 @@ public class AutoTranslatorTests
         var result = translator.TryTranslate(english);
         Assert.NotNull(result);
         Assert.Equal(japanese, result!.Japanese);
-        Assert.Equal("AutoCorpusOverride", result.Method);
+        Assert.Equal("SJPTS_AutoCorpusOverride", result.Method);
 
         var npcResult = translator.TryTranslate(english, "NPC_ FULL");
         Assert.NotNull(npcResult);
-        Assert.Equal("AutoCorpusOverride", npcResult!.Method);
+        Assert.Equal("SJPTS_AutoCorpusOverride", npcResult!.Method);
     }
 
     private static string ReadFirstNonEmptyLine(string path) =>
@@ -190,7 +190,7 @@ public class AutoTranslatorTests
 
         Assert.NotNull(result);
         Assert.Equal("鍵A(vanilla)", result!.Japanese);
-        Assert.Equal("AutoCorpus", result.Method);
+        Assert.Equal("SJPTS_AutoCorpus", result.Method);
     }
 
     /// <summary>SeenAsNpcName is tracked INDEPENDENTLY of which entry's text
@@ -229,7 +229,7 @@ public class AutoTranslatorTests
         var result = translator.TryTranslate("Amber Boots", "ARMO FULL");
 
         Assert.NotNull(result);
-        Assert.Equal("AutoCorpusMeaning", result!.Method);
+        Assert.Equal("SJPTS_AutoCorpusMeaning", result!.Method);
         Assert.NotEmpty(result.Detail);
     }
 
@@ -248,7 +248,7 @@ public class AutoTranslatorTests
 
         Assert.NotNull(result);
         Assert.Equal("フロストフォール", result!.Japanese);
-        Assert.Equal("AutoCorpusTransliterate", result.Method);
+        Assert.Equal("SJPTS_AutoCorpusTransliterate", result.Method);
     }
 
     /// <summary>The OTHER ③ path: a 2-3 word Title Case phrase with no
@@ -267,6 +267,6 @@ public class AutoTranslatorTests
 
         Assert.NotNull(result);
         Assert.Equal("フロスト・フォール", result!.Japanese);
-        Assert.Equal("AutoCorpusTransliterate", result.Method);
+        Assert.Equal("SJPTS_AutoCorpusTransliterate", result.Method);
     }
 }

@@ -541,12 +541,12 @@ int RunOutputOne(string target)
 
     // Mirrors the ESP CLI's own DsdJsonGenerator.cs: a Resolved row whose
     // Japanese still doesn't contain Japanese characters is not an error to
-    // exclude or warn about (ModifiedByUser/*NoJapanese both represent a
+    // exclude or warn about (SJPTS_ModifiedByUser/*NoJapanese both represent a
     // deliberate acceptance — a human's own edit, or the model's judgment
     // that this string doesn't need translation, e.g. "Ok"->"OK") — just an
     // informational note so it's easy to spot-check later.
     var acceptedNonJapanese = rows.Where(r => r.Resolved
-        && (r.Notes == "ModifiedByUser" || r.Notes.EndsWith("NoJapanese", StringComparison.Ordinal))
+        && (r.Notes == "SJPTS_ModifiedByUser" || r.Notes.EndsWith("NoJapanese", StringComparison.Ordinal))
         && !LanguageDetector.ContainsJapanese(r.Japanese)).ToList();
     if (acceptedNonJapanese.Count > 0)
     {
