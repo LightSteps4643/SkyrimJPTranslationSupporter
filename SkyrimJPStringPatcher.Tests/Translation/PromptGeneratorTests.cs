@@ -1581,7 +1581,7 @@ public class PromptGeneratorTests
     // a real-data investigation (HeelsFix.esp, gemma4:26b) hit a wall trying
     // to figure out WHY a candidate didn't resolve — neither translation.log
     // nor translation.trace.log captured enough to tell apart "no tags at
-    // all" from "tags present but something else was wrong". 2026-09-17:
+    // all" from "tags present but something else was wrong". 2026-09-16:
     // moved to the shared LlmBatchTranslationEngine (public) as part of the
     // ESP/Interface ApplyLlmStep duplication refactor — no longer needs
     // reflection.

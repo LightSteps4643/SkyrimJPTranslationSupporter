@@ -7,7 +7,7 @@ namespace SkyrimJPStringPatcher.Tests.Core;
 /// CLI/Core pipeline shares (consolidated in v0.46.1 from 6 independent copies).
 /// A wrong or drifted escaping here corrupts TSV structure silently — real data
 /// has hit this with multi-paragraph BOOK DESC text carrying embedded
-/// tabs/newlines. 2026-09-17: the GUI project (which has no *project reference*
+/// tabs/newlines. 2026-09-16: the GUI project (which has no *project reference*
 /// to Core, by design) no longer keeps its own duplicate copies of this logic —
 /// MainForm.cs/TranslationDetailForm.cs/InterfaceTextPanel.cs/
 /// InterfaceTextDetailForm.cs all call this exact class via a file-level link

@@ -14,10 +14,10 @@ namespace SJPTS_InterfaceText;
 /// (a debug feature once landed in only one file; the 2026-09-16 round/batch
 /// → "pass" restructure had to be hand-implemented in both files) — an
 /// independent code review done to prepare a fix also found 4 further
-/// unintentional divergences (see git history around 2026-09-16/17 and
+/// unintentional divergences (see git history around 2026-09-16 and
 /// <see cref="LlmBatchTranslationEngine"/>'s own class remarks).
 ///
-/// 2026-09-17: the shared "hard part" (pass loop, circuit-breaker checks,
+/// 2026-09-16: the shared "hard part" (pass loop, circuit-breaker checks,
 /// same-mod-hint pooling, response parsing/matching, all of the above bugs'
 /// fixes) is now extracted into <see cref="LlmBatchTranslationEngine"/>, used
 /// by both this file and <c>Translation/PromptGenerator.cs</c> — this class
@@ -159,7 +159,7 @@ public static class InterfaceTextPromptGenerator
         // Notes値はESP側（Translation/PromptGenerator.cs）の命名規則をそのまま
         // 踏襲——"TranslationLocalLlm"/"TranslationCloudLlm"。
         var methodTag = providerLabel == "localLLM" ? "TranslationLocalLlm" : "TranslationCloudLlm";
-        // 2026-09-17: 独立レビューで発覚したバグの修正——以前はここのログ見出しが
+        // 2026-09-16: 独立レビューで発覚したバグの修正——以前はここのログ見出しが
         // providerLabelを無視して常に「生成AI翻訳」固定だったため、ローカルLLM
         // 実行時でもログには「生成AI翻訳」と誤表示されていた。ESP側の
         // stepLabelJa/stepLabelEnに相当する値をproviderLabelから導出し、

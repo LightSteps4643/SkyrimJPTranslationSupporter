@@ -3,7 +3,7 @@ using SkyrimJPStringPatcher.Core;
 namespace SkyrimJPStringPatcher.Translation;
 
 /// <summary>
-/// 2026-09-16/17: shared "hard part" engine extracted from
+/// 2026-09-16: shared "hard part" engine extracted from
 /// <c>Translation/PromptGenerator.cs</c>'s and
 /// <c>SJPTS_InterfaceText/InterfaceTextPromptGenerator.cs</c>'s own, near-identical
 /// <c>ApplyLlmStep</c> methods. The Interface pipeline started life as a copy-paste
@@ -130,7 +130,7 @@ public static class LlmBatchTranslationEngine
     {
         var answers = new Dictionary<string, AutoTranslationResult>(StringComparer.Ordinal);
         if (o.Items.Count == 0) return answers;
-        // 2026-09-16/17: the same-mod pool needs each already-resolved text's own
+        // 2026-09-16: the same-mod pool needs each already-resolved text's own
         // record type (for RecordTypeAffinity) on later passes/calls, once the
         // IGrouping that resolved it no longer exists — cached alongside answers.
         var answerRecordTypes = new Dictionary<string, string>(StringComparer.Ordinal);

@@ -194,7 +194,7 @@ public class InterfaceTextPromptGeneratorTests
             // would still stop at 2 calls (the following, otherwise-empty
             // pass would see zero progress and stop on its own) but would
             // log the circuit-breaker message a second time for no reason.
-            // 2026-09-17: category text now correctly says "ローカルLLM" (a
+            // 2026-09-16: category text now correctly says "ローカルLLM" (a
             // bug found by independent code review — this was previously
             // hardcoded to "生成AI翻訳"/cloud regardless of providerLabel,
             // fixed by the LlmBatchTranslationEngine extraction).
@@ -248,7 +248,7 @@ public class InterfaceTextPromptGeneratorTests
         {
             InterfaceTextPromptGenerator.ApplyLlmStep(pending, fake, "TestMod", log, null, 12_000, dir, "localLLM");
 
-            // 2026-09-17: LlmBatchTranslationEngineへの統合に伴い、この
+            // 2026-09-16: LlmBatchTranslationEngineへの統合に伴い、この
             // カテゴリ文字列にも（ESP側と同じく）どのプロバイダの実行かを
             // 示す接頭辞が一貫して付くようになった（以前のInterface側は
             // この特定のメッセージにだけ接頭辞が付いていなかった）。
@@ -644,7 +644,7 @@ public class InterfaceTextPromptGeneratorTests
 
     // ==== 2026-09-12: ClassifyTaggedSourceIssue — mirrors the equivalent new
     // tests in SkyrimJPStringPatcher.Tests/Translation/PromptGeneratorTests.cs
-    // (ESP side). 2026-09-17: moved to the shared LlmBatchTranslationEngine
+    // (ESP side). 2026-09-16: moved to the shared LlmBatchTranslationEngine
     // (public) as part of the ESP/Interface ApplyLlmStep duplication
     // refactor — no longer needs reflection. ====
 

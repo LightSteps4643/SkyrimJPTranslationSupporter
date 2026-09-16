@@ -649,7 +649,7 @@ public static class PromptGenerator
     /// so 6 only ever sees candidates 5 left behind — a chain, not two
     /// independent passes.
     ///
-    /// 2026-09-16/17: this is now a thin ESP-specific wrapper around <see
+    /// 2026-09-16: this is now a thin ESP-specific wrapper around <see
     /// cref="LlmBatchTranslationEngine.Run{TItem}"/>, which owns the actual
     /// pass/circuit-breaker/send/parse/match loop shared with <c>SJPTS_
     /// InterfaceText/InterfaceTextPromptGenerator.cs</c>'s own ApplyLlmStep —

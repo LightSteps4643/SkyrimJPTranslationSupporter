@@ -356,7 +356,7 @@ public sealed class TranslationDetailForm : Form
         File.WriteAllLines(_path, lines, new System.Text.UTF8Encoding(true)); // BOM付きUTF-8 — CLI側の出力と同じ形式
     }
 
-    // 2026-09-17: the round-trip-safety logic (backslash/tab/newline escaping)
+    // 2026-09-16: the round-trip-safety logic (backslash/tab/newline escaping)
     // is now shared with Core/TsvEscaping.cs via the file-level link already
     // set up for InterfaceTextPanel.cs/InterfaceTextDetailForm.cs (see
     // SkyrimJPStringPatcherGui.csproj) — GUI still has zero project references

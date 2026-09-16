@@ -5,7 +5,7 @@ using SkyrimJPStringPatcherGui.Services;
 namespace SkyrimJPStringPatcher.Tests.Gui;
 
 /// <summary>
-/// 2026-09-17: TranslationDetailForm.Escape/Unescape used to be a deliberate
+/// 2026-09-16: TranslationDetailForm.Escape/Unescape used to be a deliberate
 /// small duplication of Core/TsvEscaping.cs's own logic (GUI has no project
 /// reference to Core). Now `Escape` calls `TsvEscaping.Escape` (via the
 /// file-level link already used by InterfaceTextPanel.cs/InterfaceTextDetailForm.cs
