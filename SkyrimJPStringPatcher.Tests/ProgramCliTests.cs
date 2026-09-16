@@ -141,6 +141,46 @@ public class ProgramCliTests
         }
     }
 
+    /// <summary>2026-09-17: importフォルダを任意の場所に設定可能にするため
+    /// `--import=`引数を新規追加した。既定の"Translation/import"ではない
+    /// 任意のフォルダに置いたxTranslator XMLが、`--import=`で指定した場合に
+    /// ちゃんと取り込まれることを確認する（CLI引数の配線自体の検証——
+    /// XTranslatorImporter自体のパース挙動はXTranslatorImporterTestsで
+    /// 別途カバー済み）。</summary>
+    [Fact]
+    public void TranslationAll_ImportArgOverridesDefaultImportDir()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_clitest_transimport_{Guid.NewGuid():N}");
+        var pickUpTargetOutDir = Path.Combine(root, "PickUpTarget", "out_temp");
+        Directory.CreateDirectory(pickUpTargetOutDir);
+        try
+        {
+            File.Copy(Path.Combine(FixturesDir, "Translation", "PromptGenerator", "candidates.tsv"), Path.Combine(pickUpTargetOutDir, "candidates.tsv"));
+            File.Copy(Path.Combine(FixturesDir, "Translation", "PromptGenerator", "corpus.tsv"), Path.Combine(pickUpTargetOutDir, "corpus.tsv"));
+
+            // 既定の"Translation/import"ではなく、任意の場所（"custom_import"）に置く。
+            var customImportDir = Path.Combine(root, "custom_import");
+            Directory.CreateDirectory(customImportDir);
+            File.WriteAllText(Path.Combine(customImportDir, "SjptsTestMod.xml"),
+                "<SSTXMLRessources>\n  <Params>\n    <Addon>SjptsTestMod.esp</Addon>\n  </Params>\n  <Content>\n" +
+                "    <String>\n      <REC>WEAP FULL</REC>\n      <Source>Sjpts Unresolved Candidate</Source>\n      <Dest>インポートされた訳</Dest>\n    </String>\n" +
+                "  </Content>\n</SSTXMLRessources>");
+
+            var (exitCode, output) = RunCli(root, "translation", "PickUpTarget/out_temp", "Translation/out_temp", "--all",
+                "--no-meaning", "--no-translit", "--no-namefallback", $"--import={customImportDir}");
+
+            Assert.Equal(0, exitCode);
+            var tsvPath = Path.Combine(root, "Translation", "out_temp", "SjptsTestMod", "translations.tsv");
+            Assert.True(File.Exists(tsvPath), output);
+            var lines = File.ReadAllLines(tsvPath);
+            Assert.Contains(lines, l => l.Contains("Sjpts Unresolved Candidate") && l.Contains("インポートされた訳"));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
     /// <summary>MainForm.cs: `RunCliAsync(new List&lt;string&gt; { "translation",
     /// "PickUpTarget/out_temp", "Translation/out_temp", $"--plugins-file={pluginsFilePath}",
     /// "--no-meaning", "--no-translit", "--no-namefallback", "--discard-user-edits" })` —

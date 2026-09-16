@@ -30,13 +30,18 @@ _backup/
 # 人が日本語列を埋める資産だが、公開リポジトリでは追跡しない方針とした）
 Data/mod_glossary/*.tsv
 
-# xTranslatorインポート用フォルダ（ユーザーが自分の翻訳ファイルを置く場所）
-Translation/import/*
-!Translation/import/.gitkeep
-
-# SJPTS_InterfaceText側のインポートフォルダ（同じ理由）
-InterfaceText/Translation/import/*
-!InterfaceText/Translation/import/.gitkeep
+# importフォルダ（ユーザーが自分の翻訳ファイルを置く場所。2026-09-17〜、
+# プラグイン翻訳用・Interface翻訳用とも製品ルート直下のimport/に集約）。
+# "import/*"だけでは配下のplugin/・interface/フォルダごと除外され、その中の
+# .gitkeepへの否定パターンが効かなくなる（gitignoreの既知の挙動）ため、
+# フォルダ自体は先に明示的に対象外にしている。
+import/*
+!import/plugin/
+!import/interface/
+import/plugin/*
+!import/plugin/.gitkeep
+import/interface/*
+!import/interface/.gitkeep
 
 # 実行ログ
 *.log

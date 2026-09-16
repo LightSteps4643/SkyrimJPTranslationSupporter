@@ -578,15 +578,30 @@ public sealed class InterfaceTextPanel : Form
     private string InterfaceTextWorkDir => Path.Combine(ProductRoot, "InterfaceText", "Translation", "out_temp");
 
     /// <summary>ユーザーが用意した*_japanese.txt（このツール自身が読み書きする
-    /// $Key&lt;TAB&gt;Text形式そのもの——ESP側のTranslation/import、xTranslator
-    /// XML形式とは別物）の置き場所。`detect`実行時、MOD自身のロードオーダーが
-    /// 持つ_japanese.txtより優先される（Program.cs/DetectOneMod参照）。</summary>
-    private string InterfaceTextImportDir => Path.Combine(ProductRoot, "InterfaceText", "Translation", "import");
+    /// $Key&lt;TAB&gt;Text形式そのもの——ESP側のimport、xTranslator XML形式とは
+    /// 別物）の置き場所。`detect`実行時、MOD自身のロードオーダーが持つ
+    /// _japanese.txtより優先される（Program.cs/DetectOneMod参照）。2026-09-17〜、
+    /// 既定値を&lt;製品ルート&gt;/import/interfaceに変更（ESP側の
+    /// &lt;製品ルート&gt;/import/pluginと対称、実際のMODデータベースでは両方の
+    /// 翻訳データがまとめて配布されるケースが多いため、共通の親フォルダの下に
+    /// 集約した）。AppSettingsで任意のフォルダに上書き可能。</summary>
+    private string InterfaceTextImportDir =>
+        string.IsNullOrWhiteSpace(_getSettings().InterfaceImportDirOverride)
+            ? Path.Combine(ProductRoot, "import", "interface")
+            : _getSettings().InterfaceImportDirOverride;
 
-    /// <summary>最終的にマージされた*_japanese.txtの出力先。ESP側の`out/`とは
-    /// 別系統（旧設計では共用していたが、生成物の場所が分かりにくいとの指摘で
-    /// 分離した）——`InterfaceText/GenerateTranslationFile/out/`。</summary>
-    private string InterfaceTextOutDir => Path.Combine(ProductRoot, "InterfaceText", "GenerateTranslationFile", "out");
+    /// <summary>最終的にマージされた*_japanese.txtの出力先。2026-09-17〜、ESP側の
+    /// 最終出力（`&lt;製品ルート&gt;/out/SKSE/...`）と同じ`&lt;製品ルート&gt;/out/`
+    /// ツリー配下に統合（`out/Interface/Translations/`）——1つの`out`フォルダを
+    /// そのままMO2に導入するだけで両方の翻訳が反映されるようにするため。
+    /// （過去に一度この統合を試みた形跡がコードコメントに残っていたが、実際に
+    /// 統合されたコミットは存在せず、機能追加時のセッション内で分離されたまま
+    /// 一度もリリースされていなかった。）AppSettingsで任意のフォルダに上書き可能
+    /// （ESP側の上書き設定<see cref="AppSettings.PluginOutDirOverride"/>とは独立）。</summary>
+    private string InterfaceTextOutDir =>
+        string.IsNullOrWhiteSpace(_getSettings().InterfaceOutDirOverride)
+            ? Path.Combine(ProductRoot, "out")
+            : _getSettings().InterfaceOutDirOverride;
 
     /// <summary>「再スキャン（読み取りのみ）」ボタンにも、起動直後の初期表示にも
     /// 使う共通の読み込み処理。<see cref="InterfaceTextWorkDir"/>配下の各MODフォルダの

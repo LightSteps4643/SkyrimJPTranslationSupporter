@@ -70,10 +70,17 @@ string workDir = Path.Combine(AppContext.BaseDirectory, "Translation", "out_temp
 string outDir = "out";
 // User-supplied *_japanese.txt files (same $Key<TAB>Text format this tool
 // reads/writes itself — NOT xTranslator's XML, unlike the ESP CLI's own
-// Translation/import) — checked by `detect` in DetectOneMod, ahead of
-// (i.e. overriding) whatever the mod's own load order already provides,
-// since a file placed here is a deliberate, curated override.
-string importDir = Path.Combine(AppContext.BaseDirectory, "Translation", "import");
+// import) — checked by `detect` in DetectOneMod, ahead of (i.e. overriding)
+// whatever the mod's own load order already provides, since a file placed
+// here is a deliberate, curated override.
+// 2026-09-17: changed from an exe-folder-relative path to a bare relative
+// "import/interface" — same reasoning as outDir above (bare relative,
+// resolves against the product root CliRunner.cs sets as CWD) — so this
+// lands in "<product root>/import/interface", alongside the ESP CLI's own
+// "<product root>/import/plugin" (DefaultImportDir, Program.cs), matching
+// the shared "import/" parent folder both pipelines now scaffold under
+// (publish-release.ps1).
+string importDir = "import/interface";
 string claudeExe = "claude";
 string claudeModel = "";
 string? localLlmEndpoint = null;
@@ -250,7 +257,7 @@ int RunDetect()
         .GroupBy(k => Path.GetFileNameWithoutExtension(k).Replace("_japanese", "", StringComparison.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase)
         .ToDictionary(g => g.Key, g => vfs[g.First()], StringComparer.OrdinalIgnoreCase);
     var importByBaseName = Directory.Exists(importDir)
-        ? Directory.EnumerateFiles(importDir, "*", SearchOption.AllDirectories)
+        ? Directory.EnumerateFiles(importDir, "*.txt", SearchOption.AllDirectories)
             .Where(f => Path.GetFileNameWithoutExtension(f).EndsWith("_japanese", StringComparison.OrdinalIgnoreCase))
             .GroupBy(f => Path.GetFileNameWithoutExtension(f)[..^"_japanese".Length], StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase)

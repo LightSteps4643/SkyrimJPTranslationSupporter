@@ -121,11 +121,16 @@ dotnet publish (Join-Path $root "SkyrimJPStringPatcherGui\SkyrimJPStringPatcherG
     -o $OutputDir
 if ($LASTEXITCODE -ne 0) { throw "GUIのpublishに失敗しました（exit code $LASTEXITCODE）" }
 
-$importDir = Join-Path $OutputDir "Translation\import"
-New-Item -ItemType Directory -Force -Path $importDir | Out-Null
+# 2026-09-17: プラグイン翻訳用・Interface翻訳用のimportフォルダを、製品ルート
+# 直下の"import"フォルダの下に集約（旧Translation\import・InterfaceText\
+# Translation\importから移動）。実際のMODデータベースでは両方の翻訳データが
+# まとめて配布されるケースが多く、共通の親フォルダの下にあった方が分かりやすい
+# ため。
+$pluginImportDir = Join-Path $OutputDir "import\plugin"
+New-Item -ItemType Directory -Force -Path $pluginImportDir | Out-Null
 
-$interfaceTextImportDir = Join-Path $OutputDir "InterfaceText\Translation\import"
-New-Item -ItemType Directory -Force -Path $interfaceTextImportDir | Out-Null
+$interfaceImportDir = Join-Path $OutputDir "import\interface"
+New-Item -ItemType Directory -Force -Path $interfaceImportDir | Out-Null
 
 # 2026-09-16: DSD出力先の"out"フォルダも、Translation/import等と同様に配布物へ
 # 空フォルダとして同梱する。CLI（DsdWriter）は生成成功時に自動作成するが、
@@ -147,7 +152,7 @@ if (-not (Test-Path $zipPath)) { throw "zipの作成に失敗しました: $zipP
 Write-Host ""
 Write-Host "完了: $OutputDir"
 Write-Host "  Skyrim_JP_Translation_Supporter.exe（直下） / SJPTS_InGameText\SJPTS_InGameText.exe（サブフォルダ） /"
-Write-Host "  SJPTS_InterfaceText\SJPTS_InterfaceText.exe（サブフォルダ） / Data/ / Translation/import/ / InterfaceText/Translation/import/ / out/ を含む"
+Write-Host "  SJPTS_InterfaceText\SJPTS_InterfaceText.exe（サブフォルダ） / Data/ / import/plugin/ / import/interface/ / out/ を含む"
 Write-Host "  ソースコード・開発用ドキュメント（DESIGN_NOTES.md等）は含まれない"
 Write-Host "  起動は直下の「Skyrim_JP_Translation_Supporter.exe」から（CLIは通常直接使わない）"
 Write-Host "  zip: $zipPath"

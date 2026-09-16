@@ -110,6 +110,25 @@ public sealed class AppSettings
     /// （12000）のまま変更していない。</summary>
     public int LlmCloudBatchCharLimit { get; set; } = 12_000;
 
+    /// <summary>2026-09-17: プラグイン翻訳（ESP/ESM）用importフォルダの任意上書き。
+    /// 空なら既定値（&lt;製品ルート&gt;/import/plugin）を使う。</summary>
+    public string PluginImportDirOverride { get; set; } = "";
+
+    /// <summary>Interface翻訳用importフォルダの任意上書き。空なら既定値
+    /// （&lt;製品ルート&gt;/import/interface）を使う。</summary>
+    public string InterfaceImportDirOverride { get; set; } = "";
+
+    /// <summary>プラグイン翻訳（DSD出力）の任意上書き。空なら既定値
+    /// （&lt;製品ルート&gt;/out）を使う。既定では、Interface翻訳の最終出力先
+    /// （<see cref="InterfaceOutDirOverride"/>未設定時）も同じ`out`フォルダ配下
+    /// （2026-09-17〜統合）になるが、この設定自体は独立しており、片方だけ
+    /// 上書きしても他方には影響しない。</summary>
+    public string PluginOutDirOverride { get; set; } = "";
+
+    /// <summary>Interface翻訳の最終出力先の任意上書き。空なら既定値
+    /// （&lt;製品ルート&gt;/out、ESP側と同じ場所）を使う。</summary>
+    public string InterfaceOutDirOverride { get; set; } = "";
+
     private static string SettingsPath =>
         Path.Combine(AppContext.BaseDirectory, "gui_settings.json");
 

@@ -75,6 +75,22 @@ public sealed class MainForm : Form
     internal string ProductRoot => _productRoot ?? throw new InvalidOperationException("Product root not resolved.");
     internal string Mo2Dir => _settings.Mo2InstanceDir;
 
+    /// <summary>プラグイン翻訳（xTranslator XML）用importフォルダ。2026-09-17〜、
+    /// 既定値を&lt;製品ルート&gt;/import/pluginに変更（Interface翻訳用
+    /// &lt;製品ルート&gt;/import/interfaceと対称、共通の親フォルダの下に集約）。
+    /// AppSettingsで任意のフォルダに上書き可能。</summary>
+    internal string PluginImportDir =>
+        string.IsNullOrWhiteSpace(_settings.PluginImportDirOverride)
+            ? Path.Combine(ProductRoot, "import", "plugin")
+            : _settings.PluginImportDirOverride;
+
+    /// <summary>プラグイン翻訳（DSD）の最終出力先。AppSettingsで任意のフォルダに
+    /// 上書き可能（Interface翻訳側の上書き設定とは独立）。</summary>
+    internal string PluginOutDir =>
+        string.IsNullOrWhiteSpace(_settings.PluginOutDirOverride)
+            ? Path.Combine(ProductRoot, "out")
+            : _settings.PluginOutDirOverride;
+
     /// <summary>v0.57.0: "pickuptarget" args for the current MO2 dir, with the
     /// optional mods/profile/overwrite path overrides appended when set.
     /// v0.57.3: SettingsForm used to have its own "MO2フォルダをロード" call
@@ -496,8 +512,8 @@ public sealed class MainForm : Form
         _btnRescan.Click += BtnRescan_Click;
         _btnReloadMo2.Click += BtnReloadMo2_Click;
         _btnGenerateDsd.Click += BtnGenerateDsd_Click;
-        _btnOpenImportFolder.Click += (_, _) => FolderOpener.OpenOrWarn(this, Path.Combine(ProductRoot, "Translation", "import"));
-        _btnOpenOutFolder.Click += (_, _) => FolderOpener.OpenOrWarn(this, Path.Combine(ProductRoot, "out"));
+        _btnOpenImportFolder.Click += (_, _) => FolderOpener.OpenOrWarn(this, PluginImportDir);
+        _btnOpenOutFolder.Click += (_, _) => FolderOpener.OpenOrWarn(this, PluginOutDir);
         _btnResetSelected.Margin = new Padding(3, 3, 3, 3);
         _btnRescan.Margin = new Padding(3, 3, 3, 3);
         _btnReloadMo2.Margin = new Padding(3, 3, 3, 3);
@@ -619,7 +635,7 @@ public sealed class MainForm : Form
         try
         {
             var args = new[] { "translation", "PickUpTarget/out_temp", "Translation/out_temp", plugin,
-                "--no-meaning", "--no-translit", "--no-namefallback", "--discard-user-edits" };
+                "--no-meaning", "--no-translit", "--no-namefallback", "--discard-user-edits", $"--import={PluginImportDir}" };
             if (!await RunCliAsync(args)) return;
             RefreshRowsFromTranslations(new[] { plugin });
         }
@@ -657,7 +673,7 @@ public sealed class MainForm : Form
         {
             await File.WriteAllLinesAsync(pluginsFilePath, selectedPlugins);
             var args = new[] { "translation", "PickUpTarget/out_temp", "Translation/out_temp", $"--plugins-file={pluginsFilePath}",
-                "--no-meaning", "--no-translit", "--no-namefallback", "--discard-user-edits" };
+                "--no-meaning", "--no-translit", "--no-namefallback", "--discard-user-edits", $"--import={PluginImportDir}" };
             if (!await RunCliAsync(args)) return;
             RefreshRowsFromTranslations(selectedPlugins);
         }
@@ -1047,7 +1063,7 @@ public sealed class MainForm : Form
             // reset its own confirmation dialog/comment promises ("初期状態に
             // 戻します。元に戻せません。") — see DESIGN_NOTES.md's Integration
             // scenario ⑪ entry for how this was found and confirmed.
-            if (!await RunCliAsync(new[] { "translation", "PickUpTarget/out_temp", "Translation/out_temp", "--all", "--no-meaning", "--no-translit", "--no-namefallback", "--discard-user-edits" })) return;
+            if (!await RunCliAsync(new[] { "translation", "PickUpTarget/out_temp", "Translation/out_temp", "--all", "--no-meaning", "--no-translit", "--no-namefallback", "--discard-user-edits", $"--import={PluginImportDir}" })) return;
             LoadData();
         }
         finally
@@ -1093,7 +1109,7 @@ public sealed class MainForm : Form
         try
         {
             await File.WriteAllLinesAsync(pluginsFilePath, selectedPlugins);
-            var args = new List<string> { "translation", "PickUpTarget/out_temp", "Translation/out_temp", $"--plugins-file={pluginsFilePath}", $"--cancel-flag-path={_activeCancelFlagPath}" };
+            var args = new List<string> { "translation", "PickUpTarget/out_temp", "Translation/out_temp", $"--plugins-file={pluginsFilePath}", $"--cancel-flag-path={_activeCancelFlagPath}", $"--import={PluginImportDir}" };
             args.AddRange(BuildOptionFlags());
             // v0.60.0: 実行ログウィンドウの進捗バー用——選択プラグインそれぞれの
             // 未翻訳文字数（ベース画面の一覧で既に計算済み、_rows参照）。
@@ -1173,9 +1189,9 @@ public sealed class MainForm : Form
         try
         {
             await File.WriteAllLinesAsync(pluginsFilePath, selectedPlugins);
-            if (!await RunCliAsync(new[] { "generatedsdfile", $"--plugins-file={pluginsFilePath}" })) return;
+            var outDir = PluginOutDir;
+            if (!await RunCliAsync(new[] { "generatedsdfile", "Translation/out_temp", outDir, $"--plugins-file={pluginsFilePath}" })) return;
 
-            var outDir = Path.Combine(ProductRoot, "out");
             MessageBox.Show(this, $"DSDファイルの生成が完了しました（選択中の{selectedPlugins.Count}プラグイン分）。出力先フォルダを確認してください:\n{outDir}",
                 "完了", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }

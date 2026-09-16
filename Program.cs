@@ -27,7 +27,7 @@ Console.OutputEncoding = new System.Text.UTF8Encoding(false);
 // out_temp at all — it is pure, disposable output every single run.
 const string DefaultPickUpTargetOutDir = "PickUpTarget/out_temp";
 const string DefaultTranslationOutDir = "Translation/out_temp";
-const string DefaultImportDir = "Translation/import";
+const string DefaultImportDir = "import/plugin";
 const string DefaultFinalOutDir = "out";
 
 if (args.Length < 1)
@@ -136,6 +136,12 @@ args = args.Where(a => !a.StartsWith("--plugins-file=", StringComparison.Ordinal
 var cancelFlagPathArg = args.FirstOrDefault(a => a.StartsWith("--cancel-flag-path=", StringComparison.OrdinalIgnoreCase));
 var cancelFlagPath = cancelFlagPathArg?["--cancel-flag-path=".Length..];
 args = args.Where(a => !a.StartsWith("--cancel-flag-path=", StringComparison.OrdinalIgnoreCase)).ToArray();
+
+// 2026-09-17: importフォルダを任意の場所に設定可能にするため、従来決め打ちだった
+// DefaultImportDirを--import=で上書きできるようにした（--plugins-file等と同じ流儀）。
+var importDirArg = args.FirstOrDefault(a => a.StartsWith("--import=", StringComparison.OrdinalIgnoreCase));
+var importDir = importDirArg?["--import=".Length..] ?? DefaultImportDir;
+args = args.Where(a => !a.StartsWith("--import=", StringComparison.OrdinalIgnoreCase)).ToArray();
 
 ITextTranslator? llmLocal = null;
 if (llmLocalEnabled)
@@ -371,16 +377,16 @@ switch (args[0])
                     .Where(l => l.Length > 0)
                     .ToList();
                 trace.Info($"Input: {candidatesTsv}, {corpusTsv} / targets: {targetPlugins.Count} plugin(s) from {pluginsFilePath} / step5 local LLM: {(llmLocal != null ? "enabled" : "disabled")} / step6 cloud AI: {(llmCloud != null ? "enabled" : "disabled")}");
-                PromptGenerator.RunMany(candidatesTsv, corpusTsv, DefaultImportDir, targetPlugins, outputDir, log, trace, llmLocal: llmLocal, llmCloud: llmCloud, stageOptions: stageOptions, discardUserEdits: discardUserEdits, llmLocalBatchCharLimit: llmLocalBatchCharLimit, llmCloudBatchCharLimit: llmCloudBatchCharLimit, cancelFlagPath: cancelFlagPath);
+                PromptGenerator.RunMany(candidatesTsv, corpusTsv, importDir, targetPlugins, outputDir, log, trace, llmLocal: llmLocal, llmCloud: llmCloud, stageOptions: stageOptions, discardUserEdits: discardUserEdits, llmLocalBatchCharLimit: llmLocalBatchCharLimit, llmCloudBatchCharLimit: llmCloudBatchCharLimit, cancelFlagPath: cancelFlagPath);
                 LogCloudAiUsage(log, llmCloud);
                 return 0;
             }
 
             trace.Info($"Input: {candidatesTsv}, {corpusTsv} / target: {(targetPlugin ?? "--all")} / step5 local LLM: {(llmLocal != null ? "enabled" : "disabled")} / step6 cloud AI: {(llmCloud != null ? "enabled" : "disabled")}");
             if (targetPlugin == null || targetPlugin.Equals("--all", StringComparison.OrdinalIgnoreCase))
-                PromptGenerator.RunAll(candidatesTsv, corpusTsv, DefaultImportDir, outputDir, log, trace, llmLocal: llmLocal, llmCloud: llmCloud, stageOptions: stageOptions, discardUserEdits: discardUserEdits, llmLocalBatchCharLimit: llmLocalBatchCharLimit, llmCloudBatchCharLimit: llmCloudBatchCharLimit);
+                PromptGenerator.RunAll(candidatesTsv, corpusTsv, importDir, outputDir, log, trace, llmLocal: llmLocal, llmCloud: llmCloud, stageOptions: stageOptions, discardUserEdits: discardUserEdits, llmLocalBatchCharLimit: llmLocalBatchCharLimit, llmCloudBatchCharLimit: llmCloudBatchCharLimit);
             else
-                PromptGenerator.RunOne(candidatesTsv, corpusTsv, DefaultImportDir, targetPlugin, outputDir, log, trace, llmLocal: llmLocal, llmCloud: llmCloud, stageOptions: stageOptions, discardUserEdits: discardUserEdits, llmLocalBatchCharLimit: llmLocalBatchCharLimit, llmCloudBatchCharLimit: llmCloudBatchCharLimit);
+                PromptGenerator.RunOne(candidatesTsv, corpusTsv, importDir, targetPlugin, outputDir, log, trace, llmLocal: llmLocal, llmCloud: llmCloud, stageOptions: stageOptions, discardUserEdits: discardUserEdits, llmLocalBatchCharLimit: llmLocalBatchCharLimit, llmCloudBatchCharLimit: llmCloudBatchCharLimit);
             LogCloudAiUsage(log, llmCloud);
             return 0;
         }

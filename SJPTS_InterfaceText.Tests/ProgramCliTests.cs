@@ -494,6 +494,43 @@ public class ProgramCliTests
     }
 
     [Fact]
+    public void Detect_ImportFolder_IgnoresNonTxtFilesEvenIfNamedLikeJapaneseFile()
+    {
+        // importフォルダをプラグイン翻訳用（xTranslator XML、拡張子.xml）と
+        // 共有できるようにする予定があるため、ファイル名の末尾が"_japanese"で
+        // あっても拡張子が.txtでなければ無視すべき——現状は拡張子を一切見ずに
+        // ファイル名のみで判定しているため、xTranslatorのXMLファイルが偶然
+        // "TestMod_japanese.xml"のような名前だった場合に誤って読み込まれてしまう。
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_uitext_clitest_import_ext_{Guid.NewGuid():N}");
+        try
+        {
+            var mo2Dir = SetUpSyntheticMo2Instance(root, "TestMod",
+                new List<(string, string)> { ("$K", "Hello") });
+
+            var loadOrderJapanesePath = Path.Combine(mo2Dir, "mods", "TestMod", "interface", "translations", "TestMod_japanese.txt");
+            using (var writer = new StreamWriter(loadOrderJapanesePath, append: false, Utf16LeWithBom))
+                writer.WriteLine("$K\tロードオーダー訳");
+
+            var importDir = Path.Combine(root, "import");
+            Directory.CreateDirectory(importDir);
+            // 拡張子が.txtではない（.xml）ため、中身が$Key<TAB>Text形式でも無視されるべき
+            var importPath = Path.Combine(importDir, "TestMod_japanese.xml");
+            using (var writer = new StreamWriter(importPath, append: false, Utf16LeWithBom))
+                writer.WriteLine("$K\t誤って読み込まれるべきでない訳");
+
+            var (exitCode, output) = RunCli(root, "detect", $"--mo2-instance={mo2Dir}", "--mod=TestMod", $"--work={root}\\out_temp", $"--import={importDir}");
+
+            Assert.Equal(0, exitCode);
+            var rows = InterfaceTranslationsTsv.Read(Path.Combine(root, "out_temp", "TestMod", "interface_translations.tsv"));
+
+            var kRow = rows.Single(r => r.Key == "$K");
+            Assert.True(kRow.Resolved);
+            Assert.Equal("ロードオーダー訳", kRow.Japanese); // .xmlは無視され、ロードオーダーの値が使われるべき
+        }
+        finally { try { Directory.Delete(root, recursive: true); } catch { } }
+    }
+
+    [Fact]
     public void Output_MergesTsvIntoFinalJapaneseFile()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_uitext_clitest_output_{Guid.NewGuid():N}");
