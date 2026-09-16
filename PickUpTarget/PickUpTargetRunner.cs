@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Mutagen.Bethesda;
 using Mutagen.Bethesda.Plugins;
 using Mutagen.Bethesda.Plugins.Aspects;
@@ -675,10 +676,44 @@ public static class PickUpTargetRunner
             // treating it as a "confirmed mismatch" was needlessly
             // conservative -- unlike an actual text difference, it carries no
             // signal that the record became something else.
-            if (string.Equals(reference.Trim(), winnerText.Trim(), StringComparison.OrdinalIgnoreCase)) return (chain[i].Text, false, null); // confirmed match -- trusted
+            //
+            // 2026-09-17: this case-insensitivity was leaking into TAG content
+            // too (e.g. <Alias=QuestGiver> vs <Alias=Questgiver>) — see
+            // IsConfirmedCrossModTextMatch's own remarks for why that's risky
+            // and the fix (tags require an exact, case-sensitive match; only
+            // the surrounding plain text stays case-insensitive).
+            if (IsConfirmedCrossModTextMatch(reference, winnerText)) return (chain[i].Text, false, null); // confirmed match -- trusted
             return (null, false, (chain[i].Text, reference)); // confirmed mismatch -- do not apply at all
         }
         return (null, false, null);
+    }
+
+    private static readonly Regex CrossModTagPattern = new("<[^>]*>", RegexOptions.Compiled);
+
+    /// <summary>2026-09-17: real-data investigation (item 11's tag-leak
+    /// research) found that <see cref="FindCrossModPrecedent"/>'s
+    /// case-insensitive tolerance (v0.56.2, meant for ordinary prose like "the
+    /// Jarl" vs "the jarl") was ALSO applying to script-variable tags embedded
+    /// in dialogue/quest text (e.g. &lt;Alias=QuestGiver&gt;) — real examples
+    /// found where the harvested Japanese carried a differently-cased tag
+    /// (&lt;Alias=Questgiver&gt;) than the current record's own text. No
+    /// official source could confirm whether Skyrim's own alias-name
+    /// resolution is case-insensitive; the Creation Kit wiki does document
+    /// that a failed resolution renders as a literal "[...]" in-game, a
+    /// visible break — with that downside and no confirmed safety, this
+    /// tightens tag matching to be case-SENSITIVE (and exact — same content,
+    /// same order, since this is testing textual identity, not translating),
+    /// while leaving the surrounding plain text's existing case-insensitive
+    /// tolerance untouched.</summary>
+    public static bool IsConfirmedCrossModTextMatch(string reference, string current)
+    {
+        var referenceTags = CrossModTagPattern.Matches(reference).Select(m => m.Value).ToList();
+        var currentTags = CrossModTagPattern.Matches(current).Select(m => m.Value).ToList();
+        if (!referenceTags.SequenceEqual(currentTags, StringComparer.Ordinal)) return false;
+
+        var referenceSkeleton = CrossModTagPattern.Replace(reference, "");
+        var currentSkeleton = CrossModTagPattern.Replace(current, "");
+        return string.Equals(referenceSkeleton.Trim(), currentSkeleton.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>A cross-mod precedent is harvested into the corpus too (not
