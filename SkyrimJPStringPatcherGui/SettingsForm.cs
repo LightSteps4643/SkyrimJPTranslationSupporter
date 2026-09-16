@@ -33,6 +33,15 @@ public sealed class SettingsForm : Form
     private readonly TextBox _txtMo2ModsDirOverride = new();
     private readonly TextBox _txtMo2ProfileDirOverride = new();
     private readonly TextBox _txtMo2OverwriteDirOverride = new();
+
+    // 2026-09-17: import/outフォルダの任意パス設定（プラグイン翻訳用・
+    // Interface翻訳用でそれぞれ独立）。既定ではimport/{plugin,interface}・
+    // outに統合済みだが、任意の場所へ変更したいユーザー向けの上書き項目。
+    private readonly TextBox _txtPluginImportDirOverride = new();
+    private readonly TextBox _txtInterfaceImportDirOverride = new();
+    private readonly TextBox _txtPluginOutDirOverride = new();
+    private readonly TextBox _txtInterfaceOutDirOverride = new();
+
     private readonly TextBox _txtLlmEndpoint = new();
     private readonly TextBox _txtLlmModel = new();
     // v0.58.1: 既定ON——AppSettings.LlmLocalReasoningOffの説明コメント参照。
@@ -109,6 +118,10 @@ public sealed class SettingsForm : Form
         // 触るべき設定か」を説明文として明示する形に変更した（v0.57.0時点の
         // 個別行＋「（任意）」プレフィックスのみの表現から改善）。
         AddMo2PathOverridesGroup(grid, settingsButtons);
+
+        // 2026-09-17: import/outフォルダの任意パス設定。MO2パス個別設定と
+        // 同じGroupBox＋説明文パターンに揃えた。
+        AddImportOutPathOverridesGroup(grid, settingsButtons);
 
         // v0.58.2: エンドポイント・モデル名・思考OFFの3項目をMO2パス個別設定と
         // 同様にGroupBoxへまとめた（従来は他の単発設定行と並列で紛れていた）。
@@ -222,6 +235,47 @@ public sealed class SettingsForm : Form
         AddOverrideRow("modsフォルダ", _txtMo2ModsDirOverride);
         AddOverrideRow("プロファイルフォルダ", _txtMo2ProfileDirOverride);
         AddOverrideRow("overwriteフォルダ", _txtMo2OverwriteDirOverride);
+    }
+
+    /// <summary>2026-09-17: import（xTranslator XML／Interface用*_japanese.txt）・
+    /// out（最終出力）フォルダの既定値は、製品ルート直下のimport/{plugin,interface}・
+    /// outに統合済み（1つのoutフォルダをMO2に導入するだけで両方の翻訳が反映される）。
+    /// 空欄のままなら常にこの既定値が使われ、指定した場合のみ個別に上書きされる——
+    /// プラグイン翻訳用・Interface翻訳用は完全に独立しており、片方だけ上書きしても
+    /// 他方には影響しない。</summary>
+    private void AddImportOutPathOverridesGroup(TableLayoutPanel parentGrid, List<Button> settingsButtons)
+    {
+        var row = parentGrid.RowCount++;
+        parentGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        var group = new GroupBox
+        {
+            Text = "import/outフォルダの個別設定",
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Padding = new Padding(8, 4, 8, 8),
+            Margin = new Padding(3, 6, 3, 6),
+        };
+        parentGrid.SetColumnSpan(group, 3);
+        parentGrid.Controls.Add(group, 0, row);
+
+        var inner = new TableLayoutPanel { Dock = DockStyle.Top, ColumnCount = 3, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink };
+        inner.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        inner.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        inner.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        group.Controls.Add(inner);
+
+        void AddOverrideRow(string label, TextBox box)
+        {
+            var btn = AddSettingRow(inner, label, box, "参照...",
+                () => BrowseFolder(box, resolveForExistenceCheck: p => Path.Combine(_owner.ProductRoot, p)));
+            if (btn != null) settingsButtons.Add(btn);
+        }
+        AddOverrideRow("プラグイン翻訳 importフォルダ", _txtPluginImportDirOverride);
+        AddOverrideRow("Interface翻訳 importフォルダ", _txtInterfaceImportDirOverride);
+        AddOverrideRow("プラグイン翻訳 outフォルダ", _txtPluginOutDirOverride);
+        AddOverrideRow("Interface翻訳 outフォルダ", _txtInterfaceOutDirOverride);
     }
 
     /// <summary>v0.58.2: MO2パス個別設定と同様、ローカルLLM関連の3項目
@@ -384,6 +438,18 @@ public sealed class SettingsForm : Form
         _txtMo2ModsDirOverride.Text = settings.Mo2ModsDirOverride;
         _txtMo2ProfileDirOverride.Text = settings.Mo2ProfileDirOverride;
         _txtMo2OverwriteDirOverride.Text = settings.Mo2OverwriteDirOverride;
+        // 2026-09-17: 空欄のままだと「既定値が何か」が分からず不安という指摘を
+        // 受け、常に相対パス表記の既定値を表示しておく（MainForm.PluginImportDir
+        // 等のプロパティは、相対パスなら製品ルート基準で解決するため、未変更の
+        // まま保存されても既定と同じ場所を指す——PluginImportDir参照）。
+        _txtPluginImportDirOverride.Text = string.IsNullOrWhiteSpace(settings.PluginImportDirOverride)
+            ? Path.Combine("import", "plugin") : settings.PluginImportDirOverride;
+        _txtInterfaceImportDirOverride.Text = string.IsNullOrWhiteSpace(settings.InterfaceImportDirOverride)
+            ? Path.Combine("import", "interface") : settings.InterfaceImportDirOverride;
+        _txtPluginOutDirOverride.Text = string.IsNullOrWhiteSpace(settings.PluginOutDirOverride)
+            ? "out" : settings.PluginOutDirOverride;
+        _txtInterfaceOutDirOverride.Text = string.IsNullOrWhiteSpace(settings.InterfaceOutDirOverride)
+            ? "out" : settings.InterfaceOutDirOverride;
         _txtLlmEndpoint.Text = settings.LlmEndpoint;
         _txtLlmModel.Text = settings.LlmModel;
         _chkLlmReasoningOff.Checked = settings.LlmLocalReasoningOff;
@@ -406,6 +472,10 @@ public sealed class SettingsForm : Form
         settings.Mo2ModsDirOverride = _txtMo2ModsDirOverride.Text.Trim();
         settings.Mo2ProfileDirOverride = _txtMo2ProfileDirOverride.Text.Trim();
         settings.Mo2OverwriteDirOverride = _txtMo2OverwriteDirOverride.Text.Trim();
+        settings.PluginImportDirOverride = _txtPluginImportDirOverride.Text.Trim();
+        settings.InterfaceImportDirOverride = _txtInterfaceImportDirOverride.Text.Trim();
+        settings.PluginOutDirOverride = _txtPluginOutDirOverride.Text.Trim();
+        settings.InterfaceOutDirOverride = _txtInterfaceOutDirOverride.Text.Trim();
         settings.LlmEndpoint = _txtLlmEndpoint.Text.Trim();
         settings.LlmModel = _txtLlmModel.Text.Trim();
         settings.LlmLocalReasoningOff = _chkLlmReasoningOff.Checked;
@@ -432,11 +502,28 @@ public sealed class SettingsForm : Form
 
     private void BrowseMo2Folder() => BrowseFolder(_txtMo2Dir, "MO2インスタンスフォルダを選択");
 
-    private void BrowseFolder(TextBox box, string description = "フォルダを選択")
+    /// <summary>2026-09-17: import/outフォルダ設定の入力欄は既定値を相対パス
+    /// 表記（例: "import/plugin"）で表示している——実際の場所はGUI自身の
+    /// カレントディレクトリではなく製品ルート基準で解決される（MainForm.
+    /// PluginImportDir等参照）ため、「参照...」ダイアログの初期位置もそこを
+    /// 基準に解決する必要がある（さもないと相対パスがGUIプロセス自身のCWD
+    /// 基準で解決され、存在しないと判定されて初期位置が効かない）。
+    ///
+    /// <see cref="FolderBrowserDialog.InitialDirectory"/>（.NET 9時点で既定
+    /// 有効なモダン版ダイアログ、<see cref="FolderBrowserDialog.AutoUpgradeEnabled"/>
+    /// 既定true、が持つプロパティ）を使う——<see cref="FolderBrowserDialog.SelectedPath"/>
+    /// は「対象フォルダ自体を選択済み状態にする」ため、ダイアログは親フォルダの
+    /// 階層内でそれがハイライトされた状態で開いてしまう（対象フォルダの中身が
+    /// 見えない）。InitialDirectoryは「そのフォルダ自体を表示（中身を開いた状態）
+    /// して始める」ためのプロパティで、ユーザーが望む挙動そのもの。</summary>
+    private void BrowseFolder(TextBox box, string description = "フォルダを選択", Func<string, string>? resolveForExistenceCheck = null)
     {
         using var dlg = new FolderBrowserDialog { Description = description };
-        if (!string.IsNullOrWhiteSpace(box.Text) && Directory.Exists(box.Text))
-            dlg.SelectedPath = box.Text;
+        var candidate = box.Text;
+        if (!string.IsNullOrWhiteSpace(candidate) && resolveForExistenceCheck != null)
+            candidate = resolveForExistenceCheck(candidate);
+        if (!string.IsNullOrWhiteSpace(candidate) && Directory.Exists(candidate))
+            dlg.InitialDirectory = candidate;
         if (dlg.ShowDialog(this) == DialogResult.OK)
             box.Text = dlg.SelectedPath;
     }

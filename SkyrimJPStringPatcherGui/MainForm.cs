@@ -78,18 +78,22 @@ public sealed class MainForm : Form
     /// <summary>プラグイン翻訳（xTranslator XML）用importフォルダ。2026-09-17〜、
     /// 既定値を&lt;製品ルート&gt;/import/pluginに変更（Interface翻訳用
     /// &lt;製品ルート&gt;/import/interfaceと対称、共通の親フォルダの下に集約）。
-    /// AppSettingsで任意のフォルダに上書き可能。</summary>
+    /// AppSettingsで任意のフォルダに上書き可能——上書き値が相対パスなら
+    /// 製品ルート基準、絶対パスならそのまま使う（Path.Combineの標準挙動）ため、
+    /// SettingsFormの入力欄に既定値を相対パス表記で最初から入れておいても、
+    /// 未変更のまま保存された場合に既定と同じ場所を指す。</summary>
     internal string PluginImportDir =>
-        string.IsNullOrWhiteSpace(_settings.PluginImportDirOverride)
-            ? Path.Combine(ProductRoot, "import", "plugin")
-            : _settings.PluginImportDirOverride;
+        Path.Combine(ProductRoot, string.IsNullOrWhiteSpace(_settings.PluginImportDirOverride)
+            ? Path.Combine("import", "plugin")
+            : _settings.PluginImportDirOverride);
 
     /// <summary>プラグイン翻訳（DSD）の最終出力先。AppSettingsで任意のフォルダに
-    /// 上書き可能（Interface翻訳側の上書き設定とは独立）。</summary>
+    /// 上書き可能（Interface翻訳側の上書き設定とは独立）。相対/絶対パスの扱いは
+    /// <see cref="PluginImportDir"/>と同じ。</summary>
     internal string PluginOutDir =>
-        string.IsNullOrWhiteSpace(_settings.PluginOutDirOverride)
-            ? Path.Combine(ProductRoot, "out")
-            : _settings.PluginOutDirOverride;
+        Path.Combine(ProductRoot, string.IsNullOrWhiteSpace(_settings.PluginOutDirOverride)
+            ? "out"
+            : _settings.PluginOutDirOverride);
 
     /// <summary>v0.57.0: "pickuptarget" args for the current MO2 dir, with the
     /// optional mods/profile/overwrite path overrides appended when set.

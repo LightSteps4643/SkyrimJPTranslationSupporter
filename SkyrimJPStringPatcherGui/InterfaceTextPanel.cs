@@ -586,9 +586,9 @@ public sealed class InterfaceTextPanel : Form
     /// 翻訳データがまとめて配布されるケースが多いため、共通の親フォルダの下に
     /// 集約した）。AppSettingsで任意のフォルダに上書き可能。</summary>
     private string InterfaceTextImportDir =>
-        string.IsNullOrWhiteSpace(_getSettings().InterfaceImportDirOverride)
-            ? Path.Combine(ProductRoot, "import", "interface")
-            : _getSettings().InterfaceImportDirOverride;
+        Path.Combine(ProductRoot, string.IsNullOrWhiteSpace(_getSettings().InterfaceImportDirOverride)
+            ? Path.Combine("import", "interface")
+            : _getSettings().InterfaceImportDirOverride);
 
     /// <summary>最終的にマージされた*_japanese.txtの出力先。2026-09-17〜、ESP側の
     /// 最終出力（`&lt;製品ルート&gt;/out/SKSE/...`）と同じ`&lt;製品ルート&gt;/out/`
@@ -599,9 +599,9 @@ public sealed class InterfaceTextPanel : Form
     /// 一度もリリースされていなかった。）AppSettingsで任意のフォルダに上書き可能
     /// （ESP側の上書き設定<see cref="AppSettings.PluginOutDirOverride"/>とは独立）。</summary>
     private string InterfaceTextOutDir =>
-        string.IsNullOrWhiteSpace(_getSettings().InterfaceOutDirOverride)
-            ? Path.Combine(ProductRoot, "out")
-            : _getSettings().InterfaceOutDirOverride;
+        Path.Combine(ProductRoot, string.IsNullOrWhiteSpace(_getSettings().InterfaceOutDirOverride)
+            ? "out"
+            : _getSettings().InterfaceOutDirOverride);
 
     /// <summary>「再スキャン（読み取りのみ）」ボタンにも、起動直後の初期表示にも
     /// 使う共通の読み込み処理。<see cref="InterfaceTextWorkDir"/>配下の各MODフォルダの
