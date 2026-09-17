@@ -160,10 +160,16 @@ public sealed class ModGlossaryDetailForm : Form
 
         if (_edits.Count > 0)
         {
+            // 2026-09-18: SaveChanges()自身が最後に_edits.Clear()するため、
+            // 呼び出し後に_edits.Countを参照すると必ず0になる（実機報告の
+            // 「0件の変更を保存しました」の原因——InterfaceTextDetailForm.cs
+            // で2026-09-12に一度見つかった同じ不具合の再発）。呼ぶ前に件数を
+            // 退避しておく。
+            var editedCount = _edits.Count;
             try
             {
                 SaveChanges();
-                MessageBox.Show(this, $"{_edits.Count}件の変更を保存しました。\n{_path}", "保存完了", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(this, $"{editedCount}件の変更を保存しました。\n{_path}", "保存完了", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 _onSaved?.Invoke();
             }
             catch (Exception ex)

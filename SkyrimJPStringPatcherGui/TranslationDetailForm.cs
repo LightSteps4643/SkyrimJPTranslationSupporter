@@ -225,6 +225,11 @@ public sealed class TranslationDetailForm : Form
             DefaultCellStyle = new DataGridViewCellStyle { WrapMode = DataGridViewTriState.True, Alignment = DataGridViewContentAlignment.TopLeft },
         });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Notes", HeaderText = "解決方法（Notes）", Width = 180, ReadOnly = true });
+        // 2026-09-18: ⑤⑥のLLM応答時にのみ機械的に分類される品質フラグ（空欄=
+        // 未チェック・AllJapanese=問題なし・それ以外は要確認）——背景色の
+        // グラデーションと合わせて、具体的にどの分類かをテキストでも確認できる
+        // ようにする（ユーザー要望）。
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "TranslationCheck", HeaderText = "品質チェック", Width = 150, ReadOnly = true });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "EditorId", HeaderText = "EditorId", Width = 130, ReadOnly = true });
     }
 
@@ -248,6 +253,7 @@ public sealed class TranslationDetailForm : Form
             var edited = _edits.TryGetValue(key, out var editedJapanese);
             var japanese = edited ? editedJapanese! : Unescape(row.GetValueOrDefault("Japanese", ""));
             var notes = edited ? "SJPTS_ModifiedByUser" : row.GetValueOrDefault("Notes", "");
+            var translationCheck = edited ? "" : row.GetValueOrDefault("TranslationCheck", "");
 
             var idx = _grid.Rows.Add(
                 row.GetValueOrDefault("FormId", ""),
@@ -255,6 +261,7 @@ public sealed class TranslationDetailForm : Form
                 Unescape(row.GetValueOrDefault("EnglishText", "")),
                 japanese,
                 notes,
+                translationCheck,
                 row.GetValueOrDefault("EditorId", ""));
 
             var gridRow = _grid.Rows[idx];
@@ -287,6 +294,7 @@ public sealed class TranslationDetailForm : Form
         {
             _edits.Remove(key);
             gridRow.Cells["Notes"].Value = original?.GetValueOrDefault("Notes", "") ?? "";
+            gridRow.Cells["TranslationCheck"].Value = original?.GetValueOrDefault("TranslationCheck", "") ?? "";
             gridRow.DefaultCellStyle.BackColor = string.IsNullOrEmpty(newValue)
                 ? Color.FromArgb(255, 245, 235)
                 : TranslationCheckColors.BackColorFor(original?.GetValueOrDefault("TranslationCheck", "") ?? "");
@@ -295,6 +303,7 @@ public sealed class TranslationDetailForm : Form
         {
             _edits[key] = newValue;
             gridRow.Cells["Notes"].Value = "SJPTS_ModifiedByUser";
+            gridRow.Cells["TranslationCheck"].Value = "";
             gridRow.DefaultCellStyle.BackColor = Color.FromArgb(235, 245, 255);
         }
         UpdateEditCountLabel();

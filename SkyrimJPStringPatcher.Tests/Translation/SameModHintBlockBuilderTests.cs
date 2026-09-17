@@ -161,6 +161,68 @@ public class SameModHintBlockBuilderTests
         Assert.Equal("", block);
     }
 
+    /// <summary>2026-09-18 real-data finding (Light Greatswords.esp): every
+    /// "X Light Greatsword" candidate was translated as "Xの光のグレートソード"
+    /// (word-for-word "Light"=光) despite a human having filled in
+    /// mod_glossary.tsv with "Light Greatsword" -> "軽大剣" — the softer
+    /// "keep wording consistent, defer to Reference examples if conflict"
+    /// framing wasn't enough to override the model's own dictionary instinct,
+    /// especially against a competing "Known translations for words: ...
+    /// Light=光..." hint. Verified via a real local-LLM (gemma4:26b,
+    /// reasoning off) A/B test that separating SJPTS_ModifiedByUser hints into
+    /// their own imperative "IMPORTANT" block fixes this (see management
+    /// repo's design docs). This is a SJPTS_ModifiedByUser-only test —
+    /// other trust tiers keep the existing softer wording (see
+    /// BuildBlock_LegendOnlyListsTrustTiersActuallyPresent, unchanged).</summary>
+    [Fact]
+    public void BuildBlock_ModifiedByUserHint_UsesStrongerImportantWording()
+    {
+        var block = SameModHintBlockBuilder.BuildBlock(
+            new List<CorpusEntry> { Entry("Light Greatsword", "軽大剣", "SJPTS_ModifiedByUser") },
+            new[] { ("Daedric Light Greatsword", "WEAP FULL") },
+            batchCharLimit: 6000);
+
+        Assert.Contains("IMPORTANT", block);
+        Assert.Contains("explicitly confirmed by a human", block);
+        Assert.Contains("\"Light Greatsword\" -> \"軽大剣\"", block);
+        // The stronger wording explicitly overrides "Reference examples" for
+        // this tier — the opposite of the softer tier's "defer to Reference
+        // examples if conflict" rule.
+        Assert.Contains("overriding your own judgment", block);
+    }
+
+    /// <summary>A mix of a human-confirmed hint and an ordinary (lower-trust)
+    /// same-mod hint must produce BOTH sub-blocks — the confirmed one first,
+    /// with its own stronger wording, and the rest in the existing softer
+    /// "Same-mod translations so far" block, unchanged in format.</summary>
+    [Fact]
+    public void BuildBlock_MixOfConfirmedAndOtherHints_ProducesBothSubBlocksInOrder()
+    {
+        var pool = new List<CorpusEntry>
+        {
+            Entry("Light Greatsword", "軽大剣", "SJPTS_ModifiedByUser"),
+            Entry("Frostwind Ward", "氷風の盾", "SJPTS_TranslationLocalLlm"),
+        };
+        var candidates = new[] { ("Daedric Light Greatsword", "WEAP FULL"), ("Frostwind Ward Dagger", "MISC FULL") };
+
+        var block = SameModHintBlockBuilder.BuildBlock(pool, candidates, batchCharLimit: 6000);
+
+        Assert.Contains("IMPORTANT", block);
+        Assert.Contains("\"Light Greatsword\" -> \"軽大剣\"", block);
+        Assert.Contains("Same-mod translations so far", block);
+        Assert.Contains("7=translated by a local LLM", block);
+        Assert.Contains("\"Frostwind Ward\"\t\"氷風の盾\"\t7", block);
+
+        var importantIndex = block.IndexOf("IMPORTANT", StringComparison.Ordinal);
+        var softIndex = block.IndexOf("Same-mod translations so far", StringComparison.Ordinal);
+        Assert.True(importantIndex >= 0 && softIndex >= 0 && importantIndex < softIndex,
+            "the human-confirmed IMPORTANT block should appear before the softer same-mod hints block");
+
+        // The confirmed-tier hint must not ALSO be duplicated into the softer
+        // block's numbered legend/list.
+        Assert.DoesNotContain("1=manually corrected", block);
+    }
+
     [Fact]
     public void BuildBlock_ManyHints_StopsOnceBudgetExceeded()
     {

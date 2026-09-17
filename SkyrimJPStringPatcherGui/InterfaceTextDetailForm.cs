@@ -116,6 +116,9 @@ public sealed class InterfaceTextDetailForm : Form
         });
         _grid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "Resolved", HeaderText = "対応済み", Width = 70, ReadOnly = true });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Notes", HeaderText = "Notes", Width = 220, ReadOnly = true });
+        // 2026-09-18: ESP側TranslationDetailForm.csと同じ理由——⑤⑥のLLM応答時
+        // のみ機械的に分類される品質フラグをテキストでも確認できるようにする。
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "TranslationCheck", HeaderText = "品質チェック", Width = 150, ReadOnly = true });
     }
 
     private void LoadData(string path)
@@ -136,8 +139,9 @@ public sealed class InterfaceTextDetailForm : Form
             var japanese = edited ? editedJapanese! : row.Japanese;
             var resolved = edited || row.Resolved;
             var notes = edited ? "SJPTS_ModifiedByUser" : row.Notes;
+            var translationCheck = edited ? "" : row.TranslationCheck;
 
-            var idx = _grid.Rows.Add(row.Key, row.English, japanese, resolved, notes);
+            var idx = _grid.Rows.Add(row.Key, row.English, japanese, resolved, notes, translationCheck);
             var gridRow = _grid.Rows[idx];
             gridRow.Tag = row.Key;
             if (!resolved)
@@ -169,6 +173,7 @@ public sealed class InterfaceTextDetailForm : Form
             _edits.Remove(key);
             gridRow.Cells["Resolved"].Value = original?.Resolved ?? false;
             gridRow.Cells["Notes"].Value = original?.Notes ?? "";
+            gridRow.Cells["TranslationCheck"].Value = original?.TranslationCheck ?? "";
             gridRow.DefaultCellStyle.BackColor = (original?.Resolved ?? false)
                 ? TranslationCheckColors.BackColorFor(original?.TranslationCheck ?? "")
                 : Color.FromArgb(255, 245, 235);
@@ -178,6 +183,7 @@ public sealed class InterfaceTextDetailForm : Form
             _edits[key] = newValue;
             gridRow.Cells["Resolved"].Value = true;
             gridRow.Cells["Notes"].Value = "SJPTS_ModifiedByUser";
+            gridRow.Cells["TranslationCheck"].Value = "";
             gridRow.DefaultCellStyle.BackColor = Color.FromArgb(235, 245, 255);
         }
         UpdateEditCountLabel();
