@@ -150,6 +150,7 @@ public sealed class MainForm : Form
     private readonly DataTable _table = new();
 
     private const string DetailColumnName = "詳細";
+    private const string ModGlossaryColumnName = "MOD固有語句";
     private const string ResetColumnName = "初期化";
 
     private readonly Button _btnSelectAll = new() { Text = "すべて選択", AutoSize = true };
@@ -577,6 +578,14 @@ public sealed class MainForm : Form
         });
         _grid.Columns.Add(new DataGridViewButtonColumn
         {
+            Name = ModGlossaryColumnName,
+            HeaderText = "",
+            Text = "MOD固有文字列の注釈",
+            UseColumnTextForButtonValue = true,
+            Width = 140,
+        });
+        _grid.Columns.Add(new DataGridViewButtonColumn
+        {
             Name = ResetColumnName,
             HeaderText = "",
             Text = "翻訳状況を初期化",
@@ -594,13 +603,27 @@ public sealed class MainForm : Form
     {
         if (e.RowIndex < 0) return;
         var columnName = _grid.Columns[e.ColumnIndex].Name;
-        if (columnName != DetailColumnName && columnName != ResetColumnName) return;
+        if (columnName != DetailColumnName && columnName != ModGlossaryColumnName && columnName != ResetColumnName) return;
 
         var plugin = (string)_grid.Rows[e.RowIndex].Cells["プラグイン"].Value!;
 
         if (columnName == ResetColumnName)
         {
             await ResetPlugin(plugin);
+            return;
+        }
+
+        if (columnName == ModGlossaryColumnName)
+        {
+            var glossaryPath = Path.Combine(ProductRoot, "Translation", "out_temp", PluginFolderName.From(plugin), "mod_glossary.tsv");
+            if (!File.Exists(glossaryPath))
+            {
+                MessageBox.Show(this, $"まだこのプラグインのMOD固有文字列の候補がありません:\n{glossaryPath}\n先に「MO2再読込＆初期化」または「翻訳実行」を行ってください。\n（候補が1件も検出されなかった場合、このファイル自体が作られないこともあります）",
+                    "ファイルが見つかりません", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            var glossaryDetail = new ModGlossaryDetailForm(plugin, glossaryPath);
+            PseudoModal.Show(glossaryDetail, this);
             return;
         }
 

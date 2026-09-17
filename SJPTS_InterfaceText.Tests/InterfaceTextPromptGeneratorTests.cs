@@ -75,6 +75,41 @@ public class InterfaceTextPromptGeneratorTests
         finally { }
     }
 
+    /// <summary>2026-09-18: mirrors the ESP side's
+    /// RunOne_FilledModGlossaryEntry_AppearsAsSameModHintInPrompt — once a
+    /// person fills in mod_glossary.tsv's Japanese column (issue #4's "c"),
+    /// that hint must reach the LLM prompt for this mod's OTHER unresolved
+    /// candidates. Confirms the ExternalSameModBaseline wiring just added to
+    /// ApplyLlmStep actually works (previously always empty for Interface).</summary>
+    [Fact]
+    public void ApplyLlmStep_FilledModGlossaryEntry_AppearsAsSameModHintInPrompt()
+    {
+        var pending = new List<(string Key, string English)>
+        {
+            ("$1", "Sjpts Daedric Windrune Blade"), ("$2", "Sjpts Dwarven Windrune Blade"),
+        };
+        var fake = new FakeTranslator();
+        fake.Enqueue(
+            "<SJPTS_TARGET>Sjpts Daedric Windrune Blade</SJPTS_TARGET>\tデイドラの風紋の刃\n" +
+            "<SJPTS_TARGET>Sjpts Dwarven Windrune Blade</SJPTS_TARGET>\tドワーフの風紋の刃\n");
+
+        using var log = OpenTempLog(out var dir);
+        try
+        {
+            // A person has already filled this in by hand before this run.
+            SkyrimJPStringPatcher.Translation.ModPhraseGlossary.WriteTemplate(dir, "TestMod",
+                [new SkyrimJPStringPatcher.Translation.ModPhraseGlossary.DetectedPhrase("Windrune Blade", 3, 10.0)]);
+            var glossaryPath = SkyrimJPStringPatcher.Translation.ModPhraseGlossary.PathFor(dir);
+            var content = File.ReadAllText(glossaryPath).Replace("Windrune Blade\t\t3\t10", "Windrune Blade\t風紋の刃\t3\t10");
+            File.WriteAllText(glossaryPath, content);
+
+            InterfaceTextPromptGenerator.ApplyLlmStep(pending, fake, "TestMod", log, null, 12_000, dir, "localLLM");
+
+            Assert.Contains(fake.PromptsReceived, p => p.Contains("Windrune Blade") && p.Contains("風紋の刃"));
+        }
+        finally { }
+    }
+
     /// <summary>2026-09-12: debugging aid distinct from the ESP CLI's own
     /// prompt.txt (a human AI-chat handoff for what's still unresolved) —
     /// this records what WAS actually sent, win or lose. Content must match

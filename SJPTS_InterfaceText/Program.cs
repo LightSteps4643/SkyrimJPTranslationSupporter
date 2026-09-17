@@ -176,7 +176,13 @@ int RunTranslate()
     var logDir = Directory.GetParent(workDir)?.FullName ?? workDir;
     using var log = RunLog.Open(logDir, "InterfaceText");
     using var trace = TraceLog.Open(logDir, "InterfaceText");
-    return ForEachTargetMod(target => RunTranslateOne(target, log, trace));
+    // 2026-09-18: グローバルなn-gram頻度表（ModPhraseGlossary、MOD特有語句
+    // 検出用）はworkDir配下の全MODから決まり、--mods-file=で複数MODを1
+    // プロセスでまとめて処理する場合でも一切変化しないため、ここで1回だけ
+    // 構築し使い回す——ESP側で修正済みの「毎回ゼロから再計算して6倍遅く
+    // なっていた」不具合と同じ罠を、ここで新たに作り込まないため。
+    var globalPhraseFrequency = InterfaceModPhraseGlossarySupport.BuildGlobalFrequency(workDir);
+    return ForEachTargetMod(target => RunTranslateOne(target, log, trace, globalPhraseFrequency));
 }
 
 // --mod=X が指定されていればそれ1件、--mods-file=path が指定されていれば
@@ -433,7 +439,7 @@ int RunDetect()
     return (untranslated, rows.Count, modFolderName);
 }
 
-int RunTranslateOne(string target, RunLog log, TraceLog trace)
+int RunTranslateOne(string target, RunLog log, TraceLog trace, ModPhraseGlossary.GlobalNgramFrequency globalPhraseFrequency)
 {
     var modWorkDir = Path.Combine(workDir, target);
     var tsvPath = Path.Combine(modWorkDir, "interface_translations.tsv");
@@ -442,8 +448,19 @@ int RunTranslateOne(string target, RunLog log, TraceLog trace)
         return Fail($"{tsvPath} not found. Run detect first.");
 
     var rows = InterfaceTranslationsTsv.Read(tsvPath);
+    Console.WriteLine($"read intermediate file: {rows.Count} row(s)");
+
+    // 2026-09-18: ESP側WritePluginFilesWithDirと同じく、LLM呼び出しの有無・
+    // 未解決件数によらず毎回mod_glossary.tsvを（再）生成する——このMOD自身の
+    // 候補一覧（rows全体、pending＝未解決分だけではない）を、上で1回だけ
+    // 構築したグローバル母集団と照らし合わせる。
+    var modFolderNamePathForGlossary = Path.Combine(modWorkDir, "mod_folder_name.txt");
+    var modDisplayNameForGlossary = File.Exists(modFolderNamePathForGlossary) ? File.ReadAllText(modFolderNamePathForGlossary).Trim() : target;
+    var localTexts = rows.Select(r => r.English).Distinct(StringComparer.Ordinal).ToList();
+    InterfaceModPhraseGlossarySupport.WriteModGlossary(modWorkDir, modDisplayNameForGlossary, localTexts, globalPhraseFrequency);
+
     var pending = rows.Where(r => !r.Resolved).Select(r => (r.Key, r.English)).ToList();
-    Console.WriteLine($"read intermediate file: {rows.Count} row(s) ({pending.Count} unresolved)");
+    Console.WriteLine($"{pending.Count} unresolved");
 
     if (pending.Count == 0)
     {
@@ -486,9 +503,8 @@ int RunTranslateOne(string target, RunLog log, TraceLog trace)
     // ——targetというファイル名由来の内部識別子とは別物、design/interface_
     // translations.md参照）があれば読み、プロンプトでモデルに「これがMOD名です」と
     // 伝える材料にする。無ければtargetにフォールバック（手動テスト等、detectを
-    // 経由していない場合）。
-    var modFolderNamePath = Path.Combine(modWorkDir, "mod_folder_name.txt");
-    var modDisplayName = File.Exists(modFolderNamePath) ? File.ReadAllText(modFolderNamePath).Trim() : target;
+    // 経由していない場合）。mod_glossary.tsv生成時に既に読んでいるので使い回す。
+    var modDisplayName = modDisplayNameForGlossary;
 
     var translated = InterfaceTextPromptGenerator.ApplyLlmStep(pending, translator, target, log, trace, charLimit, modWorkDir, providerLabel, modDisplayName);
     Console.WriteLine($"resolved: {translated.Count} / {pending.Count}");

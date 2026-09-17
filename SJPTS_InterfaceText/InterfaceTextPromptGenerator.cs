@@ -189,6 +189,14 @@ public static class InterfaceTextPromptGenerator
             StepNumber = "",
             StepLabelJa = stepLabelJa,
             StepLabelEn = stepLabelEn,
+            // 2026-09-18: ESP側ApplyLlmStepと同じ配線——mod_glossary.tsv
+            // （InterfaceModPhraseGlossarySupport.WriteModGlossaryが書き出す）
+            // に人が記入済みの訳を、issue #4「同一MOD既訳ヒント」のcプールへ
+            // 合流させる。これまでInterface側にはこの配線が無く、
+            // mod_glossary.tsvを作っても効果が無い状態だった。
+            ExternalSameModBaseline = ModPhraseGlossary.LoadFilled(modWorkDir)
+                .Select(kv => new CorpusEntry(kv.Key, kv.Value, modName, "SJPTS_ModifiedByUser", ""))
+                .ToList(),
         });
 
         // issue #4 (c): このメソッド自身が今回解決した英文を、共有する

@@ -102,6 +102,7 @@ public sealed class InterfaceTextPanel : Form
     private readonly DataTable _table = new();
 
     private const string DetailColumnName = "詳細";
+    private const string ModGlossaryColumnName = "MOD固有語句";
     private const string ResetColumnName = "初期化";
 
     private readonly Button _btnSelectAll = new() { Text = "すべて選択", AutoSize = true };
@@ -463,6 +464,14 @@ public sealed class InterfaceTextPanel : Form
         });
         _grid.Columns.Add(new DataGridViewButtonColumn
         {
+            Name = ModGlossaryColumnName,
+            HeaderText = "",
+            Text = "MOD固有文字列の注釈",
+            UseColumnTextForButtonValue = true,
+            Width = 140,
+        });
+        _grid.Columns.Add(new DataGridViewButtonColumn
+        {
             Name = ResetColumnName,
             HeaderText = "",
             Text = "翻訳状況を初期化",
@@ -480,7 +489,7 @@ public sealed class InterfaceTextPanel : Form
     {
         if (e.RowIndex < 0) return;
         var columnName = _grid.Columns[e.ColumnIndex].Name;
-        if (columnName != DetailColumnName && columnName != ResetColumnName) return;
+        if (columnName != DetailColumnName && columnName != ModGlossaryColumnName && columnName != ResetColumnName) return;
 
         var target = (string)_grid.Rows[e.RowIndex].Cells["Target"].Value!;
         var displayModName = (string)_grid.Rows[e.RowIndex].Cells["MOD名"].Value!;
@@ -488,6 +497,20 @@ public sealed class InterfaceTextPanel : Form
         if (columnName == ResetColumnName)
         {
             await ResetMod(target);
+            return;
+        }
+
+        if (columnName == ModGlossaryColumnName)
+        {
+            var glossaryPath = Path.Combine(InterfaceTextWorkDir, target, "mod_glossary.tsv");
+            if (!File.Exists(glossaryPath))
+            {
+                MessageBox.Show(this, $"まだこのMODのMOD固有文字列の候補がありません:\n{glossaryPath}\n先に「MO2対象Interfaceフォルダ読込み＆初期化」または「翻訳実行」を行ってください。\n（候補が1件も検出されなかった場合、このファイル自体が作られないこともあります）",
+                    "ファイルが見つかりません", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            var glossaryDetail = new ModGlossaryDetailForm(displayModName, glossaryPath);
+            PseudoModal.Show(glossaryDetail, this);
             return;
         }
 
