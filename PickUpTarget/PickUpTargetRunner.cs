@@ -650,23 +650,57 @@ public static class PickUpTargetRunner
     /// applying a stale vanilla translation to a completely different record
     /// (confirmed on real data: Ordinator's "Pickpocket Mastery" perk
     /// silently inheriting vanilla "Light Fingers"'s translation). This
-    /// version restores the comparison for both source shapes uniformly.</summary>
+    /// version restores the comparison for both source shapes uniformly.
+    ///
+    /// 2026-09-17 (user-identified gap): the reference search used to check
+    /// ONLY the immediately preceding entry (chain[i-1]) and give up the
+    /// moment IT was also Japanese — a chain with two or more STACKED
+    /// translation patches (e.g. an old patch, then a revised one) never
+    /// walked far enough back to find the genuine original English. This was
+    /// not merely a missed "confirmed match" (needlessly left as
+    /// NeedsReview=true) but could hide a genuine "confirmed mismatch": if a
+    /// later mod repurposed the FormKey for a different item, but the
+    /// repurposing mod's own predecessor happened to be a second translation
+    /// patch, the tool would give up too early and apply the stale
+    /// translation anyway instead of correctly blocking it. Fixed by walking
+    /// back past any number of consecutive Japanese-providing contributors
+    /// until a non-Japanese one is found (or the chain is exhausted).</summary>
     /// <param name="SkippedMismatch">Set (non-null, carrying the rejected
     /// Japanese text and the reference it failed to match) only in the
     /// "confirmed mismatch" case, purely so BuildCandidates can log it —
     /// distinct from "nothing found at all", which is unremarkable and not
     /// logged.</param>
-    private static (string? Japanese, bool NeedsReview, (string Japanese, string Reference)? SkippedMismatch) FindCrossModPrecedent(ChainValue chain, string winnerText)
+    /// <returns><c>IsChainOrigin</c> is true only when NO earlier non-Japanese
+    /// entry exists anywhere in the visible chain (this tool has no captured
+    /// original English to verify against at all) — deliberately a SEPARATE
+    /// signal from <c>NeedsReview</c> (2026-09-17 user request), even though
+    /// today it happens to be true in exactly the same case: <c>NeedsReview</c>
+    /// means "applied without verification" in general, while
+    /// <c>IsChainOrigin</c> specifically means "there is no English text this
+    /// mod's Japanese could ever be checked against" — a caller like
+    /// <see cref="AddCrossModPrecedentToCorpus"/> that wants to withhold ONLY
+    /// this specific case from a wider, riskier use (generic corpus
+    /// registration, reused for unrelated candidates elsewhere) should check
+    /// this flag rather than reusing <c>NeedsReview</c>, in case a future
+    /// change makes them diverge.</returns>
+    public static (string? Japanese, bool NeedsReview, bool IsChainOrigin, (string Japanese, string Reference)? SkippedMismatch) FindCrossModPrecedent(ChainValue chain, string winnerText)
     {
         for (var i = chain.Count - 2; i >= 0; i--)
         {
             if (!LanguageDetector.ContainsJapanese(chain[i].Text)) continue;
 
             var reference = chain[i].DualLanguageEnglishText;
-            if (reference == null && i > 0 && !LanguageDetector.ContainsJapanese(chain[i - 1].Text))
-                reference = chain[i - 1].Text;
+            if (reference == null)
+            {
+                for (var j = i - 1; j >= 0; j--)
+                {
+                    if (LanguageDetector.ContainsJapanese(chain[j].Text)) continue;
+                    reference = chain[j].Text;
+                    break;
+                }
+            }
 
-            if (reference == null) return (chain[i].Text, true, null); // unverifiable -- apply with a warning
+            if (reference == null) return (chain[i].Text, true, true, null); // no earlier English reference anywhere in the chain -- chain origin, unverifiable
             // v0.56.2: case-insensitive -- confirmed on real data (1,143
             // skipped cross-mod precedents across a 334-plugin load order,
             // 24 of which were ONLY a capitalization difference like "the
@@ -682,10 +716,10 @@ public static class PickUpTargetRunner
             // IsConfirmedCrossModTextMatch's own remarks for why that's risky
             // and the fix (tags require an exact, case-sensitive match; only
             // the surrounding plain text stays case-insensitive).
-            if (IsConfirmedCrossModTextMatch(reference, winnerText)) return (chain[i].Text, false, null); // confirmed match -- trusted
-            return (null, false, (chain[i].Text, reference)); // confirmed mismatch -- do not apply at all
+            if (IsConfirmedCrossModTextMatch(reference, winnerText)) return (chain[i].Text, false, false, null); // confirmed match -- trusted
+            return (null, false, false, (chain[i].Text, reference)); // confirmed mismatch -- do not apply at all
         }
-        return (null, false, null);
+        return (null, false, false, null);
     }
 
     private static readonly Regex CrossModTagPattern = new("<[^>]*>", RegexOptions.Compiled);
@@ -724,14 +758,23 @@ public static class PickUpTargetRunner
     /// additive: the direct per-candidate application (see BuildCandidates)
     /// doesn't depend on this at all, since it's keyed on record identity,
     /// not text.</summary>
-    private static void AddCrossModPrecedentToCorpus(Dictionary<ChainKey, ChainValue> chains, List<CorpusEntry> corpus)
+    public static void AddCrossModPrecedentToCorpus(Dictionary<ChainKey, ChainValue> chains, List<CorpusEntry> corpus)
     {
         foreach (var (key, chain) in chains)
         {
             var winner = chain[^1];
             if (LanguageDetector.ContainsJapanese(winner.Text)) continue;
-            var (japanese, _, _) = FindCrossModPrecedent(chain, winner.Text);
-            if (japanese == null || string.IsNullOrWhiteSpace(winner.Text) || winner.Text == japanese) continue;
+            var (japanese, _, isChainOrigin, _) = FindCrossModPrecedent(chain, winner.Text);
+            // 2026-09-17 (user-identified gap): IsChainOrigin means this
+            // Japanese text was never verified against ANY English original,
+            // so pairing it with winner.Text here would assert an
+            // (English, Japanese) equivalence this tool has no evidence for.
+            // Applying it directly to THIS record (BuildCandidates, below) is
+            // still fine -- same FormKey, so almost certainly the same item --
+            // but registering it as a GENERIC corpus precedent would let that
+            // unverified pairing resolve OTHER, unrelated candidates elsewhere
+            // that merely happen to share winner.Text's exact wording.
+            if (japanese == null || isChainOrigin || string.IsNullOrWhiteSpace(winner.Text) || winner.Text == japanese) continue;
             corpus.Add(new CorpusEntry(winner.Text, japanese, winner.Source.FileName, "cross_mod", key.DsdType));
         }
     }
@@ -1015,7 +1058,7 @@ public static class PickUpTargetRunner
             // remarks) is attached to the candidate itself, keyed on record
             // identity rather than text -- Translation applies it ahead of
             // every other resolution method.
-            var (crossModJapanese, crossModNeedsReview, crossModSkippedMismatch) = FindCrossModPrecedent(chain, winner.Text);
+            var (crossModJapanese, crossModNeedsReview, _, crossModSkippedMismatch) = FindCrossModPrecedent(chain, winner.Text);
             if (crossModJapanese != null)
             {
                 trace?.Trace($"CrossModPrecedent [{dsdType}] {formKey}: \"{winner.Text}\" <- \"{crossModJapanese}\" (needsReview={crossModNeedsReview})");

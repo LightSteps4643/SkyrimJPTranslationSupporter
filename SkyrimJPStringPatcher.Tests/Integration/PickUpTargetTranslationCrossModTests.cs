@@ -55,13 +55,19 @@ public class PickUpTargetTranslationCrossModTests
         return mo2Dir;
     }
 
-    /// <summary>Currently RED (TDD): PickUpTarget's corpus building only pairs
-    /// English/Japanese text found on the SAME mod's SAME field (see
-    /// PickUpTargetRunner.cs's Consider() local function) — it does not yet
-    /// look across a (FormKey, type, index) chain's OTHER contributors for a
-    /// non-winning Japanese entry. Skipped (not deleted) so the suite stays
-    /// green until that PickUpTarget-side fix is designed and implemented;
-    /// remove the Skip then.</summary>
+    /// <summary>TestXMod1.esp is a single-language (Japanese-only) contributor
+    /// at the very HEAD of this chain — no earlier entry exists anywhere for
+    /// this tool to verify its Japanese against (exactly the shape a real
+    /// xTranslator-hand-edited plugin has: no separate English original ever
+    /// captured). This is "chain origin" (2026-09-17, see
+    /// FindCrossModPrecedent's remarks): applying it DIRECTLY to this record
+    /// (same FormKey, so almost certainly the same item) is still fine, but
+    /// registering it as a GENERIC corpus precedent — reused for ANY other
+    /// candidate elsewhere that happens to share "Sword of Test X"'s exact
+    /// wording — asserts an (English, Japanese) equivalence this tool never
+    /// actually verified. Revised (2026-09-17, user decision) from the
+    /// original design, which treated generic corpus registration here as the
+    /// intended behavior.</summary>
     [Fact]
     public void Run_ThenTranslate_RecoversJapaneseFromANonWinningModsContribution()
     {
@@ -80,17 +86,14 @@ public class PickUpTargetTranslationCrossModTests
             Assert.Equal("Sword of Test X", candidate.CurrentText);
             Assert.Equal("TestXMod2.esp", candidate.WinningPlugin);
 
-            // Mod1's Japanese contribution to the SAME (FormKey, type, index)
-            // should have been harvested as corpus precedent, even though
-            // Mod1 didn't win the field.
-            Assert.Contains(result.Corpus, e => e.English == "Sword of Test X" && e.Japanese == "テストXの剣");
+            // Applied directly to THIS record (chain origin still gets direct
+            // application, with a review flag) ...
+            Assert.Equal("テストXの剣", candidate.CrossModPrecedentJapanese);
+            Assert.True(candidate.CrossModPrecedentNeedsReview);
 
-            // And Translation's own ①完全一致 should resolve it automatically
-            // from that corpus — the actual end-to-end payoff.
-            var autoTranslator = new AutoTranslator(result.Corpus);
-            var resolved = autoTranslator.TryTranslate(candidate.CurrentText, candidate.RecordType);
-            Assert.NotNull(resolved);
-            Assert.Equal("テストXの剣", resolved!.Japanese);
+            // ... but NOT generalized into the corpus for reuse by unrelated
+            // candidates elsewhere that merely share the same English text.
+            Assert.DoesNotContain(result.Corpus, e => e.English == "Sword of Test X");
         }
         finally
         {
