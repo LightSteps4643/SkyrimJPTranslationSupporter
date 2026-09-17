@@ -1151,7 +1151,7 @@ public static class PromptGenerator
         foreach (var p in dedupedPrecedents)
         {
             if (precedents.Count >= referenceLimits.TopN) break;
-            var line = $"    \"{p.English}\" → \"{p.Japanese}\" (source: {p.Source}, {p.SourceKind})\n";
+            var line = $"    \"{p.English}\" → \"{p.Japanese}\"\n";
             if (precedentsLength + line.Length > budget) break;
             precedents.Add(p);
             precedentsLength += line.Length;
@@ -1161,7 +1161,7 @@ public static class PromptGenerator
         {
             sb.Append("  Reference examples:\n");
             foreach (var p in precedents)
-                sb.Append($"    \"{p.English}\" → \"{p.Japanese}\" (source: {p.Source}, {p.SourceKind})\n");
+                sb.Append($"    \"{p.English}\" → \"{p.Japanese}\"\n");
         }
         else
         {

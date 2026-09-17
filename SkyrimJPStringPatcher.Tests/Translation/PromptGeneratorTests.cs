@@ -1161,6 +1161,42 @@ public class PromptGeneratorTests
         }
     }
 
+    /// <summary>2026-09-18 (user question): the "(source: X, Y)" annotation on
+    /// every "Reference examples" line has no instructed purpose for the
+    /// model — the fixed instruction text only ever says "match your
+    /// terminology to them for consistency", never anything about weighing
+    /// examples differently by source — so it was pure prompt-budget overhead
+    /// with no benefit. Removed; each line is now just the plain
+    /// "English" → "Japanese" pair.</summary>
+    [Fact]
+    public void RunOne_ReferenceExampleLine_DoesNotIncludeSourceAnnotation()
+    {
+        const string plugin = "SjptsReferenceBudget.esp";
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outputDir = Path.Combine(root, "out_temp");
+            using var log = OpenTestLog(root);
+            var fakeLlm = FakeTextTranslator.Succeeding(
+                ("Sjpts Duplicate Reference Candidate", "重複参照候補の訳"),
+                ("Sjpts Many References Candidate", "多数参照候補の訳"));
+
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm);
+
+            var pluginDir = Path.Combine(outputDir, "SjptsReferenceBudget");
+            var promptPath = Path.Combine(pluginDir, "prompt_localLLM_call1.txt");
+            var promptText = File.ReadAllText(promptPath);
+
+            Assert.Contains("\"Sjpts Duplicate Reference Item\" → \"デュープの実例\"\n", promptText);
+            Assert.DoesNotContain("(source:", promptText);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
     /// <summary>2026-09-17: real-data finding (Light Greatswords.esp) — a
     /// candidate can legitimately have many more "relevant" corpus precedents
     /// than any single prompt can afford to show, and PrecedentRetriever itself
