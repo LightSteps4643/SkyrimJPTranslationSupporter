@@ -263,6 +263,11 @@ public sealed class TranslationDetailForm : Form
                 gridRow.DefaultCellStyle.BackColor = Color.FromArgb(255, 245, 235); // 未翻訳のまま残っている行を薄く強調
             else if (edited)
                 gridRow.DefaultCellStyle.BackColor = Color.FromArgb(235, 245, 255); // 編集済みの行を薄く強調
+            else
+                // 2026-09-18: TranslationCheck（⑤⑥のLLM応答のみ機械的に分類）に
+                // 応じて赤〜白のグラデーションで強調（ユーザー要望）。空欄・
+                // AllJapanese・未編集でない行は白のまま。
+                gridRow.DefaultCellStyle.BackColor = TranslationCheckColors.BackColorFor(row.GetValueOrDefault("TranslationCheck", ""));
         }
         _grid.ResumeLayout();
         UpdateEditCountLabel();
@@ -282,7 +287,9 @@ public sealed class TranslationDetailForm : Form
         {
             _edits.Remove(key);
             gridRow.Cells["Notes"].Value = original?.GetValueOrDefault("Notes", "") ?? "";
-            gridRow.DefaultCellStyle.BackColor = string.IsNullOrEmpty(newValue) ? Color.FromArgb(255, 245, 235) : Color.White;
+            gridRow.DefaultCellStyle.BackColor = string.IsNullOrEmpty(newValue)
+                ? Color.FromArgb(255, 245, 235)
+                : TranslationCheckColors.BackColorFor(original?.GetValueOrDefault("TranslationCheck", "") ?? "");
         }
         else
         {

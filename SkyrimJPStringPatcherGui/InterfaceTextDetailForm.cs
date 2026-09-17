@@ -144,6 +144,11 @@ public sealed class InterfaceTextDetailForm : Form
                 gridRow.DefaultCellStyle.BackColor = Color.FromArgb(255, 245, 235); // 未対応行を薄く強調
             else if (edited)
                 gridRow.DefaultCellStyle.BackColor = Color.FromArgb(235, 245, 255); // 編集済み行を薄く強調
+            else
+                // 2026-09-18: TranslationCheck（⑤⑥のLLM応答のみ機械的に分類）に
+                // 応じて赤〜白のグラデーションで強調（ユーザー要望、ESP側
+                // TranslationDetailForm.csと同じ考え方）。
+                gridRow.DefaultCellStyle.BackColor = TranslationCheckColors.BackColorFor(row.TranslationCheck);
         }
         _grid.ResumeLayout();
         UpdateEditCountLabel();
@@ -164,7 +169,9 @@ public sealed class InterfaceTextDetailForm : Form
             _edits.Remove(key);
             gridRow.Cells["Resolved"].Value = original?.Resolved ?? false;
             gridRow.Cells["Notes"].Value = original?.Notes ?? "";
-            gridRow.DefaultCellStyle.BackColor = (original?.Resolved ?? false) ? Color.White : Color.FromArgb(255, 245, 235);
+            gridRow.DefaultCellStyle.BackColor = (original?.Resolved ?? false)
+                ? TranslationCheckColors.BackColorFor(original?.TranslationCheck ?? "")
+                : Color.FromArgb(255, 245, 235);
         }
         else
         {
