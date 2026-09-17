@@ -17,7 +17,14 @@ namespace SJPTS_InterfaceText;
 /// own edit via InterfaceTextDetailForm. Empty for a row resolved from the
 /// load order's own/imported _japanese.txt, the MOD-name-exact-match
 /// exclusion, or one still unresolved.</param>
-public sealed record InterfaceTranslationRow(string Key, string English, string Japanese, bool Resolved, string Notes = "");
+/// <param name="TranslationCheck">2026-09-18: mirrors the ESP side's
+/// translations.tsv "TranslationCheck" column (TranslationQualityChecker) —
+/// set ONLY when ⑤ローカルLLM/⑥生成AI翻訳 actually produces this row's
+/// Japanese (InterfaceTextPromptGenerator.ApplyLlmStep), left "" for every
+/// other resolution path and once a human confirms/edits the row
+/// (Notes=SJPTS_ModifiedByUser) — see AutoTranslationResult's own remarks for
+/// the full rationale (shared with the ESP pipeline).</param>
+public sealed record InterfaceTranslationRow(string Key, string English, string Japanese, bool Resolved, string Notes = "", string TranslationCheck = "");
 
 public static class InterfaceTranslationsTsv
 {
@@ -32,9 +39,10 @@ public static class InterfaceTranslationsTsv
             var cols = line.Split('\t');
             if (cols.Length < 4) continue;
             var notes = cols.Length >= 5 ? cols[4] : "";
+            var translationCheck = cols.Length >= 6 ? cols[5] : "";
             rows.Add(new InterfaceTranslationRow(
                 TsvEscaping.Unescape(cols[0]), TsvEscaping.Unescape(cols[1]), TsvEscaping.Unescape(cols[2]),
-                cols[3] == "1", TsvEscaping.Unescape(notes)));
+                cols[3] == "1", TsvEscaping.Unescape(notes), TsvEscaping.Unescape(translationCheck)));
         }
         return rows;
     }
@@ -46,8 +54,8 @@ public static class InterfaceTranslationsTsv
 
         using var writer = new StreamWriter(path, append: false, Encoding.UTF8);
         writer.NewLine = "\n";
-        writer.WriteLine("Key\tEnglish\tJapanese\tResolved\tNotes");
+        writer.WriteLine("Key\tEnglish\tJapanese\tResolved\tNotes\tTranslationCheck");
         foreach (var row in rows)
-            writer.WriteLine($"{TsvEscaping.Escape(row.Key)}\t{TsvEscaping.Escape(row.English)}\t{TsvEscaping.Escape(row.Japanese)}\t{(row.Resolved ? "1" : "0")}\t{TsvEscaping.Escape(row.Notes)}");
+            writer.WriteLine($"{TsvEscaping.Escape(row.Key)}\t{TsvEscaping.Escape(row.English)}\t{TsvEscaping.Escape(row.Japanese)}\t{(row.Resolved ? "1" : "0")}\t{TsvEscaping.Escape(row.Notes)}\t{TsvEscaping.Escape(row.TranslationCheck)}");
     }
 }

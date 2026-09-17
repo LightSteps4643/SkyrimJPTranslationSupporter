@@ -8,7 +8,21 @@ namespace SkyrimJPStringPatcher.Translation;
 /// from the whole-string result alone. Left "" for step 1 (コーパス完全一致,
 /// verbatim precedent needs no explaining) — see PromptGenerator's per-plugin
 /// detail log, DESIGN_HISTORY.md's v0.36.0 section for why this exists.</param>
-public sealed record AutoTranslationResult(string Japanese, string Method, string Detail = "");
+/// <param name="TranslationCheck">2026-09-18: <see cref="TranslationQualityChecker"/>'s
+/// machine-classifiable quality category for <paramref name="Japanese"/> — set
+/// ONLY at the ⑤ローカルLLM/⑥生成AI翻訳 result sites (LlmBatchTranslationEngine.cs),
+/// since ②意味合成/③音訳分解/④NameFallbackTranslator are structurally
+/// guaranteed to produce complete Japanese by construction (④ was explicitly
+/// redesigned in v0.30.0, all-or-nothing, after real data showed 75% of its
+/// old word-by-word fallbacks carried English residue), and ①コーパス完全一致
+/// (including vanilla) is, by definition, already-correct reference data, not
+/// something this tool produced and needs to grade. Left "" (unset) for every
+/// other resolution method, and for a row carried forward unresolved (see
+/// PromptGenerator's ReadExistingTranslations, which now also carries this
+/// field forward across reruns) or once a human has confirmed/edited it
+/// (SJPTS_ModifiedByUser) — a human's own judgment supersedes the mechanical
+/// check.</param>
+public sealed record AutoTranslationResult(string Japanese, string Method, string Detail = "", string TranslationCheck = "");
 
 /// <summary>
 /// Automatic, no-AI-chat-needed translation pipeline for Translation — steps ①③④ from

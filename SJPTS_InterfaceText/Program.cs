@@ -504,7 +504,7 @@ int RunTranslateOne(string target, RunLog log, TraceLog trace)
     }
 
     var updated = rows.Select(r =>
-        translated.TryGetValue(r.Key, out var t) ? r with { Japanese = t.Japanese, Resolved = true, Notes = t.Notes } : r
+        translated.TryGetValue(r.Key, out var t) ? r with { Japanese = t.Japanese, Resolved = true, Notes = t.Notes, TranslationCheck = t.TranslationCheck } : r
     ).ToList();
 
     InterfaceTranslationsTsv.Write(tsvPath, updated);

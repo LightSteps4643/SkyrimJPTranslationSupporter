@@ -389,7 +389,7 @@ public static class LlmBatchTranslationEngine
                             // ようにする。
                             else if (LanguageDetector.ContainsJapanese(japanese))
                             {
-                                answers[group.Key] = new AutoTranslationResult(japanese, o.MethodTag, "");
+                                answers[group.Key] = new AutoTranslationResult(japanese, o.MethodTag, "", TranslationQualityChecker.Classify(japanese));
                                 answerRecordTypes[group.Key] = o.RecordTypeOf(group);
                                 o.Log.Detail($"{stepPrefixJa}{o.StepLabelJa}による自動解決（低精度・要レビュー）",
                                     $"{stepPrefixEn}Auto-resolved via {o.StepLabelEn} (low confidence, needs review)",
@@ -398,7 +398,7 @@ public static class LlmBatchTranslationEngine
                             else
                             {
                                 var noJapaneseTag = o.MethodTag + "NoJapanese";
-                                answers[group.Key] = new AutoTranslationResult(japanese, noJapaneseTag, "");
+                                answers[group.Key] = new AutoTranslationResult(japanese, noJapaneseTag, "", TranslationQualityChecker.Classify(japanese));
                                 answerRecordTypes[group.Key] = o.RecordTypeOf(group);
                                 o.Trace?.Warning($"{o.StepLabelEn} [{o.LogScope}] \"{group.Key}\": response parsed but contains no Japanese — saved as \"{noJapaneseTag}\" for review");
                                 o.Log.DetailAndReport($"{stepPrefixJa}{o.StepLabelJa}: 応答は得られたが訳文に日本語が含まれない（翻訳不要な文字列か、翻訳失敗かは要レビュー）",

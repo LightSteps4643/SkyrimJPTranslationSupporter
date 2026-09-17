@@ -22,7 +22,7 @@ namespace SkyrimJPStringPatcherGui;
 /// rather than a further private duplicate — the link adds no project
 /// reference (Core itself is still not referenced), just this one pure
 /// string-utility file compiled directly into this assembly.</summary>
-public sealed record InterfaceTranslationRow(string Key, string English, string Japanese, bool Resolved, string Notes = "");
+public sealed record InterfaceTranslationRow(string Key, string English, string Japanese, bool Resolved, string Notes = "", string TranslationCheck = "");
 
 public sealed class InterfaceTextDetailForm : Form
 {
@@ -283,8 +283,12 @@ public sealed class InterfaceTextDetailForm : Form
 
     private void SaveChanges()
     {
+        // 2026-09-18: TranslationCheck（⑤⑥のLLM応答時にのみ機械的に分類される
+        // 品質フラグ）は、人間が編集・確認した時点で意味を失う——Notes=
+        // SJPTS_ModifiedByUserが既にそれを示すため、編集された行は空欄にクリア
+        // する（ESP側TranslationDetailForm.SaveChangesと同じ考え方）。
         var updated = _rows.Select(r =>
-            _edits.TryGetValue(r.Key, out var jp) ? r with { Japanese = jp, Resolved = true, Notes = "SJPTS_ModifiedByUser" } : r
+            _edits.TryGetValue(r.Key, out var jp) ? r with { Japanese = jp, Resolved = true, Notes = "SJPTS_ModifiedByUser", TranslationCheck = "" } : r
         ).ToList();
         WriteTsv(_path, updated);
         _rows = updated;
@@ -292,7 +296,7 @@ public sealed class InterfaceTextDetailForm : Form
     }
 
     /// <summary>Mirrors SJPTS_InterfaceText/InterfaceTranslationsTsv.cs's Read exactly
-    /// (same 5-column tab-separated format, header skipped) — see this class's
+    /// (same 6-column tab-separated format, header skipped) — see this class's
     /// remarks for why it's duplicated here rather than referenced.</summary>
     private static List<InterfaceTranslationRow> ReadTsv(string path)
     {
@@ -304,9 +308,10 @@ public sealed class InterfaceTextDetailForm : Form
             var cols = line.Split('\t');
             if (cols.Length < 4) continue;
             var notes = cols.Length >= 5 ? cols[4] : "";
+            var translationCheck = cols.Length >= 6 ? cols[5] : "";
             rows.Add(new InterfaceTranslationRow(
                 TsvEscaping.Unescape(cols[0]), TsvEscaping.Unescape(cols[1]), TsvEscaping.Unescape(cols[2]),
-                cols[3] == "1", TsvEscaping.Unescape(notes)));
+                cols[3] == "1", TsvEscaping.Unescape(notes), TsvEscaping.Unescape(translationCheck)));
         }
         return rows;
     }
@@ -316,9 +321,9 @@ public sealed class InterfaceTextDetailForm : Form
     {
         using var writer = new StreamWriter(path, append: false, System.Text.Encoding.UTF8);
         writer.NewLine = "\n";
-        writer.WriteLine("Key\tEnglish\tJapanese\tResolved\tNotes");
+        writer.WriteLine("Key\tEnglish\tJapanese\tResolved\tNotes\tTranslationCheck");
         foreach (var row in rows)
-            writer.WriteLine($"{TsvEscaping.Escape(row.Key)}\t{TsvEscaping.Escape(row.English)}\t{TsvEscaping.Escape(row.Japanese)}\t{(row.Resolved ? "1" : "0")}\t{TsvEscaping.Escape(row.Notes)}");
+            writer.WriteLine($"{TsvEscaping.Escape(row.Key)}\t{TsvEscaping.Escape(row.English)}\t{TsvEscaping.Escape(row.Japanese)}\t{(row.Resolved ? "1" : "0")}\t{TsvEscaping.Escape(row.Notes)}\t{TsvEscaping.Escape(row.TranslationCheck)}");
     }
 
     private void ApplyFilter()

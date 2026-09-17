@@ -41,4 +41,29 @@ public class InterfaceTextDetailFormTsvTests
         }
         finally { File.Delete(path); }
     }
+
+    /// <summary>2026-09-18: TranslationCheck column round-trips through
+    /// ReadTsv/WriteTsv, mirroring SJPTS_InterfaceText/InterfaceTranslationsTsv's
+    /// own version of this column.</summary>
+    [Fact]
+    public void WriteThenRead_RoundTrips_TranslationCheckColumn()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"sjpts_interfacetextdetail_tsv_{Guid.NewGuid():N}.tsv");
+        try
+        {
+            var rows = new List<InterfaceTranslationRow>
+            {
+                new("$Foo", "Hello", "This is 剣", true, "SJPTS_TranslationLocalLlm", "ContainsMostOfAlphaNumeric"),
+                new("$Bar", "World", "完全な日本語", true, "SJPTS_AutoCorpus", ""), // ①経由は空欄のまま
+            };
+            InvokeWriteTsv(path, rows);
+
+            var read = InvokeReadTsv(path);
+
+            Assert.Equal(rows, read);
+            var header = File.ReadAllLines(path)[0];
+            Assert.Contains("TranslationCheck", header.Split('\t'));
+        }
+        finally { File.Delete(path); }
+    }
 }

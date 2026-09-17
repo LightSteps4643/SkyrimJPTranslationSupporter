@@ -99,6 +99,113 @@ public class PromptGeneratorTests
         }
     }
 
+    /// <summary>2026-09-18: translations.tsv gained a new "TranslationCheck"
+    /// column (TranslationQualityChecker) recording a machine-classifiable
+    /// quality category for the resolved Japanese, independent of the Notes
+    /// column (which records resolution METHOD, not quality — see
+    /// TranslationQualityChecker's remarks for why the two are kept
+    /// separate). Deliberately scoped to ⑤ローカルLLM/⑥生成AI翻訳 only
+    /// (user decision, 2026-09-18): ②③④ are structurally guaranteed to
+    /// produce complete Japanese by construction, and ①コーパス完全一致
+    /// (including vanilla) is already-correct reference data, not something
+    /// this tool produced and needs to grade — so a corpus-resolved candidate
+    /// must have this column left BLANK, while an LLM-resolved one gets a
+    /// real classification.</summary>
+    [Fact]
+    public void RunOne_CorpusResolvedCandidate_LeavesTranslationCheckBlank()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outputDir = Path.Combine(root, "out_temp");
+            using var log = OpenTestLog(root);
+
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), TargetPlugin, outputDir, log);
+
+            var pluginDir = Path.Combine(outputDir, "SjptsTestMod");
+            var lines = File.ReadAllLines(Path.Combine(pluginDir, "translations.tsv"));
+            var headers = lines[0].Split('\t');
+            var translationCheckCol = Array.IndexOf(headers, "TranslationCheck");
+            Assert.True(translationCheckCol >= 0, "expected a TranslationCheck column in translations.tsv's header");
+
+            var row = lines.Skip(1).Select(l => l.Split('\t')).Single(p => Unescape(p[3]) == "Sjpts Test Sword");
+            Assert.Equal("", row[translationCheckCol]);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    [Fact]
+    public void RunOne_LocalLlmResolvedCandidate_WritesTranslationCheckClassification()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outputDir = Path.Combine(root, "out_temp");
+            using var log = OpenTestLog(root);
+            var fakeLlm = FakeTextTranslator.Succeeding(("Sjpts Llm Candidate", "完全な日本語の訳"));
+
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), TargetPlugin, outputDir, log, llmLocal: fakeLlm);
+
+            var pluginDir = Path.Combine(outputDir, "SjptsTestMod");
+            var lines = File.ReadAllLines(Path.Combine(pluginDir, "translations.tsv"));
+            var headers = lines[0].Split('\t');
+            var translationCheckCol = Array.IndexOf(headers, "TranslationCheck");
+
+            var row = lines.Skip(1).Select(l => l.Split('\t')).Single(p => Unescape(p[3]) == "Sjpts Llm Candidate");
+            Assert.Equal("AllJapanese", row[translationCheckCol]);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>Re-running (carrying forward an already-LLM-resolved row
+    /// without re-calling the LLM) must not lose the previously-computed
+    /// TranslationCheck value — ReadExistingTranslations now carries it
+    /// forward the same way it already does for Japanese/Notes.</summary>
+    [Fact]
+    public void RunOne_RerunCarriesForwardPreviouslyComputedTranslationCheck()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outputDir = Path.Combine(root, "out_temp");
+            using (var log1 = OpenTestLog(root))
+            {
+                var fakeLlm = FakeTextTranslator.Succeeding(("Sjpts Llm Candidate", "This is 剣"));
+                PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), TargetPlugin, outputDir, log1, llmLocal: fakeLlm);
+            }
+
+            var pluginDir = Path.Combine(outputDir, "SjptsTestMod");
+            var firstRunHeaders = File.ReadAllLines(Path.Combine(pluginDir, "translations.tsv"))[0].Split('\t');
+            var col = Array.IndexOf(firstRunHeaders, "TranslationCheck");
+            var firstRunRow = File.ReadAllLines(Path.Combine(pluginDir, "translations.tsv")).Skip(1)
+                .Select(l => l.Split('\t')).Single(p => Unescape(p[3]) == "Sjpts Llm Candidate");
+            Assert.Equal("ContainsMostOfAlphaNumeric", firstRunRow[col]);
+
+            // Re-run with NO llmLocal at all -- if the row weren't carried
+            // forward it would either stay unresolved or (worse) silently
+            // lose its TranslationCheck value while keeping its Japanese/Notes.
+            using (var log2 = OpenTestLog(root))
+                PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), TargetPlugin, outputDir, log2);
+
+            var secondRunRow = File.ReadAllLines(Path.Combine(pluginDir, "translations.tsv")).Skip(1)
+                .Select(l => l.Split('\t')).Single(p => Unescape(p[3]) == "Sjpts Llm Candidate");
+            Assert.Equal("ContainsMostOfAlphaNumeric", secondRunRow[col]);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
     [Fact]
     public void RunOne_CandidateWithNoPrecedentAndNoLlm_EndsUpUnresolvedInPromptTxt()
     {

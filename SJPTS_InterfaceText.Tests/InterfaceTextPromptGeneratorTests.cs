@@ -285,8 +285,8 @@ public class InterfaceTextPromptGeneratorTests
             var result = InterfaceTextPromptGenerator.ApplyLlmStep(pending, fake, "TestMod", log, null, 12_000, dir, "localLLM");
 
             Assert.Equal(2, fake.PromptsReceived.Count);
-            Assert.Equal(("こんにちは", "SJPTS_TranslationLocalLlm"), result["$Foo"]);
-            Assert.Equal(("世界", "SJPTS_TranslationLocalLlm"), result["$Bar"]);
+            Assert.Equal(("こんにちは", "SJPTS_TranslationLocalLlm", "AllJapanese"), result["$Foo"]);
+            Assert.Equal(("世界", "SJPTS_TranslationLocalLlm", "AllJapanese"), result["$Bar"]);
         }
         finally { }
     }

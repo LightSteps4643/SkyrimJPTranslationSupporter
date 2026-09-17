@@ -461,14 +461,14 @@ public static class PromptGenerator
         // "初期化"/"MO2再読込＆初期化") skips this entirely for a clean ①のみ
         // reset.
         var existing = discardUserEdits
-            ? new Dictionary<(string, string, int), (string Japanese, string Method)>()
+            ? new Dictionary<(string, string, int), (string Japanese, string Method, string TranslationCheck)>()
             : ReadExistingTranslations(templatePath);
         if (existing.Count > 0)
             trace?.Debug($"{plugin}: carrying forward {existing.Count} already-translated row(s) from existing {templatePath}");
 
         var resolved = ordered
             .Select(c => existing.TryGetValue((c.FormId, c.RecordType, c.Index), out var preserved)
-                ? (Candidate: c, Auto: (AutoTranslationResult?)new AutoTranslationResult(preserved.Japanese, preserved.Method, ""))
+                ? (Candidate: c, Auto: (AutoTranslationResult?)new AutoTranslationResult(preserved.Japanese, preserved.Method, "", preserved.TranslationCheck))
                 : !string.IsNullOrEmpty(c.CrossModPrecedentJapanese)
                     // v0.56.0: a cross-mod precedent (PickUpTargetRunner.cs's
                     // FindCrossModPrecedent) is keyed on record identity, not
@@ -1233,12 +1233,12 @@ public static class PromptGenerator
     private static void WriteTranslationTemplate(string path, List<(Candidate Candidate, AutoTranslationResult? Auto)> rows)
     {
         using var w = new StreamWriter(path, false, System.Text.Encoding.UTF8);
-        w.WriteLine(string.Join('\t', "FormId", "WinningPlugin", "RecordType", "EnglishText", "Japanese", "Notes", "Index", "EditorId"));
+        w.WriteLine(string.Join('\t', "FormId", "WinningPlugin", "RecordType", "EnglishText", "Japanese", "Notes", "Index", "EditorId", "TranslationCheck"));
         foreach (var (c, auto) in rows)
         {
             var notes = auto?.Method ?? c.Warning;
             w.WriteLine(string.Join('\t', c.FormId, c.WinningPlugin, c.RecordType, Escape(c.CurrentText),
-                Escape(auto?.Japanese ?? ""), Escape(notes), c.Index, Escape(c.EditorId)));
+                Escape(auto?.Japanese ?? ""), Escape(notes), c.Index, Escape(c.EditorId), auto?.TranslationCheck ?? ""));
         }
     }
 
@@ -1268,9 +1268,9 @@ public static class PromptGenerator
     ///
     /// Missing file or no such rows both just return empty — this is a
     /// best-effort carry-forward, not a required input.</summary>
-    private static Dictionary<(string FormId, string RecordType, int Index), (string Japanese, string Method)> ReadExistingTranslations(string path)
+    private static Dictionary<(string FormId, string RecordType, int Index), (string Japanese, string Method, string TranslationCheck)> ReadExistingTranslations(string path)
     {
-        var result = new Dictionary<(string, string, int), (string, string)>();
+        var result = new Dictionary<(string, string, int), (string, string, string)>();
         if (!File.Exists(path)) return result;
 
         using var reader = new StreamReader(path, System.Text.Encoding.UTF8);
@@ -1283,6 +1283,10 @@ public static class PromptGenerator
         var japaneseCol = Col("Japanese");
         var notesCol = Col("Notes");
         var indexCol = Col("Index");
+        // 2026-09-18: 古いtranslations.tsv（この列が存在する前に生成されたもの）
+        // との後方互換のため、無ければ""として扱う（他の必須列と違い読み込み
+        // 自体を諦めない）。
+        var translationCheckCol = Col("TranslationCheck");
         if (formIdCol < 0 || recordTypeCol < 0 || japaneseCol < 0 || notesCol < 0 || indexCol < 0) return result;
 
         string? line;
@@ -1294,7 +1298,8 @@ public static class PromptGenerator
             var japanese = Unescape(cells[japaneseCol]);
             if (japanese.Length == 0) continue;
             if (!int.TryParse(cells[indexCol], out var index)) continue;
-            result[(cells[formIdCol], cells[recordTypeCol], index)] = (japanese, Unescape(cells[notesCol]));
+            var translationCheck = translationCheckCol >= 0 && cells.Length > translationCheckCol ? Unescape(cells[translationCheckCol]) : "";
+            result[(cells[formIdCol], cells[recordTypeCol], index)] = (japanese, Unescape(cells[notesCol]), translationCheck);
         }
         return result;
     }

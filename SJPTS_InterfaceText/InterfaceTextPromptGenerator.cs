@@ -147,13 +147,13 @@ public static class InterfaceTextPromptGenerator
     /// <paramref name="modName"/> (the file-based target identifier) when not
     /// supplied — every pre-existing caller/test keeps working unchanged,
     /// just without the real display name available for this specific check.</param>
-    public static Dictionary<string, (string Japanese, string Notes)> ApplyLlmStep(
+    public static Dictionary<string, (string Japanese, string Notes, string TranslationCheck)> ApplyLlmStep(
         IReadOnlyList<(string Key, string English)> pending, ITextTranslator translator,
         string modName, RunLog log, TraceLog? trace, int batchCharLimit, string modWorkDir, string providerLabel,
         string? modDisplayName = null)
     {
         modDisplayName ??= modName;
-        var result = new Dictionary<string, (string Japanese, string Notes)>(StringComparer.Ordinal);
+        var result = new Dictionary<string, (string Japanese, string Notes, string TranslationCheck)>(StringComparer.Ordinal);
         if (pending.Count == 0) return result;
 
         // Notes値はESP側（Translation/PromptGenerator.cs）の命名規則をそのまま
@@ -198,7 +198,7 @@ public static class InterfaceTextPromptGenerator
         {
             if (!keysByEnglish.TryGetValue(text, out var keys)) continue;
             foreach (var key in keys)
-                result[key] = (auto.Japanese, auto.Method);
+                result[key] = (auto.Japanese, auto.Method, auto.TranslationCheck);
         }
 
         return result;

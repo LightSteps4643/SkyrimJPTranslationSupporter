@@ -55,6 +55,29 @@ public class InterfaceTranslationsTsvTests
         finally { File.Delete(path); }
     }
 
+    /// <summary>2026-09-18: TranslationCheck column (TranslationQualityChecker's
+    /// machine-classifiable quality category, set only for ⑤⑥ LLM results)
+    /// round-trips through Write/Read.</summary>
+    [Fact]
+    public void WriteThenRead_RoundTrips_TranslationCheckColumn()
+    {
+        var path = TempFile();
+        try
+        {
+            var rows = new List<InterfaceTranslationRow>
+            {
+                new("$Foo", "Hello", "This is 剣", true, "SJPTS_TranslationLocalLlm", "ContainsMostOfAlphaNumeric"),
+                new("$Bar", "World", "完全な日本語", true, "SJPTS_AutoCorpus", ""),
+            };
+            InterfaceTranslationsTsv.Write(path, rows);
+
+            var read = InterfaceTranslationsTsv.Read(path);
+
+            Assert.Equal(rows, read);
+        }
+        finally { File.Delete(path); }
+    }
+
     [Fact]
     public void Read_NonexistentFile_ReturnsEmptyList()
     {
