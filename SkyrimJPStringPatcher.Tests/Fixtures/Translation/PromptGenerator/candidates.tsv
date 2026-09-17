@@ -28,3 +28,5 @@ FormId	WinningPlugin	RecordType	EnglishText	Index	EditorId	Context	StaleOriginal
 000870:SjptsTargetTagCases.esp	SjptsTargetTagCases.esp	WEAP FULL	Target:	0
 000871:SjptsTargetTagCases.esp	SjptsTargetTagCases.esp	WEAP FULL	Sjpts Format Edge Case Candidate	0
 000872:SjptsTargetTagCases.esp	SjptsTargetTagCases.esp	WEAP FULL	Sjpts Trailing Whitespace Candidate 	0
+000880:SjptsReferenceBudget.esp	SjptsReferenceBudget.esp	WEAP FULL	Sjpts Duplicate Reference Candidate	0
+000881:SjptsReferenceBudget.esp	SjptsReferenceBudget.esp	WEAP FULL	Sjpts Many References Candidate	0

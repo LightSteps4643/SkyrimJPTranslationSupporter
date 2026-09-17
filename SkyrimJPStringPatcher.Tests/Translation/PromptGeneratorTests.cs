@@ -1016,6 +1016,126 @@ public class PromptGeneratorTests
         }
     }
 
+    /// <summary>2026-09-17: the corpus fixture has 3 rows all sharing the exact
+    /// same (English, Japanese) pair ("Sjpts Duplicate Reference Item" →
+    /// "デュープの実例"), differing only by Source/SourceKind — mirrors a real
+    /// pattern found in production data (the same vanilla item name/translation
+    /// recorded once per DSD/cross-mod/import occurrence). PrecedentRetriever
+    /// has no dedup of its own, so all 3 used to show up as 3 separate
+    /// "Reference examples" lines, wasting budget that should go to genuinely
+    /// different examples instead.</summary>
+    [Fact]
+    public void RunOne_CorpusHasDuplicateReferenceExamplePairs_ShownOnlyOnceInPrompt()
+    {
+        const string plugin = "SjptsReferenceBudget.esp";
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outputDir = Path.Combine(root, "out_temp");
+            using var log = OpenTestLog(root);
+            var fakeLlm = FakeTextTranslator.Succeeding(
+                ("Sjpts Duplicate Reference Candidate", "重複参照候補の訳"),
+                ("Sjpts Many References Candidate", "多数参照候補の訳"));
+
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm);
+
+            var pluginDir = Path.Combine(outputDir, "SjptsReferenceBudget");
+            var promptPath = Path.Combine(pluginDir, "prompt_localLLM_call1.txt");
+            Assert.True(File.Exists(promptPath), $"expected {promptPath} to exist");
+            var promptText = File.ReadAllText(promptPath);
+
+            var occurrences = promptText.Split("\"Sjpts Duplicate Reference Item\" → \"デュープの実例\"").Length - 1;
+            Assert.Equal(1, occurrences);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>2026-09-17: real-data finding (Light Greatswords.esp) — a
+    /// candidate can legitimately have many more "relevant" corpus precedents
+    /// than any single prompt can afford to show, and PrecedentRetriever itself
+    /// applies no count limit (only a per-entry 500-char cap and a 0.4
+    /// relative-score cutoff). Local LLM gets the more generous of the two
+    /// limits (topN=15 or 15% of batchCharLimit, whichever binds first) since
+    /// it's cheap to run and time is not critical; cloud LLM gets the tighter
+    /// pair (topN=10 or 10%) since it's already more accurate and each call has
+    /// a real dollar cost. topN=15 (not 20, tried first) — a real-machine
+    /// verification (gemma4:26b) found topN=20's extra reference-example volume
+    /// pushed some prompts' total size (fixed instruction + issue #4's "c" +
+    /// candidates, none of which batchCharLimit's own packing accounts for)
+    /// past the empirically-established ~9,659-char safe line, so it was
+    /// dialed back. The corpus fixture has 25 distinct, equally-similar
+    /// precedents for this candidate — enough to make topN the binding
+    /// constraint at a generous batchCharLimit override (so the char-ratio
+    /// budget alone wouldn't have been the bottleneck).</summary>
+    [Fact]
+    public void RunOne_ManyEquallyRelevantPrecedents_LocalLlmKeepsAtMostTopNFifteen()
+    {
+        const string plugin = "SjptsReferenceBudget.esp";
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outputDir = Path.Combine(root, "out_temp");
+            using var log = OpenTestLog(root);
+            var fakeLlm = FakeTextTranslator.Succeeding(
+                ("Sjpts Duplicate Reference Candidate", "重複参照候補の訳"),
+                ("Sjpts Many References Candidate", "多数参照候補の訳"));
+
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log,
+                llmLocal: fakeLlm, llmLocalBatchCharLimit: 20_000);
+
+            var pluginDir = Path.Combine(outputDir, "SjptsReferenceBudget");
+            var promptPath = Path.Combine(pluginDir, "prompt_localLLM_call1.txt");
+            Assert.True(File.Exists(promptPath), $"expected {promptPath} to exist");
+            var promptText = File.ReadAllText(promptPath);
+
+            var occurrences = System.Text.RegularExpressions.Regex.Matches(promptText, "Sjpts Many References Item \\d\\d").Count;
+            Assert.Equal(15, occurrences);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>Same setup as the local-LLM topN test above, but routed through
+    /// step ⑥ (cloud LLM, llmLocal left null so step ⑤ is skipped entirely) —
+    /// cloud's tighter limit (topN=10) must apply instead of local's (20).</summary>
+    [Fact]
+    public void RunOne_ManyEquallyRelevantPrecedents_CloudLlmKeepsAtMostTopNTen()
+    {
+        const string plugin = "SjptsReferenceBudget.esp";
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outputDir = Path.Combine(root, "out_temp");
+            using var log = OpenTestLog(root);
+            var fakeLlm = FakeTextTranslator.Succeeding(
+                ("Sjpts Duplicate Reference Candidate", "重複参照候補の訳"),
+                ("Sjpts Many References Candidate", "多数参照候補の訳"));
+
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log,
+                llmCloud: fakeLlm, llmCloudBatchCharLimit: 20_000);
+
+            var pluginDir = Path.Combine(outputDir, "SjptsReferenceBudget");
+            var promptPath = Path.Combine(pluginDir, "prompt_cloudLLM_call1.txt");
+            Assert.True(File.Exists(promptPath), $"expected {promptPath} to exist");
+            var promptText = File.ReadAllText(promptPath);
+
+            var occurrences = System.Text.RegularExpressions.Regex.Matches(promptText, "Sjpts Many References Item \\d\\d").Count;
+            Assert.Equal(10, occurrences);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
     /// <summary>v0.58.5: replaces the old boundary-quote-marker test suite
     /// (v0.58.4's DoubleQuoteMarker/MarkBoundaryQuotes/StripOuterQuoteIndependently,
     /// removed) now that BuildCandidateBlock wraps Target text in

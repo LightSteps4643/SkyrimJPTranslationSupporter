@@ -11,3 +11,31 @@ Willow Ring	柳の指輪	TestSource.esp	vanilla	ARMO FULL
 Ember Ring	燠火の指輪	TestSource.esp	vanilla	ARMO FULL
 Nemra	ネムラ	TestSource.esp	vanilla	WEAP FULL
 Skol	スコル	TestSource.esp	vanilla	WEAP FULL
+Sjpts Duplicate Reference Item	デュープの実例	TestSourceA.esp	vanilla	WEAP FULL
+Sjpts Duplicate Reference Item	デュープの実例	TestSourceB.esp	imported	WEAP FULL
+Sjpts Duplicate Reference Item	デュープの実例	TestSourceC.esp	cross_mod	WEAP FULL
+Sjpts Many References Item 01	参照実例01	TestSourceA.esp	vanilla	WEAP FULL
+Sjpts Many References Item 02	参照実例02	TestSourceA.esp	vanilla	WEAP FULL
+Sjpts Many References Item 03	参照実例03	TestSourceA.esp	vanilla	WEAP FULL
+Sjpts Many References Item 04	参照実例04	TestSourceA.esp	vanilla	WEAP FULL
+Sjpts Many References Item 05	参照実例05	TestSourceA.esp	vanilla	WEAP FULL
+Sjpts Many References Item 06	参照実例06	TestSourceA.esp	vanilla	WEAP FULL
+Sjpts Many References Item 07	参照実例07	TestSourceA.esp	vanilla	WEAP FULL
+Sjpts Many References Item 08	参照実例08	TestSourceA.esp	vanilla	WEAP FULL
+Sjpts Many References Item 09	参照実例09	TestSourceA.esp	vanilla	WEAP FULL
+Sjpts Many References Item 10	参照実例10	TestSourceA.esp	vanilla	WEAP FULL
+Sjpts Many References Item 11	参照実例11	TestSourceA.esp	vanilla	WEAP FULL
+Sjpts Many References Item 12	参照実例12	TestSourceA.esp	vanilla	WEAP FULL
+Sjpts Many References Item 13	参照実例13	TestSourceA.esp	vanilla	WEAP FULL
+Sjpts Many References Item 14	参照実例14	TestSourceA.esp	vanilla	WEAP FULL
+Sjpts Many References Item 15	参照実例15	TestSourceA.esp	vanilla	WEAP FULL
+Sjpts Many References Item 16	参照実例16	TestSourceA.esp	vanilla	WEAP FULL
+Sjpts Many References Item 17	参照実例17	TestSourceA.esp	vanilla	WEAP FULL
+Sjpts Many References Item 18	参照実例18	TestSourceA.esp	vanilla	WEAP FULL
+Sjpts Many References Item 19	参照実例19	TestSourceA.esp	vanilla	WEAP FULL
+Sjpts Many References Item 20	参照実例20	TestSourceA.esp	vanilla	WEAP FULL
+Sjpts Many References Item 21	参照実例21	TestSourceA.esp	vanilla	WEAP FULL
+Sjpts Many References Item 22	参照実例22	TestSourceA.esp	vanilla	WEAP FULL
+Sjpts Many References Item 23	参照実例23	TestSourceA.esp	vanilla	WEAP FULL
+Sjpts Many References Item 24	参照実例24	TestSourceA.esp	vanilla	WEAP FULL
+Sjpts Many References Item 25	参照実例25	TestSourceA.esp	vanilla	WEAP FULL

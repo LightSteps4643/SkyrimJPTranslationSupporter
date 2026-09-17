@@ -684,13 +684,14 @@ public static class PromptGenerator
         if (beforeStep.Count == 0) return resolved;
 
         var providerLabel = stepNumber == "5" ? "localLLM" : "cloudLLM";
+        var referenceLimits = stepNumber == "5" ? LocalLlmReferenceLimits : CloudLlmReferenceLimits;
 
         var answers = LlmBatchTranslationEngine.Run(new LlmBatchTranslationEngine.Options<Candidate>
         {
             Items = beforeStep,
             TextOf = c => c.CurrentText,
             RecordTypeOf = g => g.First().RecordType,
-            BuildBlock = (g, matchKey) => BuildCandidateBlock(g, retriever, auto, npcNames, batchCharLimit,
+            BuildBlock = (g, matchKey) => BuildCandidateBlock(g, retriever, auto, npcNames, batchCharLimit, referenceLimits,
                 targetTextOverride: matchKey != g.Key ? matchKey : null),
             NeedsMatchKeyFlatten = key => key.IndexOf('\n') >= 0,
             FlattenForMatching = FlattenMultiline,
@@ -1009,19 +1010,38 @@ public static class PromptGenerator
             // バッチ分割の概念自体がないため、Reference examplesの予算計算には
             // 実際のLLM APIバッチ上限ではなくDefaultLlmBatchCharLimitを代用の
             // 基準値として使う（何らかの上限がないと無制限に肥大しうるため）。
-            var (block, _) = BuildCandidateBlock(group, retriever, auto, npcNames, DefaultLlmBatchCharLimit);
+            var (block, _) = BuildCandidateBlock(group, retriever, auto, npcNames, DefaultLlmBatchCharLimit, LocalLlmReferenceLimits);
             writer.Write(block);
         }
 
         return groups.Count;
     }
 
-    /// <summary>b全体（Reference examples）に許される文字数予算 —
-    /// batchCharLimitに対する割合（同じ割合をissue #4のcも使う、後述）。
-    /// フロアなし: 1件も予算に収まらなければ0件で構わない
-    /// （PrecedentRetriever側の500文字キャップ・相対比率0.4の足切りは既に
-    /// 適用済みで、これは「その先」の集計サイズの上限）。</summary>
-    private const double ReferenceExamplesBudgetRatio = 0.25;
+    /// <summary>参考例（Reference examples）1候補あたりの上限——「件数」と
+    /// 「batchCharLimitに対する割合」の**どちらか先に達した方**で打ち切る
+    /// （2026-09-17、実データ・議論を経て確定）。
+    ///
+    /// 経緯: 当初「候補ごとにbatchCharLimitの25%」という固定上限だった。実データ
+    /// （Light Greatswords.esp）で、似た短い候補が並ぶMODではこれが1回のバッチに
+    /// 詰め込める候補数を3件程度まで圧迫することが判明し、一度は「パス全体の
+    /// 合計に対する共有スケール係数」方式に置き換えたが、今度は長文・汎用的な
+    /// 候補（例: 武器の由来を説明する一文）が数百〜900件以上の類似実例を抱える
+    /// ケースがあり、この外れ値がパス全体の合計を支配してしまい、他の候補の
+    /// 参考例までほぼゼロに潰れてしまうことが判明した。相対比率0.4の足切り
+    /// （PrecedentRetriever）は件数を一切制限しないため、この種の外れ値を
+    /// 生み出しうる。
+    ///
+    /// 結論として、パス全体の集計という複雑な仕組みをやめ、**候補ごとに
+    /// 独立した「件数」上限を追加**することで外れ値を直接抑え、かつ「割合」
+    /// 上限も残すことで、候補ごとの文字数バランスも保つ。⑤ローカルLLM
+    /// （実行コストが低く、時間も数時間程度まで許容できるため精度優先で
+    /// やや緩め）と⑥クラウドLLM（呼び出し1回ごとに実費用が発生し、かつ
+    /// 元々の精度が高いためヒントへの依存度も低いので、呼び出し回数の
+    /// 最小化を優先してやや厳しめ）で別々の値を持つ。</summary>
+    private readonly record struct ReferenceExampleLimits(int TopN, double BudgetRatio);
+
+    private static readonly ReferenceExampleLimits LocalLlmReferenceLimits = new(TopN: 15, BudgetRatio: 0.15);
+    private static readonly ReferenceExampleLimits CloudLlmReferenceLimits = new(TopN: 10, BudgetRatio: 0.10);
 
     /// <summary>
     /// The per-candidate detail block ("- Target: ..." through the trailing blank
@@ -1048,7 +1068,7 @@ public static class PromptGenerator
     /// against anything already shown here.</returns>
     private static (string Block, IReadOnlyList<string> ShownReferenceEnglish) BuildCandidateBlock(
         IGrouping<string, Candidate> group, PrecedentRetriever retriever, AutoTranslator auto, IReadOnlySet<string> npcNames,
-        int batchCharLimit, string? targetTextOverride = null)
+        int batchCharLimit, ReferenceExampleLimits referenceLimits, string? targetTextOverride = null)
     {
         var sb = new System.Text.StringBuilder();
         var first = group.First();
@@ -1091,16 +1111,26 @@ public static class PromptGenerator
         if (group.Count() > 1)
             sb.Append($"  (This string appears {group.Count()} times in this plugin. Answer once — the same translation applies to all occurrences.)\n");
 
-        // 2026-09-16: PrecedentRetriever自体は500文字キャップ・相対比率0.4の
-        // 足切りは適用済みだが、集計後の文字数予算（batchCharLimitの25%）は
-        // 呼び出し側の責務として設計されていた（3つの独立した軸の3つ目）——
-        // ここがその実装。フロアなし: 1件も収まらなければ0件（"none"表示）。
+        // 2026-09-17: PrecedentRetriever自体は500文字キャップ・相対比率0.4の
+        // 足切りは適用済みだが、これは件数を一切制限しないため、長文・汎用的な
+        // 候補では数百件を超えることがある（実データで確認）。まず完全一致する
+        // (English, Japanese)ペアを1件にまとめ（同じ実例が出典違いで重複登録
+        // されているケースの無駄を省く）、そのうえで「件数」と「割合」の
+        // どちらか先に達した方で打ち切る——ReferenceExampleLimits参照。
+        // フロアなし: 1件も収まらなければ0件（"none"表示）。
         var allPrecedents = retriever.FindPrecedents(first.CurrentText, first.RecordType, first.WinningPlugin);
-        var budget = (int)(batchCharLimit * ReferenceExamplesBudgetRatio);
+        var seenPairs = new HashSet<(string English, string Japanese)>();
+        var dedupedPrecedents = new List<CorpusEntry>();
+        foreach (var p in allPrecedents)
+            if (seenPairs.Add((p.English, p.Japanese)))
+                dedupedPrecedents.Add(p);
+
+        var budget = (int)(batchCharLimit * referenceLimits.BudgetRatio);
         var precedents = new List<CorpusEntry>();
         var precedentsLength = 0;
-        foreach (var p in allPrecedents)
+        foreach (var p in dedupedPrecedents)
         {
+            if (precedents.Count >= referenceLimits.TopN) break;
             var line = $"    \"{p.English}\" → \"{p.Japanese}\" (source: {p.Source}, {p.SourceKind})\n";
             if (precedentsLength + line.Length > budget) break;
             precedents.Add(p);
