@@ -334,10 +334,17 @@ public static class ModPhraseGlossary
             }
         }
 
-        var detectedByPhrase = detectedPhrases.ToDictionary(d => d.Phrase, StringComparer.OrdinalIgnoreCase);
+        // 2026-09-18 real-data crash (VioLens - A Killmove Mod SE): 検出結果に
+        // 大文字小文字違いだけの語句（"Hotkey"と"HotKey"）が両方含まれることが
+        // あり、値を持つ`Dictionary`への`ToDictionary`はそれを重複キーとして
+        // 例外を投げていた。ここは「既に検出済みか」を調べる存在チェックにしか
+        // 使われておらず値そのものは参照しないため、値を持たない`HashSet`にする
+        // ——どちらが同じ語句かを断定・選別する場ではない（detectedPhrases自体・
+        // rows側では両方とも別行として残り続ける）。
+        var detectedPhraseSet = new HashSet<string>(detectedPhrases.Select(d => d.Phrase), StringComparer.OrdinalIgnoreCase);
         var rows = new List<DetectedPhrase>(detectedPhrases);
         foreach (var (english, _) in existingJapanese)
-            if (!detectedByPhrase.ContainsKey(english))
+            if (!detectedPhraseSet.Contains(english))
                 rows.Add(new DetectedPhrase(english, 0, 0)); // retired: keep the row, zero the stats
 
         var ranked = rows

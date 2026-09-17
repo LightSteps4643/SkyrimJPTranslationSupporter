@@ -345,6 +345,36 @@ public class ModPhraseGlossaryTests
         Assert.DoesNotContain(detectedB, d => d.Phrase == "Light Greatsword");
     }
 
+    /// <summary>2026-09-18 real-data crash (Interface翻訳「VioLens - A Killmove
+    /// Mod SE」): 検出結果に大文字小文字違いだけの語句（"Hotkey"と"HotKey"）が
+    /// 両方含まれると、内部の「既に検出済みか」判定用の`ToDictionary`
+    /// （<see cref="StringComparer.OrdinalIgnoreCase"/>）が重複キー例外を投げ、
+    /// detect自体が丸ごとクラッシュしていた（GUIが強制終了）。
+    ///
+    /// "Hotkey"と"HotKey"が本当に同じ語句かどうかは判断できない（例:
+    /// "OriginalModWords"と"Originalmodwords"のように、大文字小文字が違う
+    /// だけでも別物である可能性を否定できない）ため、どちらかを統合・破棄する
+    /// のではなく、両方を別々の行として書き出せるようにする——最終的な判断は
+    /// 人間（GUIでこのファイルを見るユーザー）に委ねる。</summary>
+    [Fact]
+    public void WriteTemplate_PhrasesDifferingOnlyByCase_DoesNotThrow_BothWrittenAsSeparateRows()
+    {
+        var pluginDir = Path.Combine(Path.GetTempPath(), $"sjpts_modphrase_{Guid.NewGuid():N}");
+        try
+        {
+            ModPhraseGlossary.WriteTemplate(pluginDir, "SjptsCaseVariantTestMod",
+                [new ModPhraseGlossary.DetectedPhrase("Hotkey", 2, 3.0), new ModPhraseGlossary.DetectedPhrase("HotKey", 2, 3.0)]);
+
+            var lines = File.ReadAllLines(ModPhraseGlossary.PathFor(pluginDir)).Where(l => l.Length > 0 && l[0] != '#').ToList();
+            Assert.Contains(lines, l => l.StartsWith("Hotkey\t"));
+            Assert.Contains(lines, l => l.StartsWith("HotKey\t"));
+        }
+        finally
+        {
+            try { Directory.Delete(pluginDir, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
     [Fact]
     public void WriteTemplate_NewFile_ListsDetectedPhrasesWithCountAndScore()
     {
