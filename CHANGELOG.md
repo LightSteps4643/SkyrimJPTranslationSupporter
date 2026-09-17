@@ -5,6 +5,12 @@ v0.54.0でバージョン管理をgit/GitHub（[Releases](https://github.com/Lig
 
 それより前の履歴は開発メモ（非公開）に記録されています。
 
+### v0.62.7 (2026-09-18)
+
+#### 修正
+
+- Interface翻訳（SJPTS_InterfaceText）で、「MO2対象Interfaceフォルダ読込み＆初期化」（`detect`）を実行した時点ではまだ`mod_glossary.tsv`が作成されず、「翻訳実行」（LLM呼び出し）まで進まないとMOD固有文字列の候補を確認できない問題を修正しました。検出処理自体はLLMに依存しないため、`detect`の時点で作成するようにしました。
+
 ### v0.62.6 (2026-09-18)
 
 #### 変更

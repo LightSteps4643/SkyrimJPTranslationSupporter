@@ -294,6 +294,7 @@ int RunDetect()
     }
 
     var summary = new List<(string Target, string ModFolderName, int TargetFileCount, int UntranslatedCount, string Status)>();
+    var processedTargets = new List<(string Target, string ModFolderName)>();
     foreach (var target in targetMods)
     {
         var result = DetectOneMod(vfs, target, instance.ModsDir, englishByBaseName, japaneseByBaseName, importByBaseName);
@@ -303,6 +304,27 @@ int RunDetect()
             continue;
         }
         summary.Add((target, result.Value.ModFolderName, 1, result.Value.UntranslatedCount, result.Value.UntranslatedCount == 0 ? "対応済み" : "未対応・未翻訳あり"));
+        processedTargets.Add((target, result.Value.ModFolderName));
+    }
+
+    // 2026-09-18: 「MO2対象Interfaceフォルダ読込み＆初期化」（detect）の時点で
+    // mod_glossary.tsvを作成しておく——検出ロジック自体はLLM非依存（テキストの
+    // TF-IDFのみ）なので、翻訳実行（RunTranslateOne）まで待たせる理由がない
+    // （実データ検証: ユーザーがdetect直後にMOD固有文字列の候補を確認しようと
+    // したところ、ファイル自体が存在しなかった）。全MOD分のinterface_
+    // translations.tsvが出揃った後に母集団を1回だけ構築し、使い回す
+    // （RunTranslateOneと同じ節約——毎回再構築すると6倍速度低下の再発になる）。
+    if (processedTargets.Count > 0)
+    {
+        var globalPhraseFrequency = InterfaceModPhraseGlossarySupport.BuildGlobalFrequency(workDir);
+        foreach (var (target, modFolderName) in processedTargets)
+        {
+            var modWorkDir = Path.Combine(workDir, target);
+            var tsvPath = Path.Combine(modWorkDir, "interface_translations.tsv");
+            var localTexts = InterfaceTranslationsTsv.Read(tsvPath).Select(r => r.English).Distinct(StringComparer.Ordinal).ToList();
+            InterfaceModPhraseGlossarySupport.WriteModGlossary(modWorkDir, modFolderName, localTexts, globalPhraseFrequency);
+        }
+        Console.WriteLine($"wrote mod_glossary.tsv for {processedTargets.Count} mod(s)");
     }
 
     if (targetMods.Count > 1)

@@ -91,6 +91,36 @@ public class ProgramCliTests
         finally { try { Directory.Delete(root, recursive: true); } catch { } }
     }
 
+    /// <summary>
+    /// 2026-09-18 real-data finding: 「MO2対象Interfaceフォルダ読込み＆初期化」
+    /// （＝`detect`）の時点ではmod_glossary.tsvが作られず、ユーザーが翻訳実行
+    /// （LLM呼び出し）まで進まないとMOD固有文字列の候補を確認できなかった。
+    /// `WriteModGlossary`はテキストのみに依存する検出ロジック（LLM非依存）
+    /// なので、`detect`だけでも作成できるようにする（Program.cs RunDetect）。
+    /// </summary>
+    [Fact]
+    public void Detect_WritesModGlossaryTsv_WithoutRunningTranslate()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_uitext_clitest_detect_glossary_{Guid.NewGuid():N}");
+        try
+        {
+            var mo2Dir = SetUpSyntheticMo2Instance(root, "TestMod", new List<(string, string)>
+            {
+                ("$TestMod_Sword1", "The Ancient Dragonfire Blade grants power"),
+                ("$TestMod_Sword2", "Wield the Ancient Dragonfire Blade with pride"),
+            });
+
+            var (exitCode, output) = RunCli(root, "detect", $"--mo2-instance={mo2Dir}", "--mod=TestMod", $"--work={root}\\out_temp");
+
+            Assert.Equal(0, exitCode);
+            var glossaryPath = Path.Combine(root, "out_temp", "TestMod", "mod_glossary.tsv");
+            Assert.True(File.Exists(glossaryPath), output);
+            var content = File.ReadAllText(glossaryPath);
+            Assert.Contains("Ancient Dragonfire Blade", content);
+        }
+        finally { try { Directory.Delete(root, recursive: true); } catch { } }
+    }
+
     [Fact]
     public void Detect_KeyExactlyMatchingModName_KeptEnglishAndMarkedResolved()
     {
