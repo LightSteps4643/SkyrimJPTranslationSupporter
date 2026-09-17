@@ -30,3 +30,6 @@ FormId	WinningPlugin	RecordType	EnglishText	Index	EditorId	Context	StaleOriginal
 000872:SjptsTargetTagCases.esp	SjptsTargetTagCases.esp	WEAP FULL	Sjpts Trailing Whitespace Candidate 	0
 000880:SjptsReferenceBudget.esp	SjptsReferenceBudget.esp	WEAP FULL	Sjpts Duplicate Reference Candidate	0
 000881:SjptsReferenceBudget.esp	SjptsReferenceBudget.esp	WEAP FULL	Sjpts Many References Candidate	0
+000890:SjptsModPhraseGlossary.esp	SjptsModPhraseGlossary.esp	WEAP FULL	Sjpts Daedric Windrune Blade	0
+000891:SjptsModPhraseGlossary.esp	SjptsModPhraseGlossary.esp	WEAP FULL	Sjpts Dwarven Windrune Blade	0
+000892:SjptsModPhraseGlossary.esp	SjptsModPhraseGlossary.esp	WEAP FULL	Sjpts Ebony Windrune Blade	0

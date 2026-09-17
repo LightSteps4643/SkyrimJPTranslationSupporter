@@ -1136,6 +1136,76 @@ public class PromptGeneratorTests
         }
     }
 
+    /// <summary>2026-09-17: ModPhraseGlossary's mod_glossary.tsv (⑤/⑥-facing,
+    /// distinct from ④-only Data/mod_glossary/*.tsv) should be generated
+    /// alongside translations.tsv for a MOD whose candidates share a
+    /// distinctively recurring phrase ("Windrune Blade", 3 occurrences, not
+    /// resolvable via ①②③ — a fictional term unrelated to anything in the
+    /// corpus fixture).</summary>
+    [Fact]
+    public void RunOne_ModHasRecurringUnresolvedPhrase_WritesModGlossaryTemplate()
+    {
+        const string plugin = "SjptsModPhraseGlossary.esp";
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outputDir = Path.Combine(root, "out_temp");
+            using var log = OpenTestLog(root);
+            var fakeLlm = FakeTextTranslator.Succeeding(
+                ("Sjpts Daedric Windrune Blade", "訳1"), ("Sjpts Dwarven Windrune Blade", "訳2"), ("Sjpts Ebony Windrune Blade", "訳3"));
+
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm);
+
+            var pluginDir = Path.Combine(outputDir, "SjptsModPhraseGlossary");
+            var glossaryPath = ModPhraseGlossary.PathFor(pluginDir);
+            Assert.True(File.Exists(glossaryPath), $"expected {glossaryPath} to exist");
+            var lines = File.ReadAllLines(glossaryPath).Where(l => l.Length > 0 && l[0] != '#').ToList();
+            Assert.Contains(lines, l => l.StartsWith("Windrune Blade\t"));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>Once a person fills in mod_glossary.tsv's Japanese column, that
+    /// row must reach the LLM prompt as a same-mod hint (issue #4's "c") for
+    /// this mod's OTHER unresolved candidates — the whole point of this
+    /// mechanism (a person pre-deciding one occurrence's translation so the
+    /// rest of the mod's candidates stay consistent with it).</summary>
+    [Fact]
+    public void RunOne_FilledModGlossaryEntry_AppearsAsSameModHintInPrompt()
+    {
+        const string plugin = "SjptsModPhraseGlossary.esp";
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outputDir = Path.Combine(root, "out_temp");
+            var pluginDir = Path.Combine(outputDir, "SjptsModPhraseGlossary");
+            Directory.CreateDirectory(pluginDir);
+            // A person has already filled this in by hand before this run.
+            File.WriteAllLines(ModPhraseGlossary.PathFor(pluginDir), ["# comment", "Windrune Blade\t風紋の刃"]);
+
+            using var log = OpenTestLog(root);
+            var fakeLlm = FakeTextTranslator.Succeeding(
+                ("Sjpts Daedric Windrune Blade", "デイドラの風紋の刃"), ("Sjpts Dwarven Windrune Blade", "ドワーフの風紋の刃"), ("Sjpts Ebony Windrune Blade", "黒檀の風紋の刃"));
+
+            PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm);
+
+            var promptPath = Path.Combine(pluginDir, "prompt_localLLM_call1.txt");
+            Assert.True(File.Exists(promptPath), $"expected {promptPath} to exist");
+            var promptText = File.ReadAllText(promptPath);
+            Assert.Contains("Windrune Blade", promptText);
+            Assert.Contains("風紋の刃", promptText);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
     /// <summary>v0.58.5: replaces the old boundary-quote-marker test suite
     /// (v0.58.4's DoubleQuoteMarker/MarkBoundaryQuotes/StripOuterQuoteIndependently,
     /// removed) now that BuildCandidateBlock wraps Target text in

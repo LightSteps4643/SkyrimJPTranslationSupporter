@@ -50,7 +50,7 @@ public static class PromptGenerator
     private readonly record struct TranslationContext(
         List<Candidate> AllCandidates, List<CorpusEntry> Corpus, List<CorpusEntry> Imported, List<CorpusEntry> Reference,
         PrecedentRetriever Retriever, AutoTranslator Auto, NameFallbackTranslator NameFallback,
-        IReadOnlySet<string> NpcNames);
+        IReadOnlySet<string> NpcNames, ModPhraseGlossary.GlobalNgramFrequency GlobalPhraseFrequency);
 
     private static TranslationContext BuildContext(string candidatesTsvPath, string corpusTsvPath, string importDir, string outputDir, RunLog log, TraceLog? trace, TranslationStageOptions stages)
     {
@@ -100,7 +100,15 @@ public static class PromptGenerator
             .Select(c => c.CurrentText)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        return new TranslationContext(allCandidates, corpus, imported, reference, retriever, auto, nameFallback, npcNames);
+        // 2026-09-17: ModPhraseGlossaryのグローバルn-gram文書頻度表はロード
+        // オーダー全体（allCandidates）から決まり、どのプラグインを処理するかに
+        // 一切依存しないので、npcNames同様ここで実行全体につき1回だけ構築する
+        // （GlobalNgramFrequencyの remarks 参照。以前はプラグインごとに毎回
+        // 再構築しており、--all実行が約6倍（10秒→62秒、183プラグインで実測）
+        // 遅くなっていた）。
+        var globalPhraseFrequency = ModPhraseGlossary.GlobalNgramFrequency.Build(allCandidates.Select(c => c.CurrentText).ToList());
+
+        return new TranslationContext(allCandidates, corpus, imported, reference, retriever, auto, nameFallback, npcNames, globalPhraseFrequency);
     }
 
     /// <summary>1つのプラグインだけを対象に実行する。</summary>
@@ -126,7 +134,7 @@ public static class PromptGenerator
             return;
         }
 
-        var (promptPath, templatePath, _, autoCount, unique, _, _, _, methodCounts) = WritePluginFilesWithDir(outputDir, targetPlugin, targetCandidates, ctx.Retriever, ctx.Auto, ctx.NameFallback, ctx.NpcNames, llmLocal, llmCloud, stages.EnableNameFallback, log, trace, discardUserEdits, llmLocalBatchCharLimit, llmCloudBatchCharLimit);
+        var (promptPath, templatePath, _, autoCount, unique, _, _, _, methodCounts) = WritePluginFilesWithDir(outputDir, targetPlugin, targetCandidates, ctx.GlobalPhraseFrequency, ctx.Retriever, ctx.Auto, ctx.NameFallback, ctx.NpcNames, llmLocal, llmCloud, stages.EnableNameFallback, log, trace, discardUserEdits, llmLocalBatchCharLimit, llmCloudBatchCharLimit);
         Console.WriteLine($"Target: {targetPlugin} ({targetCandidates.Count} candidates, {autoCount} resolved (①〜⑥))");
         Console.WriteLine($"Wrote AI-chat prompt: {promptPath}");
         Console.WriteLine($"Wrote translation template: {templatePath}");
@@ -193,7 +201,7 @@ public static class PromptGenerator
             processedCount++;
             var candidates = group.ToList();
             var (promptPath, templatePath, _, autoCount, _, _, _, _, methodCounts) =
-                WritePluginFilesWithDir(outputDir, group.Key, candidates, ctx.Retriever, ctx.Auto, ctx.NameFallback, ctx.NpcNames, llmLocal, llmCloud, stages.EnableNameFallback, log, trace, discardUserEdits, llmLocalBatchCharLimit, llmCloudBatchCharLimit);
+                WritePluginFilesWithDir(outputDir, group.Key, candidates, ctx.GlobalPhraseFrequency, ctx.Retriever, ctx.Auto, ctx.NameFallback, ctx.NpcNames, llmLocal, llmCloud, stages.EnableNameFallback, log, trace, discardUserEdits, llmLocalBatchCharLimit, llmCloudBatchCharLimit);
             totalCandidates += candidates.Count;
             totalAuto += autoCount;
             trace?.Debug($"{group.Key}: target {candidates.Count} entries, auto-resolved {autoCount} -> {templatePath}");
@@ -265,7 +273,7 @@ public static class PromptGenerator
         {
             var candidates = group.ToList();
             var (_, _, pluginDir, autoCount, unique, autoResolvedChars, remainingChars, sampleRemaining, methodCounts) =
-                WritePluginFilesWithDir(outputDir, group.Key, candidates, ctx.Retriever, ctx.Auto, ctx.NameFallback, ctx.NpcNames, llmLocal, llmCloud, stages.EnableNameFallback, log, trace, discardUserEdits, llmLocalBatchCharLimit, llmCloudBatchCharLimit);
+                WritePluginFilesWithDir(outputDir, group.Key, candidates, ctx.GlobalPhraseFrequency, ctx.Retriever, ctx.Auto, ctx.NameFallback, ctx.NpcNames, llmLocal, llmCloud, stages.EnableNameFallback, log, trace, discardUserEdits, llmLocalBatchCharLimit, llmCloudBatchCharLimit);
             index.Add((group.Key, candidates.Count, autoCount, pluginDir));
             autoResolveByPlugin.Add((group.Key, candidates.Count, autoCount, autoResolvedChars, remainingChars, sampleRemaining));
             uniqueForAi += unique;
@@ -420,7 +428,7 @@ public static class PromptGenerator
     private static (string PromptPath, string TemplatePath, string PluginDir, int AutoResolvedCount, int UniqueForAi,
         long AutoResolvedChars, long RemainingChars, List<string> SampleRemaining,
         (int Corpus, int Meaning, int Transliteration, int NameFallback, int Llm, int CloudLlm) MethodCounts) WritePluginFilesWithDir(
-        string outputDir, string plugin, List<Candidate> candidates, PrecedentRetriever retriever, AutoTranslator auto,
+        string outputDir, string plugin, List<Candidate> candidates, ModPhraseGlossary.GlobalNgramFrequency globalPhraseFrequency, PrecedentRetriever retriever, AutoTranslator auto,
         NameFallbackTranslator nameFallback, IReadOnlySet<string> npcNames, ITextTranslator? llmLocal, ITextTranslator? llmCloud, bool enableNameFallback,
         RunLog log, TraceLog? trace = null, bool discardUserEdits = false,
         int llmLocalBatchCharLimit = DefaultLocalLlmBatchCharLimit, int llmCloudBatchCharLimit = DefaultLlmBatchCharLimit)
@@ -429,6 +437,15 @@ public static class PromptGenerator
         var safeName = MakeSafeFolderName(plugin);
         var pluginDir = Path.Combine(outputDir, safeName);
         Directory.CreateDirectory(pluginDir);
+
+        // 2026-09-17: MOD特有語彙ヒント（mod_glossary.tsv、⑤/⑥のissue #4「c」に
+        // 合流させる。④専用のData/mod_glossary/*.tsvとは別物）——このMOD自身の
+        // 候補と、ロード順全体の候補を比較し、このMODに特徴的な未解決フレーズを
+        // 検出してテンプレート出力する。既存の記入済み内容はWriteTemplate側で
+        // 保持される（ModPhraseGlossary.WriteTemplateの remarks 参照）。
+        var localTexts = candidates.Select(c => c.CurrentText).Distinct(StringComparer.Ordinal).ToList();
+        var detectedPhrases = ModPhraseGlossary.DetectCandidatePhrases(localTexts, globalPhraseFrequency, auto);
+        ModPhraseGlossary.WriteTemplate(pluginDir, plugin, detectedPhrases);
 
         var promptPath = Path.Combine(pluginDir, "prompt.txt");
         var templatePath = Path.Combine(pluginDir, "translations.tsv");
@@ -698,7 +715,10 @@ public static class PromptGenerator
             UnflattenAnswer = s => s.Replace(MultilineBreakMarker, "\n"),
             StripSpuriousBoundaryMarker = StripSpuriousBoundaryMarker,
             InstructionText = LlmBatchInstruction,
-            ExternalSameModBaseline = BuildSameModHintPool(resolved, plugin),
+            ExternalSameModBaseline = BuildSameModHintPool(resolved, plugin)
+                .Concat(ModPhraseGlossary.LoadFilled(pluginDir)
+                    .Select(kv => new CorpusEntry(kv.Key, kv.Value, plugin, "SJPTS_ModifiedByUser", "")))
+                .ToList(),
             SameModSourceLabel = plugin,
             Translator = llm,
             BatchCharLimit = batchCharLimit,
