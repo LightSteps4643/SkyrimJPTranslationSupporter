@@ -118,7 +118,7 @@ public sealed class InterfaceTextDetailForm : Form
         _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Notes", HeaderText = "Notes", Width = 220, ReadOnly = true });
         // 2026-09-18: ESP側TranslationDetailForm.csと同じ理由——⑤⑥のLLM応答時
         // のみ機械的に分類される品質フラグをテキストでも確認できるようにする。
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "TranslationCheck", HeaderText = "品質チェック", Width = 150, ReadOnly = true });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "TranslationCheck", HeaderText = "日本語化チェック", Width = 150, ReadOnly = true });
     }
 
     private void LoadData(string path)

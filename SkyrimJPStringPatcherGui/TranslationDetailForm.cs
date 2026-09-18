@@ -229,7 +229,7 @@ public sealed class TranslationDetailForm : Form
         // 未チェック・AllJapanese=問題なし・それ以外は要確認）——背景色の
         // グラデーションと合わせて、具体的にどの分類かをテキストでも確認できる
         // ようにする（ユーザー要望）。
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "TranslationCheck", HeaderText = "品質チェック", Width = 150, ReadOnly = true });
+        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "TranslationCheck", HeaderText = "日本語化チェック", Width = 150, ReadOnly = true });
         _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "EditorId", HeaderText = "EditorId", Width = 130, ReadOnly = true });
     }
 
