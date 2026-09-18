@@ -25,7 +25,9 @@ public class CandidateIoTests
         StaleTranslation: "古いテキスト",
         Warning: "PickUpTargetClassificationFailed",
         CrossModPrecedentJapanese: "過去の訳文",
-        CrossModPrecedentNeedsReview: true);
+        CrossModPrecedentNeedsReview: true,
+        DsdCoveredJapanese: "既存DSDの訳文",
+        DsdCoveredNotes: "SJPTS_AutoCorpusDsd");
 
     [Fact]
     public void ReadTsv_FullFormatFixture_ParsesEveryFieldCorrectly()
@@ -77,6 +79,8 @@ public class CandidateIoTests
         Assert.Equal("", c.StaleOriginal);
         Assert.Equal("", c.StaleTranslation);
         Assert.Equal("", c.Warning);
+        Assert.Equal("", c.DsdCoveredJapanese);
+        Assert.Equal("", c.DsdCoveredNotes);
     }
 
     [Fact]

@@ -69,6 +69,48 @@ public class PromptGeneratorTests
         File.WriteAllText(path, $"{english}\t{japanese}\n");
     }
 
+    /// <summary>2026-09-18 real-data finding: a candidate PickUpTargetRunner
+    /// marks as already covered by an existing DSD json (DsdCoveredJapanese/
+    /// DsdCoveredNotes on Candidate) must flow through RunOne as an already-
+    /// resolved row — never sent to the LLM, never left blank — so the plugin
+    /// stays visible/selectable in the GUI grid instead of vanishing entirely
+    /// when every one of its candidates happens to be DSD-covered.</summary>
+    [Fact]
+    public void RunOne_DsdCoveredCandidate_ResolvedAsIsWithoutGoingThroughAutoTranslator()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_promptgen_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var outputDir = Path.Combine(root, "out_temp");
+            var candidatesPath = Path.Combine(root, "candidates.tsv");
+            var corpusPath = Path.Combine(root, "corpus.tsv");
+            CandidateIo.WriteTsv(candidatesPath, new[]
+            {
+                new Candidate(TargetPlugin, "001234:SjptsTestMod.esp", "WEAP FULL", "Sjpts Dsd Covered Weapon",
+                    DsdCoveredJapanese: "既にDSDで日本語化済みの武器", DsdCoveredNotes: "SJPTS_AutoCorpusDsd"),
+            });
+            CorpusIo.WriteTsv(corpusPath, Array.Empty<CorpusEntry>());
+            using var log = OpenTestLog(root);
+
+            PromptGenerator.RunOne(candidatesPath, corpusPath, NonexistentImportDir(root), TargetPlugin, outputDir, log);
+
+            var pluginDir = Path.Combine(outputDir, "SjptsTestMod");
+            var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
+
+            Assert.Equal(("既にDSDで日本語化済みの武器", "SJPTS_AutoCorpusDsd"), translations["Sjpts Dsd Covered Weapon"]);
+
+            // Never sent to the LLM as something needing translation.
+            var promptPath = Path.Combine(pluginDir, "prompt.txt");
+            if (File.Exists(promptPath))
+                Assert.DoesNotContain("Sjpts Dsd Covered Weapon", File.ReadAllText(promptPath));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
     [Fact]
     public void RunOne_ExactMatchCandidate_ResolvesViaCorpus_NotWrittenToPrompt()
     {

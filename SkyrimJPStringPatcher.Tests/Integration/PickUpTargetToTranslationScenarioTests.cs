@@ -144,12 +144,17 @@ public class PickUpTargetToTranslationScenarioTests
         }
     }
 
-    /// <summary>④ 既存DSDカバー済みのレコードは翻訳対象にならない。
+    /// <summary>④ 既存DSDカバー済みのレコードは、翻訳が必要な未解決候補としては
+    /// 扱われない（⑤⑥へは回らない）。
     /// 実施イメージ: 有名な武器MOD向けに有志配布のDSD翻訳パッチを導入済みで、
-    /// 再スキャンしてもカバー済みの武器名は翻訳対象に出てこない
-    /// （"Iron Blade Updated"、DSDのoriginalが現在の原文と完全一致）。</summary>
+    /// 再スキャンしても既存の訳がそのまま引き継がれる
+    /// （"Iron Blade Updated"、DSDのoriginalが現在の原文と完全一致）。
+    /// 2026-09-18: 以前はtranslations.tsvに一切出てこなかったが、それだと
+    /// 対象文字列が全てカバー済みのプラグインがGUI一覧から消えてしまう不具合が
+    /// あったため、解決済みの行として残るよう修正した——重要なのは「未解決の
+    /// まま」ではなく「①〜⑥に回らず既存の訳がそのまま使われる」ことである。</summary>
     [Fact]
-    public void RecordAlreadyCoveredByExistingDsd_NeverBecomesATranslationCandidate()
+    public void RecordAlreadyCoveredByExistingDsd_IsResolvedFromTheDsdItselfNotSentThroughAutoTranslation()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_scenario_covered_{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -158,7 +163,9 @@ public class PickUpTargetToTranslationScenarioTests
             var mo2Dir = BuildFakeMo2Instance(root);
             var (_, translations, _) = RunPickUpTargetThenTranslation(mo2Dir, root, "StaleTest.esp");
 
-            Assert.False(translations.ContainsKey("Iron Blade Updated"));
+            var (japanese, notes) = translations["Iron Blade Updated"];
+            Assert.Equal("更新された鉄の剣", japanese);
+            Assert.Equal("SJPTS_AutoCorpusDsd", notes);
         }
         finally
         {
@@ -176,7 +183,7 @@ public class PickUpTargetToTranslationScenarioTests
     /// 英語表記が変わった（"Steel Blade Old"→"Steel Blade New"）。DSD自体はFormID
     /// 一致で適用され続けるが、既定ではこのツールは静かに見過ごす。</summary>
     [Fact]
-    public void StaleExistingDsdTranslation_WithoutIncludeStale_DoesNotBecomeACandidate()
+    public void StaleExistingDsdTranslation_WithoutIncludeStale_IsResolvedFromTheOldDsdTranslation()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_scenario_stale_off_{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -185,7 +192,13 @@ public class PickUpTargetToTranslationScenarioTests
             var mo2Dir = BuildFakeMo2Instance(root);
             var (_, translations, _) = RunPickUpTargetThenTranslation(mo2Dir, root, "StaleTest.esp", includeStale: false);
 
-            Assert.False(translations.ContainsKey("Steel Blade New"));
+            // 2026-09-18: pre-resolved with the (possibly stale) old translation
+            // DSD keeps applying anyway — not left as a genuinely unresolved
+            // candidate. See RecordAlreadyCoveredByExistingDsd_... above for why
+            // this changed from "never appears at all".
+            var (japanese, notes) = translations["Steel Blade New"];
+            Assert.Equal("古い鋼の剣", japanese);
+            Assert.Equal("SJPTS_AutoCorpusDsd", notes);
         }
         finally
         {
@@ -277,7 +290,7 @@ public class PickUpTargetToTranslationScenarioTests
     /// 実施イメージ: 互換パッチMODが上書きした後の防具名に対して、有志が
     /// DSD翻訳パッチを配布している（パッチMOD自体を対象にした翻訳）。</summary>
     [Fact]
-    public void OverriddenWinnerAlreadyCoveredByExistingDsd_NeverBecomesATranslationCandidate()
+    public void OverriddenWinnerAlreadyCoveredByExistingDsd_IsResolvedFromTheDsdItselfNotSentThroughAutoTranslation()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_scenario_priority_covered_{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -286,9 +299,16 @@ public class PickUpTargetToTranslationScenarioTests
             var mo2Dir = BuildPriorityOverrideMo2Instance(root, withDsdCoverageForWinner: true);
             var (pickUpTargetResult, translations, _) = RunPickUpTargetThenTranslation(mo2Dir, root, "PriorityModPatch.esp");
 
-            Assert.DoesNotContain(pickUpTargetResult.Candidates, c => c.RecordType == "WEAP FULL");
-            Assert.False(translations.ContainsKey("Iron Guardian"));
-            Assert.False(translations.ContainsKey("Iron Guard"));
+            // 2026-09-18: still present (pre-resolved from the existing DSD),
+            // not sent through ①〜⑥ — see RecordAlreadyCoveredByExistingDsd_...
+            // above for why this changed from "never appears at all".
+            var candidate = Assert.Single(pickUpTargetResult.Candidates, c => c.RecordType == "WEAP FULL");
+            Assert.Equal("鉄の守護者", candidate.DsdCoveredJapanese);
+
+            var (japanese, notes) = translations["Iron Guardian"];
+            Assert.Equal("鉄の守護者", japanese);
+            Assert.Equal("SJPTS_AutoCorpusDsd", notes);
+            Assert.False(translations.ContainsKey("Iron Guard")); // the losing (non-winning) text never becomes a candidate at all
         }
         finally
         {
@@ -399,7 +419,7 @@ public class PickUpTargetToTranslationScenarioTests
     /// 換わった。古いインポートファイルを消し忘れていても、既にカバー済みの
     /// レコードが二重に翻訳対象へ復活してはいけない。</summary>
     [Fact]
-    public void XTranslatorImportForAnAlreadyDsdCoveredRecord_DoesNotResurrectItAsACandidate()
+    public void XTranslatorImportForAnAlreadyDsdCoveredRecord_DoesNotOverrideTheDsdsOwnTranslation()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_scenario_xtimport_stale_import_{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -408,11 +428,14 @@ public class PickUpTargetToTranslationScenarioTests
             var mo2Dir = BuildFakeMo2Instance(root);
             // "Iron Blade Updated" is already covered by the existing DSD patch
             // (scenario ④) -- an xTranslator entry for the exact same text is a
-            // leftover/stray import that must have no effect on it.
+            // leftover/stray import that must have no effect on it: the DSD's
+            // own translation wins, not the import.
             var (_, translations, _) = RunPickUpTargetThenTranslation(mo2Dir, root, "StaleTest.esp",
                 xTranslatorImports: [("StaleTest.esp", "WEAP FULL", "Iron Blade Updated", "紛れ込んだ古いインポート訳")]);
 
-            Assert.False(translations.ContainsKey("Iron Blade Updated"));
+            var (japanese, notes) = translations["Iron Blade Updated"];
+            Assert.Equal("更新された鉄の剣", japanese);
+            Assert.Equal("SJPTS_AutoCorpusDsd", notes);
         }
         finally
         {

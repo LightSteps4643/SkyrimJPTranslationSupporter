@@ -839,9 +839,17 @@ public static class PickUpTargetRunner
             if (cov != null && cov.Status?.StartsWith("SJPTS_", StringComparison.Ordinal) == true)
             {
                 alreadyCoveredByDsd++;
-                trace?.Trace($"Skip [{dsdType}] {formKey}: already covered by DSD, this tool's own decision (status={cov.Status}) — accepted as-is regardless of content (\"{winner.Text}\" -> \"{cov.TranslatedString}\" in {Path.GetFileName(cov.SourceFile)})");
+                trace?.Trace($"Cover [{dsdType}] {formKey}: already covered by DSD, this tool's own decision (status={cov.Status}) — accepted as-is regardless of content (\"{winner.Text}\" -> \"{cov.TranslatedString}\" in {Path.GetFileName(cov.SourceFile)})");
                 var pluginTallyOwn = coveredByPlugin.GetValueOrDefault(winner.Source.FileName);
                 coveredByPlugin[winner.Source.FileName] = (pluginTallyOwn.Count + 1, pluginTallyOwn.Chars + winner.Text.Length);
+                // 2026-09-18: 除外せず「解決済み」の候補として残す——除外すると、
+                // 対象文字列が全てカバー済みのプラグインはcandidates.tsv自体に
+                // 1件も残らず、GUIの一覧から完全に消えて再翻訳の選択ができなく
+                // なる不具合があった（実データで確認済み）。
+                candidates.Add(new Candidate(
+                    winner.Source.FileName, formKey.ToString(), dsdType, winner.Text, index, winner.EditorId, winner.Context,
+                    DsdCoveredJapanese: cov.TranslatedString, DsdCoveredNotes: cov.Status,
+                    Warning: classificationFailed.Contains(formKey) ? ClassificationFailedWarning : ""));
                 continue;
             }
 
@@ -901,6 +909,15 @@ public static class PickUpTargetRunner
                         continue;
                     }
                 }
+                // 2026-09-18: 除外せず「解決済み」の候補として残す（上記のSJPTS_
+                // ステータス分岐と同じ理由）。ここに来るのは、他modが提供する
+                // DSD（本ツール自身の判断ではない）で既に日本語化されている
+                // ケース——既存のコーパス由来解決（SJPTS_AutoCorpusDsd）と同じ
+                // 信頼度として扱う。
+                candidates.Add(new Candidate(
+                    winner.Source.FileName, formKey.ToString(), dsdType, winner.Text, index, winner.EditorId, winner.Context,
+                    DsdCoveredJapanese: cov.TranslatedString, DsdCoveredNotes: "SJPTS_AutoCorpusDsd",
+                    Warning: classificationFailed.Contains(formKey) ? ClassificationFailedWarning : ""));
                 continue;
             }
 

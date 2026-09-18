@@ -469,7 +469,14 @@ public static class PromptGenerator
         var resolved = ordered
             .Select(c => existing.TryGetValue((c.FormId, c.RecordType, c.Index), out var preserved)
                 ? (Candidate: c, Auto: (AutoTranslationResult?)new AutoTranslationResult(preserved.Japanese, preserved.Method, "", preserved.TranslationCheck))
-                : !string.IsNullOrEmpty(c.CrossModPrecedentJapanese)
+                : !string.IsNullOrEmpty(c.DsdCoveredJapanese)
+                    // 2026-09-18: already covered by an existing DSD json
+                    // (PickUpTargetRunner.BuildCandidates) — apply as-is,
+                    // preserving whichever Notes tag the coverage check itself
+                    // determined (this tool's own prior decision, or
+                    // SJPTS_AutoCorpusDsd for a third party's DSD translation).
+                    ? (Candidate: c, Auto: (AutoTranslationResult?)new AutoTranslationResult(c.DsdCoveredJapanese, c.DsdCoveredNotes, ""))
+                    : !string.IsNullOrEmpty(c.CrossModPrecedentJapanese)
                     // v0.56.0: a cross-mod precedent (PickUpTargetRunner.cs's
                     // FindCrossModPrecedent) is keyed on record identity, not
                     // text -- it takes priority even over ①コーパス完全一致.

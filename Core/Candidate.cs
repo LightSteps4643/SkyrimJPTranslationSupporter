@@ -50,7 +50,24 @@ namespace SkyrimJPStringPatcher.Core;
 /// installed). This tool does not adjudicate whether a translation is still
 /// objectively correct for the current text (mirrors the existing DSD
 /// stale-coverage handling): the precedent is still applied either way, this
-/// flag only controls whether a review warning is logged.</summary>
+/// flag only controls whether a review warning is logged.
+///
+/// <paramref name="DsdCoveredJapanese"/>/<paramref name="DsdCoveredNotes"/>
+/// (v0.63.0, 2026-09-18): set when this record is already covered by an
+/// existing DSD json (this tool's own prior output, or a third party's) —
+/// previously such a record was excluded from <c>candidates</c> entirely,
+/// which meant a plugin whose every field was already covered vanished from
+/// the GUI grid with no way to select it for re-translation work (real-data
+/// finding — see the coverage-priority fix in DsdCoverageScanner.cs's own
+/// remarks for the bug that made an unrelated mod's DSD entry, e.g. an icon
+/// replacement, sometimes masquerade as "coverage" for a translation this
+/// tool had already correctly shipped). Carrying the record through as a
+/// normal (resolved) candidate keeps it visible and re-translatable.
+/// <paramref name="DsdCoveredNotes"/> preserves the ORIGINAL Notes/Method tag
+/// when the covering DSD entry's own status already carries an SJPTS_ prefix
+/// (this tool's own prior decision, restored as-is); otherwise it is
+/// "SJPTS_AutoCorpusDsd" (a third party's own DSD translation — same tier as
+/// the existing corpus-based dsd-sourced resolution).</summary>
 public sealed record Candidate(
     string WinningPlugin,
     string FormId,
@@ -63,4 +80,6 @@ public sealed record Candidate(
     string StaleTranslation = "",
     string Warning = "",
     string CrossModPrecedentJapanese = "",
-    bool CrossModPrecedentNeedsReview = false);
+    bool CrossModPrecedentNeedsReview = false,
+    string DsdCoveredJapanese = "",
+    string DsdCoveredNotes = "");

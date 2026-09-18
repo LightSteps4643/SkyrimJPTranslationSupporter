@@ -51,14 +51,44 @@ public class DsdCoverageScannerTests
         File.Copy(Path.Combine(fixturesDir, "broken.json"), Path.Combine(dsdBrokenDir, "broken.json"));
         File.Copy(Path.Combine(fixturesDir, "inactive_patch.json"), Path.Combine(dsdInactiveDir, "patch.json"));
 
+        // 2026-09-18 real-data finding (VioLens/USSEP+Oblivion Interaction Icons
+        // collision): two DIFFERENTLY-NAMED files within the SAME gating folder
+        // ("TestMod.esp") both target FormID 000850 — DSD's real tie-break here
+        // is purely the filename itself (Z-first alphabetical descending),
+        // independent of MO2's own modlist.txt priority. ModLow (lower MO2
+        // priority) ships the "z"-named file to prove MO2 priority is NOT what
+        // decides this.
+        File.Copy(Path.Combine(fixturesDir, "filename_priority_a.json"), Path.Combine(dsdHighDir, "filename_priority_a.json"));
+        File.Copy(Path.Combine(fixturesDir, "filename_priority_z.json"), Path.Combine(dsdLowDir, "filename_priority_z.json"));
+
+        // Two DIFFERENT gating folders (different plugin names entirely) both
+        // target FormID 000860 — DSD's real tie-break here is the LOAD ORDER of
+        // the plugin the gating FOLDER is named after (later-loading plugin's
+        // folder is processed first and wins), not the filename and not MO2's
+        // modlist.txt priority. The "late load" folder's file is named to sort
+        // alphabetically BEFORE the "early load" folder's file, specifically to
+        // prove filename comparison across folders is not what decides this.
+        var modGateEarlyDir = Path.Combine(mo2Dir, "mods", "ModGateEarly");
+        var modGateLateDir = Path.Combine(mo2Dir, "mods", "ModGateLate");
+        var dsdGateEarlyDir = Path.Combine(modGateEarlyDir, "SKSE", "Plugins", "DynamicStringDistributor", "GateEarly.esp");
+        var dsdGateLateDir = Path.Combine(modGateLateDir, "SKSE", "Plugins", "DynamicStringDistributor", "GateLate.esp");
+        Directory.CreateDirectory(dsdGateEarlyDir);
+        Directory.CreateDirectory(dsdGateLateDir);
+        File.WriteAllText(Path.Combine(modGateEarlyDir, "GateEarly.esp"), "");
+        File.WriteAllText(Path.Combine(modGateLateDir, "GateLate.esp"), "");
+        File.Copy(Path.Combine(fixturesDir, "gating_folder_early_load.json"), Path.Combine(dsdGateEarlyDir, "zzz_file.json"));
+        File.Copy(Path.Combine(fixturesDir, "gating_folder_late_load.json"), Path.Combine(dsdGateLateDir, "aaa_file.json"));
+
         File.WriteAllText(Path.Combine(mo2Dir, "ModOrganizer.ini"),
             "[General]\r\n" +
             $"gamePath=@ByteArray({AppContext.BaseDirectory})\r\n" +
             "selected_profile=@ByteArray(Default)\r\n");
         // ModHigh listed first (= highest priority).
-        File.WriteAllText(Path.Combine(profileDir, "modlist.txt"), "+ModHigh\r\n+ModLow\r\n+ModBroken\r\n+ModZ\r\n");
+        File.WriteAllText(Path.Combine(profileDir, "modlist.txt"), "+ModHigh\r\n+ModLow\r\n+ModBroken\r\n+ModZ\r\n+ModGateEarly\r\n+ModGateLate\r\n");
         // Only TestMod.esp is active — NeverActivated.esp is never listed at all.
-        File.WriteAllText(Path.Combine(profileDir, "plugins.txt"), "*TestMod.esp\r\n");
+        // GateEarly.esp loads BEFORE GateLate.esp (lower load-order index) —
+        // per DSD's real rule, the LATER-loading plugin's gating folder should win.
+        File.WriteAllText(Path.Combine(profileDir, "plugins.txt"), "*TestMod.esp\r\n*GateEarly.esp\r\n*GateLate.esp\r\n");
 
         return mo2Dir;
     }
@@ -128,6 +158,65 @@ public class DsdCoverageScannerTests
 
             var formKey = FormKey.Factory("000800:TestMod.esp");
             Assert.True(coverage.ByFormTypeIndex.ContainsKey((formKey, "WEAP FULL", 0)));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>2026-09-18 real-data finding: within the SAME gating folder,
+    /// DSD's real tie-break for colliding (FormID, Type, Index) entries is the
+    /// filename itself, sorted alphabetically descending (Z first, wins) —
+    /// completely independent of MO2's own modlist.txt mod-priority order
+    /// (verified against DSD's actual source, Manager.cpp's processFiles:
+    /// `std::ranges::sort(files, std::greater<>{})`). ModLow (the LOWER MO2
+    /// priority mod) ships the "z"-named file specifically to prove MO2
+    /// priority is not what decides the winner here.</summary>
+    [Fact]
+    public void Scan_TwoFilesInSameGatingFolder_ZNamedFileWinsRegardlessOfMo2Priority()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_dsdscanner_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var coverage = ScanFixture(root);
+
+            var formKey = FormKey.Factory("000850:TestMod.esp");
+            var entry = coverage.ByFormTypeIndex[(formKey, "WEAP FULL", 0)];
+
+            Assert.Equal("zで始まるファイルの訳", entry.TranslatedString);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>2026-09-18 real-data finding (VioLens/USSEP vs. Oblivion
+    /// Interaction Icons colliding on the exact same FormID+Type+Index via two
+    /// entirely unrelated gating-plugin folders): DSD resolves a collision
+    /// across DIFFERENT gating folders by the LOAD ORDER of the plugin each
+    /// folder is named after — the folder for the LATER-loading plugin is
+    /// processed first and wins (Manager.cpp's processFolders: descending by
+    /// each plugin's own load-order index). This is independent of filename
+    /// (the losing folder's file is named "zzz_..." — alphabetically it would
+    /// "win" a naive cross-folder filename comparison) and independent of MO2's
+    /// modlist.txt mod priority (which never enters into it at all, since the
+    /// two files don't share a relative path).</summary>
+    [Fact]
+    public void Scan_TwoDifferentGatingFoldersCollideOnSameFormId_LaterLoadingGatingPluginWins()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_dsdscanner_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var coverage = ScanFixture(root);
+
+            var formKey = FormKey.Factory("000860:TestMod.esp");
+            var entry = coverage.ByFormTypeIndex[(formKey, "WEAP FULL", 0)];
+
+            Assert.Equal("後にロードされるゲートフォルダの訳", entry.TranslatedString);
         }
         finally
         {

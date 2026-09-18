@@ -17,14 +17,18 @@ namespace SkyrimJPStringPatcher.Tests.PickUpTarget;
 /// DSD merges every *.json under a plugin folder) to simulate a pre-existing
 /// translation patch already installed:
 /// - "Iron Blade Updated" (FormKey 000800): the DSD entry's recorded
-///   original text MATCHES the current text exactly -> fully covered, never
-///   becomes a candidate, not flagged stale, regardless of --include-stale.
+///   original text MATCHES the current text exactly -> fully covered, not
+///   flagged stale, regardless of --include-stale. 2026-09-18: still becomes
+///   a candidate (real-data finding — excluding it entirely made a fully-
+///   covered plugin vanish from the GUI grid with no way to select it for
+///   re-translation), but pre-resolved via DsdCoveredJapanese/DsdCoveredNotes
+///   rather than left for ①〜⑥ to work out.
 /// - "Steel Blade New" (FormKey 000801): the DSD entry's recorded original
 ///   is "Steel Blade Old" -> a later mod update changed the text but the old
 ///   translation keeps applying (DSD matches by FormID alone). Default
-///   (no --include-stale): stays covered/excluded (just flagged for review).
-///   With --include-stale: re-included as a candidate carrying
-///   StaleOriginal/StaleTranslation.
+///   (no --include-stale): stays covered (pre-resolved, same as above, just
+///   flagged for review). With --include-stale: re-included as an ordinary
+///   (unresolved) candidate carrying StaleOriginal/StaleTranslation instead.
 /// - "Bronze Blade" (FormKey 000802): no DSD entry at all -> an ordinary new
 ///   candidate either way.
 /// </summary>
@@ -57,7 +61,7 @@ public class DsdCoverageAndStaleTests
     }
 
     [Fact]
-    public void Run_WithoutIncludeStale_StaysCoveredAndDoesNotBecomeACandidate()
+    public void Run_WithoutIncludeStale_CoveredRecordsBecomePreResolvedCandidates()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_stale_{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -68,11 +72,25 @@ public class DsdCoverageAndStaleTests
 
             var result = PickUpTargetRunner.Run(mo2Dir, log, includeStale: false);
 
-            var texts = result.Candidates.Select(c => c.CurrentText).ToHashSet();
-            Assert.DoesNotContain("Iron Blade Updated", texts); // matched coverage: fully covered
-            Assert.DoesNotContain("Steel Blade New", texts);    // stale coverage: still excluded by default
-            Assert.Contains("Bronze Blade", texts);             // no coverage at all: ordinary candidate
-            Assert.Single(result.Candidates);
+            // matched coverage: fully covered, but still present — pre-resolved,
+            // not left for ①〜⑥ (real-data finding: excluding it entirely made a
+            // fully-covered plugin vanish from the GUI grid).
+            var ironBlade = Assert.Single(result.Candidates, c => c.CurrentText == "Iron Blade Updated");
+            Assert.Equal("更新された鉄の剣", ironBlade.DsdCoveredJapanese);
+            Assert.Equal("SJPTS_AutoCorpusDsd", ironBlade.DsdCoveredNotes);
+
+            // stale coverage (default, no --include-stale): also pre-resolved with
+            // the OLD translation, same as a non-stale covered record — DSD itself
+            // keeps applying it regardless, so it isn't "untranslated" either.
+            var steelBlade = Assert.Single(result.Candidates, c => c.CurrentText == "Steel Blade New");
+            Assert.Equal("古い鋼の剣", steelBlade.DsdCoveredJapanese);
+            Assert.Equal("SJPTS_AutoCorpusDsd", steelBlade.DsdCoveredNotes);
+
+            // no coverage at all: an ordinary, still-unresolved candidate.
+            var bronzeBlade = Assert.Single(result.Candidates, c => c.CurrentText == "Bronze Blade");
+            Assert.Equal("", bronzeBlade.DsdCoveredJapanese);
+
+            Assert.Equal(3, result.Candidates.Count);
         }
         finally
         {
@@ -81,7 +99,7 @@ public class DsdCoverageAndStaleTests
     }
 
     [Fact]
-    public void Run_WithIncludeStale_ReincludesOnlyTheStaleOneWithItsOldTranslationAttached()
+    public void Run_WithIncludeStale_ReincludesOnlyTheStaleOneAsAnOrdinaryCandidateWithItsOldTranslationAttached()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_stale_{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -92,14 +110,21 @@ public class DsdCoverageAndStaleTests
 
             var result = PickUpTargetRunner.Run(mo2Dir, log, includeStale: true);
 
-            Assert.DoesNotContain(result.Candidates, c => c.CurrentText == "Iron Blade Updated"); // still fully covered, exact match
+            // still fully covered, exact match — pre-resolved either way.
+            var ironBlade = Assert.Single(result.Candidates, c => c.CurrentText == "Iron Blade Updated");
+            Assert.Equal("更新された鉄の剣", ironBlade.DsdCoveredJapanese);
+
             Assert.Contains(result.Candidates, c => c.CurrentText == "Bronze Blade"); // unaffected by the flag
 
+            // --include-stale re-opens the STALE one as an ordinary (unresolved)
+            // candidate instead of pre-resolving it — DsdCovered* stays empty,
+            // StaleOriginal/StaleTranslation carry the old translation instead.
             var stale = Assert.Single(result.Candidates, c => c.CurrentText == "Steel Blade New");
             Assert.Equal("Steel Blade Old", stale.StaleOriginal);
             Assert.Equal("古い鋼の剣", stale.StaleTranslation);
+            Assert.Equal("", stale.DsdCoveredJapanese);
 
-            Assert.Equal(2, result.Candidates.Count);
+            Assert.Equal(3, result.Candidates.Count);
         }
         finally
         {

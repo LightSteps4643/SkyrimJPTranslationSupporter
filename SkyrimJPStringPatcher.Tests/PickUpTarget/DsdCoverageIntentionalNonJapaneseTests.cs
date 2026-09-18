@@ -54,7 +54,7 @@ public class DsdCoverageIntentionalNonJapaneseTests
     }
 
     [Fact]
-    public void Run_SjptsPrefixedNonJapaneseDsdEntry_IsTreatedAsCoveredNotCandidate()
+    public void Run_SjptsPrefixedNonJapaneseDsdEntry_IsTreatedAsCoveredAndPreResolvedAsIs()
     {
         const string plugin = "SjptsDsdNonJa1.esp";
         var dsdJson =
@@ -78,7 +78,14 @@ public class DsdCoverageIntentionalNonJapaneseTests
 
             var result = PickUpTargetRunner.Run(mo2Dir, log, includeStale: false);
 
-            Assert.DoesNotContain(result.Candidates, c => c.CurrentText == "Sjpts Gilded Hammer");
+            // 2026-09-18: still present (real-data finding — excluding it
+            // entirely made a fully-covered plugin vanish from the GUI grid),
+            // but pre-resolved exactly as-is (non-Japanese content included),
+            // preserving the ORIGINAL SJPTS_ status tag rather than being sent
+            // through ①〜⑥ again.
+            var candidate = Assert.Single(result.Candidates, c => c.CurrentText == "Sjpts Gilded Hammer");
+            Assert.Equal("Sjpts Gilded Hammer", candidate.DsdCoveredJapanese);
+            Assert.Equal("SJPTS_TranslationLocalLlmNoJapanese", candidate.DsdCoveredNotes);
         }
         finally
         {

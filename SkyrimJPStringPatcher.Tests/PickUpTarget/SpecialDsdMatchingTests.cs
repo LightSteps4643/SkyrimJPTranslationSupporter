@@ -26,16 +26,18 @@ namespace SkyrimJPStringPatcher.Tests.PickUpTarget;
 /// community DSD patch with 3 entries, each deliberately probing ONE axis:
 /// - GMST "sTestGmstCorrectEditorWrongForm": DSD entry has the CORRECT
 ///   editor_id but a WRONG form_id (000999, not this GMST's real 000800) ->
-///   must still be recognized as covered, proving EditorID alone drives the
-///   match.
+///   must still be recognized as covered (resolved via DsdCoveredJapanese),
+///   proving EditorID alone drives the match.
 /// - GMST "sTestGmstFormIdOnlyNoEditor": DSD entry has the CORRECT form_id
-///   (000801) but NO editor_id at all -> must NOT be recognized as covered,
-///   proving GMST DATA never falls back to FormID matching.
+///   (000801) but NO editor_id at all -> must NOT be recognized as covered
+///   (stays a genuinely unresolved candidate), proving GMST DATA never falls
+///   back to FormID matching.
 /// - QUST CNAM "First quest log message.": DSD entry has the CORRECT form_id
 ///   but a WRONG index (99999, not this entry's real 10000) -> must still be
-///   recognized as covered, proving original-text content alone drives the
-///   match. The quest's OTHER log entry ("Second quest log message.", no
-///   matching DSD original text) remains an ordinary candidate.
+///   recognized as covered (resolved via DsdCoveredJapanese), proving
+///   original-text content alone drives the match. The quest's OTHER log
+///   entry ("Second quest log message.", no matching DSD original text)
+///   remains an ordinary, genuinely unresolved candidate.
 /// </summary>
 public class SpecialDsdMatchingTests
 {
@@ -73,7 +75,7 @@ public class SpecialDsdMatchingTests
     }
 
     [Fact]
-    public void Gmst_MatchedByEditorIdDespiteWrongFormId_IsNotACandidate()
+    public void Gmst_MatchedByEditorIdDespiteWrongFormId_IsResolvedFromTheDsdItself()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_specialmatch_{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -81,7 +83,8 @@ public class SpecialDsdMatchingTests
         {
             var result = RunFixture(root);
 
-            Assert.DoesNotContain(result.Candidates, c => c.CurrentText == "Correct Editor Match Setting");
+            var candidate = Assert.Single(result.Candidates, c => c.CurrentText == "Correct Editor Match Setting");
+            Assert.Equal("正しいエディタ一致設定", candidate.DsdCoveredJapanese);
         }
         finally
         {
@@ -90,7 +93,7 @@ public class SpecialDsdMatchingTests
     }
 
     [Fact]
-    public void Gmst_CoverageWithCorrectFormIdButNoEditorId_NeverMatches_StaysACandidate()
+    public void Gmst_CoverageWithCorrectFormIdButNoEditorId_NeverMatches_StaysAnUnresolvedCandidate()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_specialmatch_{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -98,8 +101,8 @@ public class SpecialDsdMatchingTests
         {
             var result = RunFixture(root);
 
-            var candidate = Assert.Single(result.Candidates, c => c.RecordType == "GMST DATA");
-            Assert.Equal("Form Id Only Setting", candidate.CurrentText);
+            var candidate = Assert.Single(result.Candidates, c => c.CurrentText == "Form Id Only Setting");
+            Assert.Equal("", candidate.DsdCoveredJapanese);
         }
         finally
         {
@@ -108,7 +111,7 @@ public class SpecialDsdMatchingTests
     }
 
     [Fact]
-    public void QuestCnam_MatchedByOriginalTextDespiteWrongIndex_IsNotACandidate()
+    public void QuestCnam_MatchedByOriginalTextDespiteWrongIndex_IsResolvedFromTheDsdItself()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_specialmatch_{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -116,7 +119,8 @@ public class SpecialDsdMatchingTests
         {
             var result = RunFixture(root);
 
-            Assert.DoesNotContain(result.Candidates, c => c.CurrentText == "First quest log message.");
+            var candidate = Assert.Single(result.Candidates, c => c.CurrentText == "First quest log message.");
+            Assert.Equal("最初のクエストログメッセージ。", candidate.DsdCoveredJapanese);
         }
         finally
         {
@@ -125,7 +129,7 @@ public class SpecialDsdMatchingTests
     }
 
     [Fact]
-    public void QuestCnam_LogEntryWithNoMatchingCoverageText_StaysACandidate()
+    public void QuestCnam_LogEntryWithNoMatchingCoverageText_StaysAnUnresolvedCandidate()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_specialmatch_{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -133,8 +137,8 @@ public class SpecialDsdMatchingTests
         {
             var result = RunFixture(root);
 
-            var candidate = Assert.Single(result.Candidates, c => c.RecordType == "QUST CNAM");
-            Assert.Equal("Second quest log message.", candidate.CurrentText);
+            var candidate = Assert.Single(result.Candidates, c => c.CurrentText == "Second quest log message.");
+            Assert.Equal("", candidate.DsdCoveredJapanese);
         }
         finally
         {
@@ -142,14 +146,20 @@ public class SpecialDsdMatchingTests
         }
     }
 
-    /// <summary>3 candidates total: the 2 GMST/QUST-CNAM ones this class is
-    /// actually about, plus an incidental "QUST FULL" candidate for the
-    /// quest's own Name ("Test Quest") — unrelated to this class's matching
-    /// logic (QUST FULL uses the default ByFormIdIndex strategy, unaffected
-    /// by any DSD coverage entry in this fixture), but real Quest records
-    /// always carry a translatable FULL, so it's present here too.</summary>
+    /// <summary>5 candidates total: 2026-09-18, DSD-covered records are no
+    /// longer excluded from `candidates` (real-data finding — excluding them
+    /// entirely made a fully-covered plugin vanish from the GUI grid), so the
+    /// 2 matched (EditorID-covered GMST, OriginalText-covered QUST CNAM) ones
+    /// are now included too, pre-resolved via DsdCoveredJapanese. Plus the 2
+    /// unmatched ones ("Form Id Only Setting" GMST, "Second quest log
+    /// message." QUST CNAM) that stay genuinely unresolved, and an incidental
+    /// "QUST FULL" candidate for the quest's own Name ("Test Quest") —
+    /// unrelated to this class's matching logic (QUST FULL uses the default
+    /// ByFormIdIndex strategy, unaffected by any DSD coverage entry in this
+    /// fixture), but real Quest records always carry a translatable FULL, so
+    /// it's present here too.</summary>
     [Fact]
-    public void Run_ExactlyThreeCandidatesSurvive_TwoFromThisClassScopePlusTheIncidentalQuestFull()
+    public void Run_ExactlyFiveCandidatesSurvive_TwoResolvedTwoUnresolvedPlusTheIncidentalQuestFull()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_specialmatch_{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -157,7 +167,7 @@ public class SpecialDsdMatchingTests
         {
             var result = RunFixture(root);
 
-            Assert.Equal(3, result.Candidates.Count);
+            Assert.Equal(5, result.Candidates.Count);
             Assert.Contains(result.Candidates, c => c.RecordType == "QUST FULL" && c.CurrentText == "Test Quest");
         }
         finally

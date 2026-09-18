@@ -45,24 +45,47 @@ public static class DsdCoverageScanner
         var byFormType = new Dictionary<(FormKey, string), List<DsdCoverageEntry>>();
         var byEditorId = new Dictionary<string, DsdCoverageEntry>(StringComparer.OrdinalIgnoreCase);
 
-        var activePlugins = instance.LoadOrder
-            .Select(p => p.FileName)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // 2026-09-18 real-data crash/misdetection (VioLens/USSEP vs. Oblivion
+        // Interaction Icons colliding on the same FormID+Type+Index via two
+        // unrelated gating folders): confirmed against DSD's actual source
+        // (Manager.cpp) that its own precedence for resolving a collision is:
+        // 1. Gating-plugin FOLDERS are processed in DESCENDING load-order index
+        //    (the folder for whichever plugin loads LATER is processed first) —
+        //    processFolders(): `itA->second.second > itB->second.second`.
+        // 2. Within one folder, FILES are processed by filename descending
+        //    (Z first) — processFiles(): `std::ranges::sort(files, std::greater<>{})`.
+        // 3. Whichever entry is processed FIRST for a given key wins (try_emplace/
+        //    constTranslationContains-then-emplace) — later duplicates are dropped.
+        // Neither of these is MO2's own mod-priority (modlist.txt) — that only
+        // matters for two mods sharing the exact same relative file path (a
+        // genuine VFS override, handled already by BuildVfsDirectoryMerge before
+        // this method ever runs). Reproducing this exactly is essential: without
+        // it, an unrelated mod's own DSD usage (e.g. an icon-replacement patch
+        // that also targets the same field) can silently "win" the internal
+        // index over this tool's own correct translation, making PickUpTarget
+        // think a genuinely-covered field is still untranslated.
+        var loadOrderIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < instance.LoadOrder.Count; i++)
+            loadOrderIndex[instance.LoadOrder[i].FileName] = i;
 
         var winningFiles = Mo2InstanceReader.BuildVfsDirectoryMerge(instance, DsdRelativeRoot);
 
         // Group by the plugin-name folder (first path segment) so we only read
-        // json files that live under a folder DSD would actually load.
+        // json files that live under a folder DSD would actually load, ordered
+        // by that plugin's own load-order index descending (later-loading
+        // plugin's folder processed first, per DSD's real precedence above).
         var byGatingPlugin = winningFiles
             .Where(kv => Path.GetExtension(kv.Key).Equals(".json", StringComparison.OrdinalIgnoreCase))
-            .GroupBy(kv => kv.Key.Split(Path.DirectorySeparatorChar, 2)[0]);
+            .GroupBy(kv => kv.Key.Split(Path.DirectorySeparatorChar, 2)[0])
+            .Where(g => loadOrderIndex.ContainsKey(g.Key)) // DSD wouldn't load this folder at all
+            .OrderByDescending(g => loadOrderIndex[g.Key]);
 
         foreach (var group in byGatingPlugin)
         {
-            var gatingPlugin = group.Key;
-            if (!activePlugins.Contains(gatingPlugin)) continue; // DSD wouldn't load this folder at all
+            // Files within one gating folder, filename descending (Z first, wins).
+            var filesInPriorityOrder = group.OrderByDescending(kv => Path.GetFileName(kv.Key), StringComparer.Ordinal);
 
-            foreach (var (_, physicalPath) in group)
+            foreach (var (_, physicalPath) in filesInPriorityOrder)
             {
                 List<DsdSourceEntry>? entries;
                 try
@@ -87,14 +110,21 @@ public static class DsdCoverageScanner
 
                     if (!string.IsNullOrWhiteSpace(entry.EditorId))
                     {
-                        byEditorId[$"{entry.Type}|{entry.EditorId}"] = coverageEntry;
+                        // First entry wins (we now iterate in DSD's real priority
+                        // order, highest first) — an overwrite here would let a
+                        // LOWER-priority duplicate silently replace the real winner.
+                        var editorIdKey = $"{entry.Type}|{entry.EditorId}";
+                        if (!byEditorId.ContainsKey(editorIdKey))
+                            byEditorId[editorIdKey] = coverageEntry;
                         // GMST-style entries may still carry a form_id; fall through so
                         // they're ALSO indexed by form if parseable, harmless either way.
                     }
 
                     if (!TryParseFormId(entry.FormId, out var formKey)) continue;
 
-                    byFormTypeIndex[(formKey, entry.Type, entry.Index)] = coverageEntry;
+                    var formTypeIndexKey = (formKey, entry.Type, entry.Index);
+                    if (!byFormTypeIndex.ContainsKey(formTypeIndexKey))
+                        byFormTypeIndex[formTypeIndexKey] = coverageEntry;
 
                     var formTypeKey = (formKey, entry.Type);
                     if (!byFormType.TryGetValue(formTypeKey, out var list))

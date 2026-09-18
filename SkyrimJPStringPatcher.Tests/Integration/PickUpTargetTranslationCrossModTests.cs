@@ -602,10 +602,12 @@ public class PickUpTargetTranslationCrossModTests
     /// already targets this exact (FormID, WEAP FULL, index) with a
     /// DIFFERENT, independently-authored Japanese string, "金箔のハンマー".
     /// When: PickUpTarget -> Translation is run.
-    /// Then: the record should not become a translation candidate at all
-    /// (already covered by DSD, exactly like scenario④) -- the cross-mod
-    /// precedent ("金箔の槌") must never surface or compete with the DSD
-    /// translation.</summary>
+    /// Then: the record should be resolved directly from the existing DSD
+    /// translation (exactly like scenario④), never sent through ①〜⑥ -- the
+    /// cross-mod precedent ("金箔の槌") must never surface or compete with the
+    /// DSD translation. 2026-09-18: still becomes a candidate now (real-data
+    /// finding — see DsdCoverageAndStaleTests's remarks), but pre-resolved via
+    /// DsdCoveredJapanese rather than left unresolved.</summary>
     [Fact]
     public void Run_ThenTranslate_PatternE_ExistingDsdCoverageTakesPrecedenceOverCrossModPrecedent()
     {
@@ -632,7 +634,9 @@ public class PickUpTargetTranslationCrossModTests
             using var pickUpTargetLog = RunLog.Open(Path.Combine(root, "PickUpTarget"), "PickUpTarget");
             var result = PickUpTargetRunner.Run(mo2Dir, pickUpTargetLog);
 
-            Assert.DoesNotContain(result.Candidates, c => c.CurrentText == "Sjpts Gilded Hammer");
+            var candidate = Assert.Single(result.Candidates, c => c.CurrentText == "Sjpts Gilded Hammer");
+            Assert.Equal("金箔のハンマー", candidate.DsdCoveredJapanese);
+            Assert.Equal("SJPTS_AutoCorpusDsd", candidate.DsdCoveredNotes);
         }
         finally
         {
