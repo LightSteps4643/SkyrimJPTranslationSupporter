@@ -56,7 +56,7 @@ public sealed class InterfaceTextDetailForm : Form
     {
         _onSaved = onSaved;
         Text = $"UIテキスト翻訳の詳細 — {modName}";
-        Width = 1000;
+        Width = 1400;
         Height = 700;
         StartPosition = FormStartPosition.CenterParent;
 

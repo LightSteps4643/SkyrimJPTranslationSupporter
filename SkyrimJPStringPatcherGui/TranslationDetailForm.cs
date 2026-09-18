@@ -47,7 +47,7 @@ public sealed class TranslationDetailForm : Form
     {
         _onSaved = onSaved;
         Text = $"翻訳状況の詳細 — {pluginName}";
-        Width = 1100;
+        Width = 1400;
         Height = 760;
         StartPosition = FormStartPosition.CenterParent;
 
