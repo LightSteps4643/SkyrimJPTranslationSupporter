@@ -875,9 +875,10 @@ public sealed class InterfaceTextPanel : Form
 
         var confirm = MessageBox.Show(this,
             "MO2のInterface\\Translationsを対象MOD全体で再読込し、翻訳状況を初期化します。\n" +
-            "全MODの翻訳結果（手動での編集・生成AI/ローカルLLMでの翻訳結果を含む）を\n" +
-            "すべて消去し、初期状態に戻します。よろしいですか？\n" +
-            "（実行前の状態はInterfaceText\\Translation\\bak\\に自動でバックアップされます）",
+            "全MODの翻訳結果（手動編集・生成AI/ローカルLLM翻訳分を含む）をすべて消去し、初期状態に戻します。\n\n" +
+            "よろしいですか？\n" +
+            "※実行前の状態はInterfaceText\\Translation\\bak\\に自動でバックアップされます\n" +
+            "※ファイル形式の制約上、既に翻訳済みでも一部の候補が未翻訳として再検出される場合があります",
             "MO2対象Interfaceフォルダ読込み＆初期化", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
         if (confirm != DialogResult.OK) return;
 
