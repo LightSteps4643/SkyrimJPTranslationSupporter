@@ -53,7 +53,7 @@ namespace SkyrimJPStringPatcher.Core;
 /// flag only controls whether a review warning is logged.
 ///
 /// <paramref name="DsdCoveredJapanese"/>/<paramref name="DsdCoveredNotes"/>
-/// (v0.63.0, 2026-09-18): set when this record is already covered by an
+/// (v0.62.10, 2026-09-18): set when this record is already covered by an
 /// existing DSD json (this tool's own prior output, or a third party's) —
 /// previously such a record was excluded from <c>candidates</c> entirely,
 /// which meant a plugin whose every field was already covered vanished from

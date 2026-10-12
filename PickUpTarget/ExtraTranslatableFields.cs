@@ -21,11 +21,15 @@ namespace SkyrimJPStringPatcher.PickUpTarget;
 /// instead, since those need to yield multiple (type, index) pairs per record
 /// rather than a flat one-property-per-type mapping.
 ///
-/// "REFR FULL" remains entirely unimplemented: Mutagen exposes no
-/// TranslatedString field on PlacedObject at all (confirmed both via the
-/// Mutagen schema reference and, independently, by scanning the actual binary
-/// data in SSEEdit — 0 of ~930,000 placed references in a real load order had
-/// a non-empty FULL override, so this isn't costing any real candidates).
+/// "REFR FULL" is a map marker's name (DSD's kReference type replaces the
+/// ExtraMapMarker's location name — see DSD's StrHelper::setReferenceStrings):
+/// Mutagen keeps it in PlacedObject.MapMarker.Name, a translated string.
+/// (Until 2026-10-12 this type was deliberately left unimplemented on the
+/// premise that Mutagen exposes no translated string on PlacedObject at all.
+/// That premise was wrong — MapMarker.Name is one — and map markers whose
+/// names a mod embedded in English, such as Helgen's under Alternate Start,
+/// were never picked up. The earlier "0 non-empty FULL among ~930,000 placed
+/// references" check looked at the wrong place.)
 /// </summary>
 public static class ExtraTranslatableFields
 {
@@ -95,6 +99,10 @@ public static class ExtraTranslatableFields
                 break;
             case INpcGetter npc:
                 yield return ("NPC_ SHRT", npc.ShortName);
+                break;
+            case IPlacedObjectGetter refr:
+                // Only placed objects that ARE a map marker have a name (MapMarker is null otherwise).
+                yield return ("REFR FULL", refr.MapMarker?.Name);
                 break;
             case IActorValueInformationGetter avif:
                 yield return ("AVIF DESC", avif.Description);

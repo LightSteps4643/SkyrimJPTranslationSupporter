@@ -42,6 +42,8 @@ public static class RecordContextExtractor
             IBookGetter book => Book(book),
             IMagicEffectGetter mgef => MagicSchool(mgef.MagicSkill),
             ISpellGetter spell => Spell(spell),
+            // A map marker's name is a place name; saying so helps the model pick the usual place-name rendering.
+            IPlacedObjectGetter { MapMarker: not null } => "map marker (place name)",
             _ => "",
         };
     }

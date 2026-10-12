@@ -95,10 +95,7 @@ public static class RecordSignatureMap
 
     private static readonly HashSet<string> WarnedUnmapped = new();
 
-    /// <summary>Strips Mutagen's "BinaryOverlay"/"Setter"/"Getter" suffixes and looks up the signature.
-    /// Falls back to the raw (uppercased, 4-char-padded) stem and logs a one-time warning if unmapped,
-    /// so gaps in this table are visible instead of silently wrong.</summary>
-    public static string Resolve(string clrTypeName)
+    private static string StripMutagenSuffixes(string clrTypeName)
     {
         var stem = clrTypeName;
         foreach (var suffix in new[] { "BinaryOverlay", "Setter", "Getter" })
@@ -106,6 +103,29 @@ public static class RecordSignatureMap
             if (stem.EndsWith(suffix, StringComparison.Ordinal))
                 stem = stem[..^suffix.Length];
         }
+        return stem;
+    }
+
+    /// <summary>Same lookup as <see cref="Resolve"/> but silent: returns false for a CLR type this table
+    /// does not know (no fallback guess, no warning). For callers that look at EVERY record, most of which
+    /// are of types DSD has nothing to do with, and only care about the known ones.</summary>
+    public static bool TryResolve(string clrTypeName, out string signature)
+    {
+        if (Map.TryGetValue(StripMutagenSuffixes(clrTypeName), out var found))
+        {
+            signature = found;
+            return true;
+        }
+        signature = "";
+        return false;
+    }
+
+    /// <summary>Strips Mutagen's "BinaryOverlay"/"Setter"/"Getter" suffixes and looks up the signature.
+    /// Falls back to the raw (uppercased, 4-char-padded) stem and logs a one-time warning if unmapped,
+    /// so gaps in this table are visible instead of silently wrong.</summary>
+    public static string Resolve(string clrTypeName)
+    {
+        var stem = StripMutagenSuffixes(clrTypeName);
 
         if (Map.TryGetValue(stem, out var signature))
             return signature;

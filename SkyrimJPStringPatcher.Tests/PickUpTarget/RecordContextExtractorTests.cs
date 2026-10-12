@@ -195,4 +195,27 @@ public class RecordContextExtractorTests
 
         Assert.Equal("", context);
     }
+
+    [Fact]
+    public void For_PlacedObjectWithAMapMarker_ReportsItIsAPlaceNameOnTheMap()
+    {
+        // A map marker's name is a place name; saying so lets the model choose the usual katakana place-name
+        // rendering instead of guessing from a bare word like "Helgen" or "Wreck of the Skinny Horker".
+        var mod = new SkyrimMod(ModKey.FromNameAndExtension("SjptsMapMarkerContext.esp"), SkyrimRelease.SkyrimSE);
+        var marker = new PlacedObject(mod) { MapMarker = new MapMarker { Name = "Helgen", Type = MapMarker.MarkerType.City } };
+
+        var context = RecordContextExtractor.For(marker, new Dictionary<FormKey, string>());
+
+        Assert.Contains("map marker", context);
+        Assert.Contains("place name", context);
+    }
+
+    [Fact]
+    public void For_PlacedObjectWithoutAMapMarker_ReportsNoContext()
+    {
+        var mod = new SkyrimMod(ModKey.FromNameAndExtension("SjptsNoMapMarkerContext.esp"), SkyrimRelease.SkyrimSE);
+        var plain = new PlacedObject(mod);
+
+        Assert.Equal("", RecordContextExtractor.For(plain, new Dictionary<FormKey, string>()));
+    }
 }

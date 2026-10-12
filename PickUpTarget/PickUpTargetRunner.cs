@@ -348,6 +348,7 @@ public static class PickUpTargetRunner
             list.Add((source, winnerText!, editorId, context, dualLanguageEnglishText));
         }
 
+        var warnedUnhandledFullNameSignatures = new HashSet<string>(StringComparer.Ordinal);
         var raceNames = CollectRaceNames(mods, issues, log, trace);
         trace?.Debug($"CollectRaceNames done: {raceNames.Count} entries");
 
@@ -425,13 +426,22 @@ public static class PickUpTargetRunner
                 // already do, uses Consider()'s own TryLookup-based
                 // Japanese-then-English fallback instead, which behaves the same
                 // regardless of whether the plugin is localized.
+                // 2026-10-12: moved into FullNameFields.For, which also reads the names of the three record
+                // kinds (Key / Class / Flora) that have a translated Name but lack ITranslatedNamedGetter and
+                // were therefore silently skipped by the check that used to sit here. Records of a kind DSD
+                // supports but whose name this tool cannot read at all are reported once per kind instead of
+                // being dropped without a trace.
                 try
                 {
-                    if (record is ITranslatedNamedGetter translatedNamed && translatedNamed.Name != null)
+                    foreach (var (fullType, nameField) in FullNameFields.For(record))
+                        Consider(record.FormKey, fullType, 0, mod.ModKey, nameField, context: context);
+
+                    if (FullNameFields.IsSupportedButUnhandled(record, out var unhandledSignature)
+                        && warnedUnhandledFullNameSignatures.Add(unhandledSignature))
                     {
-                        var signature = RecordSignatureMap.Resolve(record.GetType().Name);
-                        if (RecordSignatureMap.DsdFullNameSupported.Contains(signature))
-                            Consider(record.FormKey, $"{signature} FULL", 0, mod.ModKey, translatedNamed.Name, context: context);
+                        log.Detail("DSDが対応する名前（FULL）の型なのに、名前を読み取る手段が無く、スキップされている", "Record kind DSD supports a FULL name for, but this tool has no way to read the name — its records are being skipped",
+                            $"[{mod.ModKey.FileName}] {unhandledSignature} ({record.GetType().Name}) — 最初に見つかった{record.FormKey}（以降、同じ型は報告しない）");
+                        trace?.Warning($"No way to read the name of {unhandledSignature} records ({record.GetType().Name}), although DSD supports '{unhandledSignature} FULL'; first seen {record.FormKey} in '{mod.ModKey.FileName}'. Add a case to FullNameFields.");
                     }
                 }
                 catch (Exception ex)
