@@ -321,7 +321,7 @@ public sealed class SettingsForm : Form
 
         var group = new GroupBox
         {
-            Text = "生成AI（クラウド）翻訳設定",
+            Text = "クラウドLLM翻訳設定",
             Dock = DockStyle.Fill,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
@@ -489,7 +489,7 @@ public sealed class SettingsForm : Form
         settings.Save();
 
         // v0.54.2 (既知の課題22.): ローカルLLM設定を実際に変更した場合のみ、
-        // ベース画面の「Beta機能: ローカルLLM翻訳」チェックを外す——古い接続先の
+        // ベース画面の「ローカルLLM翻訳」チェックを外す——古い接続先の
         // ままチェックが入りっぱなしになる事故を防ぐ。単にウィンドウを開いて
         // 何も変えずに閉じただけでは発火しない。
         if (settings.LlmEndpoint != _initialLlmEndpoint || settings.LlmModel != _initialLlmModel)

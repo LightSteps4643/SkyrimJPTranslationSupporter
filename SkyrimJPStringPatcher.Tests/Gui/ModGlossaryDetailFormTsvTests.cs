@@ -59,7 +59,7 @@ public class ModGlossaryDetailFormTsvTests
             InvokeWriteTsv(path, "SjptsTestMod.esp", []);
 
             var lines = File.ReadAllLines(path);
-            Assert.Contains("# SjptsTestMod.esp — このMODだけに効く語彙集（⑤ローカルLLM・⑥生成AI翻訳へのヒントとして使われます）", lines);
+            Assert.Contains("# SjptsTestMod.esp — このMODだけに効く語彙集（⑤ローカルLLM・⑥クラウドLLM翻訳へのヒントとして使われます）", lines);
             Assert.Contains("# English\tJapanese\tCount\tScore", lines);
         }
         finally { File.Delete(path); }

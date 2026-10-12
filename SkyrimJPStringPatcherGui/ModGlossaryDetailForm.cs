@@ -230,7 +230,7 @@ public sealed class ModGlossaryDetailForm : Form
     private static void WriteTsv(string path, string plugin, IReadOnlyList<ModGlossaryRow> rows)
     {
         using var writer = new StreamWriter(path, false, new System.Text.UTF8Encoding(true));
-        writer.WriteLine($"# {plugin} — このMODだけに効く語彙集（⑤ローカルLLM・⑥生成AI翻訳へのヒントとして使われます）");
+        writer.WriteLine($"# {plugin} — このMODだけに効く語彙集（⑤ローカルLLM・⑥クラウドLLM翻訳へのヒントとして使われます）");
         writer.WriteLine("#");
         writer.WriteLine("# 以下は、このMOD内で繰り返し使われているが、まだ確立した訳が無い語句の候補です。");
         writer.WriteLine("# Count＝このMOD内での出現回数、Score＝TF-IDFによる固有度（高いほどMOD特有）です。");

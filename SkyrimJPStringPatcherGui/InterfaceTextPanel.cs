@@ -113,10 +113,10 @@ public sealed class InterfaceTextPanel : Form
     // 解決できなかったものだけが⑥に回る。
     // v0.58.1: 従来は同じ行に並べていたが、それぞれ独自の文字数上限（右隣）を
     // 持たせるようになったため、行を分けた（ローカルLLMが上、生成AIが下）。
-    private const string LlmCheckboxLabel = "Beta機能: ローカルLLM翻訳（品質中～低）";
+    private const string LlmCheckboxLabel = "ローカルLLM翻訳";
     private readonly CheckBox _chkLlm = new() { Text = LlmCheckboxLabel, Checked = false, AutoSize = true };
 
-    private const string CloudAiCheckboxLabel = "Beta機能: 生成AI翻訳（クラウド・品質中～低）";
+    private const string CloudAiCheckboxLabel = "クラウドLLM翻訳";
     private readonly CheckBox _chkCloudAi = new() { Text = CloudAiCheckboxLabel, Checked = false, AutoSize = true };
 
     // v0.52.1a: 1回のLLM呼び出しにまとめる候補の合計文字数の上限（PromptGenerator.
@@ -258,7 +258,7 @@ public sealed class InterfaceTextPanel : Form
         var result = MessageBox.Show(_logWindow,
             "処理を中断しますか？\n\n" +
             "・すぐには止まりません。現在処理中のMODの完了を待ってから停止します。\n" +
-            "・既に生成AI（クラウド）へ送信済みの呼び出し分の課金は取り消せません。\n" +
+            "・既にクラウドLLMへ送信済みの呼び出し分の課金は取り消せません。\n" +
             "・それ以降の未処理MODは翻訳されないまま残りますが、\n" +
             "　次回「翻訳実行」で続きから再開できます（完了済み分は再翻訳されません）。",
             "処理の中断", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
@@ -537,7 +537,7 @@ public sealed class InterfaceTextPanel : Form
     {
         var confirm = MessageBox.Show(this,
             $"「{target}」の翻訳状況を初期化します。\n" +
-            "このMODの翻訳結果（手動での編集・生成AI/ローカルLLMでの翻訳結果を含む）を\n" +
+            "このMODの翻訳結果（手動での編集・クラウドLLM/ローカルLLMでの翻訳結果を含む）を\n" +
             "すべて消去し、初期状態に戻します。\n" +
             "元に戻せません（実行前の状態はInterfaceText\\Translation\\bak\\に自動でバックアップされます）。よろしいですか？",
             "翻訳状況を初期化", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
@@ -845,16 +845,15 @@ public sealed class InterfaceTextPanel : Form
     // "軽い接続テスト"に相当する手段が無く、OpenAI互換API選択時もクラウドAPIへの
     // 毎回の疎通確認はレイテンシ・コストの点で気軽に行うものではないと判断した。
     // 失敗すれば実行時のエラーとしてログ・ダイアログに出る。代わりに、チェックを
-    // 入れた瞬間にBeta機能・課金・規模に関する注意喚起を一度出す（Nexus公開後、
+    // 入れた瞬間に課金・規模に関する注意喚起を一度出す（Nexus公開後、
     // 初見のユーザーがいきなり大規模実行して想定外のコストを被らないように）。
     private void ChkCloudAi_CheckedChanged(object? sender, EventArgs e)
     {
         if (!_chkCloudAi.Checked) return;
         MessageBox.Show(this,
-            "本機能はベータ版です。\n" +
-            "また、生成AI翻訳にはトークンを消費します。翻訳文字数や対象が増えるほど大規模になります。\n" +
+            "クラウドLLM翻訳にはトークンを消費します。翻訳文字数や対象が増えるほど大規模になります。\n" +
             "最初は小規模なプラグインを対象に動作を確認し、負荷をチェックすることを推奨します。",
-            "Beta機能: 生成AI翻訳（クラウド）", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            "クラウドLLM翻訳", MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
 
     /// <summary>「MO2対象Interfaceフォルダ読込み＆初期化」— SJPTS_InterfaceTextの
@@ -875,7 +874,7 @@ public sealed class InterfaceTextPanel : Form
 
         var confirm = MessageBox.Show(this,
             "MO2のInterface\\Translationsを対象MOD全体で再読込し、翻訳状況を初期化します。\n" +
-            "全MODの翻訳結果（手動編集・生成AI/ローカルLLM翻訳分を含む）をすべて消去し、初期状態に戻します。\n\n" +
+            "全MODの翻訳結果（手動編集・クラウドLLM/ローカルLLM翻訳分を含む）をすべて消去し、初期状態に戻します。\n\n" +
             "よろしいですか？\n" +
             "※実行前の状態はInterfaceText\\Translation\\bak\\に自動でバックアップされます\n" +
             "※ファイル形式の制約上、既に翻訳済みでも一部の候補が未翻訳として再検出される場合があります",
@@ -931,7 +930,7 @@ public sealed class InterfaceTextPanel : Form
         // このチェックは生成AI（クラウド）がOpenAI互換API側を使う場合のみ。
         if (_chkCloudAi.Checked && !UseClaudeCodeCli && string.IsNullOrWhiteSpace(LlmModel))
         {
-            MessageBox.Show(this, "生成AI翻訳（クラウド）をOpenAI互換APIで使う場合は、「設定」でモデル名を指定してください。", "入力エラー", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, "クラウドLLM翻訳をOpenAI互換APIで使う場合は、「設定」でモデル名を指定してください。", "入力エラー", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -1004,7 +1003,7 @@ public sealed class InterfaceTextPanel : Form
                     // （プレーンな引数には含めない）。
                     if (string.IsNullOrWhiteSpace(CloudAiEndpoint) || string.IsNullOrWhiteSpace(LlmModel))
                     {
-                        MessageBox.Show(this, "生成AI翻訳（クラウド・OpenAI互換API）を使うには、「設定」でエンドポイントとモデル名を指定してください。",
+                        MessageBox.Show(this, "クラウドLLM翻訳（OpenAI互換API）を使うには、「設定」でエンドポイントとモデル名を指定してください。",
                             "入力エラー", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                         return;
                     }
