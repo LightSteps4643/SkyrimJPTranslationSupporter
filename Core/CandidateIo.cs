@@ -12,12 +12,12 @@ public static class CandidateIo
     public static void WriteTsv(string path, IEnumerable<Candidate> candidates)
     {
         using var w = new StreamWriter(path, false, System.Text.Encoding.UTF8);
-        w.WriteLine(string.Join(Sep, "FormId", "WinningPlugin", "RecordType", "EnglishText", "Index", "EditorId", "Context", "StaleOriginal", "StaleTranslation", "Warning", "CrossModPrecedentJapanese", "CrossModPrecedentNeedsReview", "DsdCoveredJapanese", "DsdCoveredNotes", "SourcePath", "SourceFilter", "SourceLine", "Inactive"));
+        w.WriteLine(string.Join(Sep, "FormId", "WinningPlugin", "RecordType", "EnglishText", "Index", "EditorId", "Context", "StaleOriginal", "StaleTranslation", "Warning", "CrossModPrecedentJapanese", "CrossModPrecedentNeedsReview", "DsdCoveredJapanese", "DsdCoveredNotes", "SourcePath", "SourceFilter", "SourceLine", "Inactive", "Excluded"));
         foreach (var c in candidates)
             w.WriteLine(string.Join(Sep, c.FormId, c.WinningPlugin, c.RecordType, Escape(c.CurrentText), c.Index, Escape(c.EditorId), Escape(c.Context),
                 Escape(c.StaleOriginal), Escape(c.StaleTranslation), Escape(c.Warning), Escape(c.CrossModPrecedentJapanese), c.CrossModPrecedentNeedsReview ? "1" : "0",
                 Escape(c.DsdCoveredJapanese), Escape(c.DsdCoveredNotes),
-                Escape(c.SourcePath), Escape(c.SourceFilter), c.SourceLine > 0 ? c.SourceLine.ToString() : "", Escape(c.Inactive)));
+                Escape(c.SourcePath), Escape(c.SourceFilter), c.SourceLine > 0 ? c.SourceLine.ToString() : "", Escape(c.Inactive), Escape(c.Excluded)));
     }
 
     public static List<Candidate> ReadTsv(string path)
@@ -43,9 +43,10 @@ public static class CandidateIo
             var sourceFilter = parts.Length > 15 ? Unescape(parts[15]) : "";
             var sourceLine = parts.Length > 16 && int.TryParse(parts[16], out var sl) ? sl : 0;
             var inactive = parts.Length > 17 ? Unescape(parts[17]) : "";
+            var excluded = parts.Length > 18 ? Unescape(parts[18]) : "";
             result.Add(new Candidate(parts[1], parts[0], parts[2], Unescape(parts[3]), index, editorId, context, staleOriginal, staleTranslation, warning,
                 crossModPrecedentJapanese, crossModPrecedentNeedsReview, dsdCoveredJapanese, dsdCoveredNotes,
-                sourcePath, sourceFilter, sourceLine, inactive));
+                sourcePath, sourceFilter, sourceLine, inactive, excluded));
         }
         return result;
     }

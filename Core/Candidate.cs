@@ -69,7 +69,7 @@ namespace SkyrimJPStringPatcher.Core;
 /// "SJPTS_AutoCorpusDsd" (a third party's own DSD translation — same tier as
 /// the existing corpus-based dsd-sourced resolution).
 ///
-/// <paramref name="SourcePath"/>/<paramref name="SourceFilter"/>/<paramref name="SourceLine"/>/<paramref name="Inactive"/>
+/// <paramref name="SourcePath"/>/<paramref name="SourceFilter"/>/<paramref name="SourceLine"/>/<paramref name="Inactive"/>/<paramref name="Excluded"/>
 /// (SkyPatcher support): set only on a row that comes from a SkyPatcher .ini
 /// rather than from a plugin record, so an EMPTY SourcePath means "plugin row".
 /// For such a row <c>FormId</c> is not a Skyrim FormKey but the row key
@@ -78,8 +78,11 @@ namespace SkyrimJPStringPatcher.Core;
 /// SKSE/Plugins/SkyPatcher (type folder included, e.g. "armor/Foo.ini"),
 /// <c>SourceFilter</c> the line's filter part exactly as written, <c>SourceLine</c>
 /// its 1-based line number (display only; 0 = none), and <c>Inactive</c> the reason
-/// the line cannot take effect ("" = it can). All four are appended after the
-/// older columns so an older file still reads.</summary>
+/// the line cannot take effect ("" = it can), and <c>Excluded</c> the reason the text
+/// is not offered for translation ("" = it is): the row is kept anyway, because the
+/// output must reproduce every effective line, in order, with an untranslated one
+/// written back as its original text. All five are appended after the older columns
+/// so an older file still reads.</summary>
 public sealed record Candidate(
     string WinningPlugin,
     string FormId,
@@ -98,4 +101,5 @@ public sealed record Candidate(
     string SourcePath = "",
     string SourceFilter = "",
     int SourceLine = 0,
-    string Inactive = "");
+    string Inactive = "",
+    string Excluded = "");

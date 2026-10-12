@@ -2,6 +2,7 @@ using SkyrimJPStringPatcher.Core;
 using SkyrimJPStringPatcher.PickUpTarget;
 using SkyrimJPStringPatcher.Translation;
 using SkyrimJPStringPatcher.GenerateDsdFile;
+using SkyrimJPStringPatcher.SkyPatcher;
 
 // v0.50.1a (GUI): without this, Console.Out/Error default to the OS console
 // codepage (cp932/Shift-JIS on Japanese Windows) when running interactively in
@@ -26,6 +27,7 @@ Console.OutputEncoding = new System.Text.UTF8Encoding(false);
 // note used to explain the boundary of; there is now no cross-run state in
 // out_temp at all — it is pure, disposable output every single run.
 const string DefaultPickUpTargetOutDir = "PickUpTarget/out_temp";
+const string DefaultSkyPatcherPickUpTargetOutDir = "SkyPatcherText/PickUpTarget/out_temp";
 const string DefaultTranslationOutDir = "Translation/out_temp";
 const string DefaultImportDir = "import/plugin";
 const string DefaultFinalOutDir = "out";
@@ -344,6 +346,47 @@ switch (args[0])
         }
     }
 
+    case "skypatcher-pickup":
+    {
+        // Same MO2 instance arguments as "pickuptarget"; the output is a separate, independent tree
+        // (SkyPatcherText/…) so resetting one side never touches the other's results.
+        string? SkyPatcherFlag(string prefix) =>
+            args.FirstOrDefault(a => a.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))?[prefix.Length..];
+        var modsDirOverride = SkyPatcherFlag("--mods-dir=");
+        var profileDirOverride = SkyPatcherFlag("--profile-dir=");
+        var overwriteDirOverride = SkyPatcherFlag("--overwrite-dir=");
+        args = args.Where(a => !a.StartsWith("--mods-dir=", StringComparison.OrdinalIgnoreCase)
+                               && !a.StartsWith("--profile-dir=", StringComparison.OrdinalIgnoreCase)
+                               && !a.StartsWith("--overwrite-dir=", StringComparison.OrdinalIgnoreCase)).ToArray();
+
+        if (args.Length < 2) { PrintUsage(); return 1; }
+        var mo2Dir = args[1];
+        var outDir = args.Length > 2 ? args[2] : DefaultSkyPatcherPickUpTargetOutDir;
+
+        using var log = RunLog.Open("SkyPatcherText/PickUpTarget", "SkyPatcherPickUp");
+        using var trace = TraceLog.Open("SkyPatcherText/PickUpTarget", "SkyPatcherPickUp");
+        try
+        {
+            trace.Info($"Resolving MO2 instance: {mo2Dir}");
+            var result = SkyPatcherPickUpRunner.Run(mo2Dir, outDir, log, modsDirOverride, profileDirOverride, overwriteDirOverride);
+            trace.Info($"Scan complete: {result.Stats.TotalRows} name rows from {result.Stats.FilesRead} file(s)");
+            return 0;
+        }
+        catch (Mo2InstanceConfigurationException ex)
+        {
+            trace.Error("MO2 instance configuration problem during skypatcher-pickup execution", ex);
+            Console.Error.WriteLine($"[error] MO2インスタンスの読み込みに失敗しました: {ex.Message}");
+            log.Section("エラー", "Error");
+            log.Line($"MO2インスタンスの読み込みに失敗しました: {ex.Message}", $"Failed to read the MO2 instance: {ex.Message}");
+            return 1;
+        }
+        catch (Exception ex)
+        {
+            trace.Error("Exception during skypatcher-pickup execution", ex);
+            throw;
+        }
+    }
+
     case "translation":
     {
         var inputDir = args.Length > 1 ? args[1] : DefaultPickUpTargetOutDir;
@@ -530,6 +573,8 @@ static void PrintUsage()
     Console.WriteLine("                       MO2の「Paths」タブでmods/profiles/overwriteを標準位置から変更している場合の");
     Console.WriteLine("                       個別上書き（既定は<MO2 instance dir>直下のmods/profiles/<選択中プロファイル>/overwrite）。");
     Console.WriteLine("                       --profile-dir は選択中プロファイル自体のフォルダを指定（profilesの親ではない）。");
+    Console.WriteLine("  SkyrimJPStringPatcher skypatcher-pickup <MO2 instance dir> [output dir = SkyPatcherText/PickUpTarget/out_temp]");
+    Console.WriteLine("      -> candidates.tsv / excluded_candidates.txt（SkyPatcherの.iniのfullName/shortName。--mods-dir 等は pickuptarget と同じ）");
     Console.WriteLine("  SkyrimJPStringPatcher translation [input dir = PickUpTarget/out_temp] [output dir = Translation/out_temp] [target plugin filename | --all]");
     Console.WriteLine("      target plugin omitted or --all -> generates <output dir>/<plugin>/{prompt.txt,translations.tsv} for EVERY plugin with candidates, plus translation_index.txt");
     Console.WriteLine("      target plugin given            -> generates just that one plugin's files");
