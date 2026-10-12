@@ -28,6 +28,7 @@ Console.OutputEncoding = new System.Text.UTF8Encoding(false);
 // out_temp at all — it is pure, disposable output every single run.
 const string DefaultPickUpTargetOutDir = "PickUpTarget/out_temp";
 const string DefaultSkyPatcherPickUpTargetOutDir = "SkyPatcherText/PickUpTarget/out_temp";
+const string DefaultSkyPatcherTranslationOutDir = "SkyPatcherText/Translation/out_temp";
 const string DefaultTranslationOutDir = "Translation/out_temp";
 const string DefaultImportDir = "import/plugin";
 const string DefaultFinalOutDir = "out";
@@ -387,6 +388,48 @@ switch (args[0])
         }
     }
 
+    case "skypatcher-generate":
+    {
+        // Writes the SkyPatcher .ini files into <output dir>/SKSE/Plugins/SkyPatcher/…; the DSD json
+        // output of "generatedsdfile" goes to the same final "out" folder.
+        var modsFileArg = args.FirstOrDefault(a => a.StartsWith("--mods-file=", StringComparison.OrdinalIgnoreCase));
+        args = args.Where(a => !a.StartsWith("--mods-file=", StringComparison.OrdinalIgnoreCase)).ToArray();
+
+        var translationsInput = args.Length > 1 ? args[1] : DefaultSkyPatcherTranslationOutDir;
+        var finalOutDir = args.Length > 2 ? args[2] : DefaultFinalOutDir;
+        if (!File.Exists(translationsInput) && !Directory.Exists(translationsInput))
+        {
+            Console.Error.WriteLine($"Translations file/directory not found: {translationsInput}");
+            return 1;
+        }
+
+        List<string>? modFilter = null;
+        if (modsFileArg != null)
+        {
+            var modsFilePath = modsFileArg["--mods-file=".Length..];
+            if (!File.Exists(modsFilePath))
+            {
+                Console.Error.WriteLine($"--mods-file target not found: {modsFilePath}");
+                return 1;
+            }
+            modFilter = File.ReadAllLines(modsFilePath).Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
+        }
+
+        using var log = RunLog.Open("SkyPatcherText/GenerateDsdFile", "SkyPatcherGenerate");
+        using var trace = TraceLog.Open("SkyPatcherText/GenerateDsdFile", "SkyPatcherGenerate");
+        try
+        {
+            trace.Info($"Input: {translationsInput} / output: {finalOutDir}" + (modFilter != null ? $" / mod filter: {modFilter.Count} mod(s)" : ""));
+            SkyPatcherIniGenerator.Run(translationsInput, finalOutDir, log, modFilter, trace);
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            trace.Error("Exception during skypatcher-generate execution", ex);
+            throw;
+        }
+    }
+
     case "translation":
     {
         var inputDir = args.Length > 1 ? args[1] : DefaultPickUpTargetOutDir;
@@ -575,6 +618,9 @@ static void PrintUsage()
     Console.WriteLine("                       --profile-dir は選択中プロファイル自体のフォルダを指定（profilesの親ではない）。");
     Console.WriteLine("  SkyrimJPStringPatcher skypatcher-pickup <MO2 instance dir> [output dir = SkyPatcherText/PickUpTarget/out_temp]");
     Console.WriteLine("      -> candidates.tsv / excluded_candidates.txt（SkyPatcherの.iniのfullName/shortName。--mods-dir 等は pickuptarget と同じ）");
+    Console.WriteLine("  SkyrimJPStringPatcher skypatcher-generate [input = SkyPatcherText/Translation/out_temp] [output dir = out] [--mods-file=<path>]");
+    Console.WriteLine("      -> <output dir>/SKSE/Plugins/SkyPatcher/<type>/zzz_SJPTS/…（元の.iniと同じ相対パス・同じファイル名。全行を元の順序で写し、訳が無い行は原文のまま）");
+    Console.WriteLine("      --mods-file=<path> : 対象のMOD名を1行1件で書いたファイル（省略時は入力中の全MOD）");
     Console.WriteLine("  SkyrimJPStringPatcher translation [input dir = PickUpTarget/out_temp] [output dir = Translation/out_temp] [target plugin filename | --all]");
     Console.WriteLine("      target plugin omitted or --all -> generates <output dir>/<plugin>/{prompt.txt,translations.tsv} for EVERY plugin with candidates, plus translation_index.txt");
     Console.WriteLine("      target plugin given            -> generates just that one plugin's files");
