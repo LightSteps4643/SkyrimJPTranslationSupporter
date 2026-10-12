@@ -27,7 +27,11 @@ public class CandidateIoTests
         CrossModPrecedentJapanese: "過去の訳文",
         CrossModPrecedentNeedsReview: true,
         DsdCoveredJapanese: "既存DSDの訳文",
-        DsdCoveredNotes: "SJPTS_AutoCorpusDsd");
+        DsdCoveredNotes: "SJPTS_AutoCorpusDsd",
+        SourcePath: "armor/Mark Unique Items.ini",
+        SourceFilter: "filterByArmors=Skyrim.esm|15516",
+        SourceLine: 47,
+        Inactive: "OverriddenInSameFile");
 
     [Fact]
     public void ReadTsv_FullFormatFixture_ParsesEveryFieldCorrectly()
@@ -81,6 +85,46 @@ public class CandidateIoTests
         Assert.Equal("", c.Warning);
         Assert.Equal("", c.DsdCoveredJapanese);
         Assert.Equal("", c.DsdCoveredNotes);
+    }
+
+    /// <summary>SkyPatcher support appended four columns (SourcePath, SourceFilter,
+    /// SourceLine, Inactive) after DsdCoveredNotes. A candidates.tsv written
+    /// before that — the checked-in sample holds exactly the previous 14
+    /// columns — must still read, with the new fields defaulting to "" / 0, and
+    /// must be recognisable as a plugin row (empty SourcePath).</summary>
+    [Fact]
+    public void ReadTsv_FileWrittenBeforeSkyPatcherColumns_DefaultsTheNewFields()
+    {
+        var result = CandidateIo.ReadTsv(FixturePath("candidate_before_skypatcher_columns.tsv"));
+
+        var c = Assert.Single(result);
+        Assert.Equal(FullFormatCandidate with { SourcePath = "", SourceFilter = "", SourceLine = 0, Inactive = "" }, c);
+    }
+
+    /// <summary>A plugin candidate carries none of the SkyPatcher fields: they are
+    /// written as four empty trailing columns (SourceLine empty rather than 0, so
+    /// an empty SourcePath/SourceLine pair reads as "not a SkyPatcher row") and
+    /// read back as the defaults.</summary>
+    [Fact]
+    public void WriteTsv_PluginCandidate_WritesEmptySkyPatcherColumns_AndRoundTrips()
+    {
+        var plugin = new Candidate("Skyrim.esm", "00012345", "ARMO FULL", "Steel Cuirass");
+        var path = Path.GetTempFileName();
+        try
+        {
+            CandidateIo.WriteTsv(path, new[] { plugin });
+
+            var cells = File.ReadAllLines(path)[1].Split('\t');
+            Assert.Equal(18, cells.Length);
+            Assert.All(cells.Skip(14), cell => Assert.Equal("", cell));
+
+            var read = Assert.Single(CandidateIo.ReadTsv(path));
+            Assert.Equal(plugin, read);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 
     [Fact]

@@ -8,6 +8,17 @@ namespace SkyrimJPStringPatcherGui.Services;
 /// </summary>
 public static class TsvReader
 {
+    /// <summary>The header's column names in file order (empty if the file is missing
+    /// or empty) — <see cref="Read"/> keys rows by name, which loses the order a
+    /// writer needs to put the columns back where they were.</summary>
+    public static string[] ReadHeader(string path)
+    {
+        if (!File.Exists(path)) return [];
+        using var reader = new StreamReader(path, System.Text.Encoding.UTF8);
+        var headerLine = reader.ReadLine();
+        return headerLine == null ? [] : headerLine.Split('\t');
+    }
+
     public static List<Dictionary<string, string>> Read(string path)
     {
         var rows = new List<Dictionary<string, string>>();

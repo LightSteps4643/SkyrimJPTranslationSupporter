@@ -67,7 +67,19 @@ namespace SkyrimJPStringPatcher.Core;
 /// when the covering DSD entry's own status already carries an SJPTS_ prefix
 /// (this tool's own prior decision, restored as-is); otherwise it is
 /// "SJPTS_AutoCorpusDsd" (a third party's own DSD translation — same tier as
-/// the existing corpus-based dsd-sourced resolution).</summary>
+/// the existing corpus-based dsd-sourced resolution).
+///
+/// <paramref name="SourcePath"/>/<paramref name="SourceFilter"/>/<paramref name="SourceLine"/>/<paramref name="Inactive"/>
+/// (SkyPatcher support): set only on a row that comes from a SkyPatcher .ini
+/// rather than from a plugin record, so an EMPTY SourcePath means "plugin row".
+/// For such a row <c>FormId</c> is not a Skyrim FormKey but the row key
+/// "&lt;ini path&gt;|&lt;filter part&gt;|&lt;occurrence&gt;", and <c>WinningPlugin</c> is the
+/// providing MOD. <c>SourcePath</c> is the .ini's path relative to
+/// SKSE/Plugins/SkyPatcher (type folder included, e.g. "armor/Foo.ini"),
+/// <c>SourceFilter</c> the line's filter part exactly as written, <c>SourceLine</c>
+/// its 1-based line number (display only; 0 = none), and <c>Inactive</c> the reason
+/// the line cannot take effect ("" = it can). All four are appended after the
+/// older columns so an older file still reads.</summary>
 public sealed record Candidate(
     string WinningPlugin,
     string FormId,
@@ -82,4 +94,8 @@ public sealed record Candidate(
     string CrossModPrecedentJapanese = "",
     bool CrossModPrecedentNeedsReview = false,
     string DsdCoveredJapanese = "",
-    string DsdCoveredNotes = "");
+    string DsdCoveredNotes = "",
+    string SourcePath = "",
+    string SourceFilter = "",
+    int SourceLine = 0,
+    string Inactive = "");

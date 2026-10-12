@@ -353,30 +353,12 @@ public sealed class TranslationDetailForm : Form
     /// fields the user actually touched.</summary>
     private void SaveChanges()
     {
-        var lines = new List<string> { "FormId\tWinningPlugin\tRecordType\tEnglishText\tJapanese\tNotes\tIndex\tEditorId\tTranslationCheck" };
-        foreach (var row in _rows)
-        {
-            var key = RowKey(row);
-            var edited = _edits.ContainsKey(key);
-            var japanese = edited ? TsvEscaping.Escape(_edits[key]) : row.GetValueOrDefault("Japanese", "");
-            var notes = edited ? "SJPTS_ModifiedByUser" : row.GetValueOrDefault("Notes", "");
-            // 2026-09-18: TranslationCheck（⑤⑥のLLM応答時にのみ機械的に分類される
-            // 品質フラグ）は、人間が編集・確認した時点で意味を失う——確認済みで
-            // あることは既にNotes=SJPTS_ModifiedByUserが示すため、空欄にクリア
-            // する（GUI側に分類ロジックを複製する必要も無くなる）。編集していない
-            // 行は元の値をそのまま引き継ぐ。
-            var translationCheck = edited ? "" : row.GetValueOrDefault("TranslationCheck", "");
-            lines.Add(string.Join('\t',
-                row.GetValueOrDefault("FormId", ""),
-                row.GetValueOrDefault("WinningPlugin", ""),
-                row.GetValueOrDefault("RecordType", ""),
-                row.GetValueOrDefault("EnglishText", ""),
-                japanese,
-                notes,
-                row.GetValueOrDefault("Index", ""),
-                row.GetValueOrDefault("EditorId", ""),
-                translationCheck));
-        }
+        // 列の書き戻しは TranslationsTsvWriter（ヘッダー駆動）に任せる——固定の9列だけを
+        // 書くと、SkyPatcherの行が持つ末尾の列（SourcePathなど）が保存で消えるため。
+        // 2026-09-18: 編集した行のTranslationCheck（⑤⑥のLLM応答時にのみ機械的に分類される
+        // 品質フラグ）は、人間が確認した時点で意味を失うため空欄にクリアする（同クラスの仕様）。
+        var lines = TranslationsTsvWriter.BuildLines(TsvReader.ReadHeader(_path), _rows,
+            row => _edits.TryGetValue(RowKey(row), out var japanese) ? japanese : null);
         File.WriteAllLines(_path, lines, new System.Text.UTF8Encoding(true)); // BOM付きUTF-8 — CLI側の出力と同じ形式
     }
 

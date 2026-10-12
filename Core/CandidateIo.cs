@@ -12,11 +12,12 @@ public static class CandidateIo
     public static void WriteTsv(string path, IEnumerable<Candidate> candidates)
     {
         using var w = new StreamWriter(path, false, System.Text.Encoding.UTF8);
-        w.WriteLine(string.Join(Sep, "FormId", "WinningPlugin", "RecordType", "EnglishText", "Index", "EditorId", "Context", "StaleOriginal", "StaleTranslation", "Warning", "CrossModPrecedentJapanese", "CrossModPrecedentNeedsReview", "DsdCoveredJapanese", "DsdCoveredNotes"));
+        w.WriteLine(string.Join(Sep, "FormId", "WinningPlugin", "RecordType", "EnglishText", "Index", "EditorId", "Context", "StaleOriginal", "StaleTranslation", "Warning", "CrossModPrecedentJapanese", "CrossModPrecedentNeedsReview", "DsdCoveredJapanese", "DsdCoveredNotes", "SourcePath", "SourceFilter", "SourceLine", "Inactive"));
         foreach (var c in candidates)
             w.WriteLine(string.Join(Sep, c.FormId, c.WinningPlugin, c.RecordType, Escape(c.CurrentText), c.Index, Escape(c.EditorId), Escape(c.Context),
                 Escape(c.StaleOriginal), Escape(c.StaleTranslation), Escape(c.Warning), Escape(c.CrossModPrecedentJapanese), c.CrossModPrecedentNeedsReview ? "1" : "0",
-                Escape(c.DsdCoveredJapanese), Escape(c.DsdCoveredNotes)));
+                Escape(c.DsdCoveredJapanese), Escape(c.DsdCoveredNotes),
+                Escape(c.SourcePath), Escape(c.SourceFilter), c.SourceLine > 0 ? c.SourceLine.ToString() : "", Escape(c.Inactive)));
     }
 
     public static List<Candidate> ReadTsv(string path)
@@ -38,8 +39,13 @@ public static class CandidateIo
             var crossModPrecedentNeedsReview = parts.Length > 11 && parts[11] == "1";
             var dsdCoveredJapanese = parts.Length > 12 ? Unescape(parts[12]) : "";
             var dsdCoveredNotes = parts.Length > 13 ? Unescape(parts[13]) : "";
+            var sourcePath = parts.Length > 14 ? Unescape(parts[14]) : "";
+            var sourceFilter = parts.Length > 15 ? Unescape(parts[15]) : "";
+            var sourceLine = parts.Length > 16 && int.TryParse(parts[16], out var sl) ? sl : 0;
+            var inactive = parts.Length > 17 ? Unescape(parts[17]) : "";
             result.Add(new Candidate(parts[1], parts[0], parts[2], Unescape(parts[3]), index, editorId, context, staleOriginal, staleTranslation, warning,
-                crossModPrecedentJapanese, crossModPrecedentNeedsReview, dsdCoveredJapanese, dsdCoveredNotes));
+                crossModPrecedentJapanese, crossModPrecedentNeedsReview, dsdCoveredJapanese, dsdCoveredNotes,
+                sourcePath, sourceFilter, sourceLine, inactive));
         }
         return result;
     }
