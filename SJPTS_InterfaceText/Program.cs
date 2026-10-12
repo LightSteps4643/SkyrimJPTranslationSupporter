@@ -536,7 +536,7 @@ int RunTranslateOne(string target, RunLog log, TraceLog trace, ModPhraseGlossary
     if (translator is ClaudeCodeTranslator claude)
     {
         var usage = claude.Usage;
-        var usageLine = $"cloud AI usage: {usage.CallCount} call(s) / {usage.InputTokens} input, {usage.OutputTokens} output token(s) / " +
+        var usageLine = $"cloud LLM usage: {usage.CallCount} call(s) / {usage.InputTokens} input, {usage.OutputTokens} output token(s) / " +
             $"{usage.CacheCreationInputTokens} cache-creation, {usage.CacheReadInputTokens} cache-read token(s) / est. cost ${usage.TotalCostUsd:F4}";
         log.Report(usageLine);
     }

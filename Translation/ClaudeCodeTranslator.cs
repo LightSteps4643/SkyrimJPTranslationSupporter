@@ -121,7 +121,7 @@ public sealed class ClaudeCodeTranslator : ITextTranslator
     {
         if (CircuitOpen)
         {
-            error = $"circuit breaker open ({ConsecutiveFailureThreshold}回連続の異常系失敗のため以降の生成AI翻訳呼び出しを打ち切り中)";
+            error = $"circuit breaker open ({ConsecutiveFailureThreshold}回連続の異常系失敗のため以降のクラウドLLM翻訳呼び出しを打ち切り中)";
             return null;
         }
 

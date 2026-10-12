@@ -8,7 +8,7 @@ namespace SkyrimJPStringPatcher.Translation;
 /// <summary>
 /// 2026-09-17: a per-MOD PHRASE glossary — <c>&lt;plugin's Translation output
 /// folder&gt;/mod_glossary.tsv</c>, one file per plugin, feeding into issue
-/// #4's "c" (same-mod hint) pool for ⑤ローカルLLM/⑥生成AI翻訳. The ⑤/⑥-facing
+/// #4's "c" (same-mod hint) pool for ⑤ローカルLLM/⑥クラウドLLM翻訳. The ⑤/⑥-facing
 /// sibling of <see cref="ModGlossary"/> (Data/mod_glossary/*.tsv, ④固有名詞
 /// 組み立て専用) — deliberately a SEPARATE file/mechanism, not a repurposing
 /// of that one, since ④ is being deprecated and this needs to outlive it.
@@ -354,7 +354,7 @@ public static class ModPhraseGlossary
             .ToList();
 
         using var writer = new StreamWriter(path, false, new UTF8Encoding(true));
-        writer.WriteLine($"# {plugin} — このMODだけに効く語彙集（⑤ローカルLLM・⑥生成AI翻訳へのヒントとして使われます）");
+        writer.WriteLine($"# {plugin} — このMODだけに効く語彙集（⑤ローカルLLM・⑥クラウドLLM翻訳へのヒントとして使われます）");
         writer.WriteLine("#");
         writer.WriteLine("# 以下は、このMOD内で繰り返し使われているが、まだ確立した訳が無い語句の候補です。");
         writer.WriteLine("# Count＝このMOD内での出現回数、Score＝TF-IDFによる固有度（高いほどMOD特有）です。");

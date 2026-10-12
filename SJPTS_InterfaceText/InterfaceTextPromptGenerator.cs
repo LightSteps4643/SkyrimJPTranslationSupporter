@@ -160,12 +160,12 @@ public static class InterfaceTextPromptGenerator
         // 踏襲——"SJPTS_TranslationLocalLlm"/"SJPTS_TranslationCloudLlm"。
         var methodTag = providerLabel == "localLLM" ? "SJPTS_TranslationLocalLlm" : "SJPTS_TranslationCloudLlm";
         // 2026-09-16: 独立レビューで発覚したバグの修正——以前はここのログ見出しが
-        // providerLabelを無視して常に「生成AI翻訳」固定だったため、ローカルLLM
-        // 実行時でもログには「生成AI翻訳」と誤表示されていた。ESP側の
+        // providerLabelを無視して常に「クラウドLLM翻訳」固定だったため、ローカルLLM
+        // 実行時でもログには「クラウドLLM翻訳」と誤表示されていた。ESP側の
         // stepLabelJa/stepLabelEnに相当する値をproviderLabelから導出し、
         // LlmBatchTranslationEngineの全ログ呼び出しに一貫して渡す。
-        var stepLabelJa = providerLabel == "localLLM" ? "ローカルLLM" : "生成AI翻訳";
-        var stepLabelEn = providerLabel == "localLLM" ? "local LLM" : "cloud AI translation";
+        var stepLabelJa = providerLabel == "localLLM" ? "ローカルLLM" : "クラウドLLM翻訳";
+        var stepLabelEn = providerLabel == "localLLM" ? "local LLM" : "cloud LLM translation";
 
         var keysByEnglish = pending.GroupBy(e => e.English, e => e.Key, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);

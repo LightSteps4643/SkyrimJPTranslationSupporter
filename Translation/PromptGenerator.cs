@@ -145,14 +145,14 @@ public static class PromptGenerator
         Console.WriteLine($"Wrote translation template: {templatePath}");
 
         log.Section("処理サマリ", "Processing summary");
-        // v0.53.0: 「AI不要」という表記は、⑤ローカルLLM・⑥生成AI翻訳による解決も
+        // v0.53.0: 「AI不要」という表記は、⑤ローカルLLM・⑥クラウドLLM翻訳による解決も
         // 含んだ件数であるにもかかわらず「AIなしで解決した件数」であるかのように
         // 読めてしまっていたため、単純に「解決」に修正した（実データからユーザーが
         // 指摘・確認済み）。内訳の内側にローカルLLM/生成AIの件数が既に出ているので、
         // 情報量自体は変わらない。
         log.Line($"解決（①〜⑥）: {autoCount} / {targetCandidates.Count}", $"Resolved (steps 1-6): {autoCount} / {targetCandidates.Count}");
-        log.Line($"  内訳: コーパス完全一致{methodCounts.Corpus}件 / 意味合成{methodCounts.Meaning}件 / 音訳分解{methodCounts.Transliteration}件 / NameFallbackTranslator{methodCounts.NameFallback}件 / ローカルLLM{methodCounts.Llm}件 生成AI{methodCounts.CloudLlm}件",
-            $"  Breakdown: exact corpus match {methodCounts.Corpus} / meaning composition {methodCounts.Meaning} / transliteration decomposition {methodCounts.Transliteration} / NameFallbackTranslator {methodCounts.NameFallback} / local LLM {methodCounts.Llm} cloud AI {methodCounts.CloudLlm}");
+        log.Line($"  内訳: コーパス完全一致{methodCounts.Corpus}件 / 意味合成{methodCounts.Meaning}件 / 音訳分解{methodCounts.Transliteration}件 / NameFallbackTranslator{methodCounts.NameFallback}件 / ローカルLLM{methodCounts.Llm}件 クラウドLLM{methodCounts.CloudLlm}件",
+            $"  Breakdown: exact corpus match {methodCounts.Corpus} / meaning composition {methodCounts.Meaning} / transliteration decomposition {methodCounts.Transliteration} / NameFallbackTranslator {methodCounts.NameFallback} / local LLM {methodCounts.Llm} cloud LLM {methodCounts.CloudLlm}");
         log.Line($"AIチャット対象: {targetCandidates.Count - autoCount} → 同一英文の重複排除後 {unique}",
             $"AI-chat target: {targetCandidates.Count - autoCount} -> {unique} after deduplicating identical English text");
         log.Line($"※各件の訳は {templatePath} を参照", $"* See {templatePath} for each entry's translation");
@@ -215,10 +215,10 @@ public static class PromptGenerator
             log.Line(
                 $"{group.Key}: 対象{candidates.Count}件 " +
                 $"コーパス{methodCounts.Corpus}件 意味合成{methodCounts.Meaning}件 音訳{methodCounts.Transliteration}件 " +
-                $"NameFallback{methodCounts.NameFallback}件 ローカルLLM{methodCounts.Llm}件 生成AI{methodCounts.CloudLlm}件 未解決{candidates.Count - autoCount}件",
+                $"NameFallback{methodCounts.NameFallback}件 ローカルLLM{methodCounts.Llm}件 クラウドLLM{methodCounts.CloudLlm}件 未解決{candidates.Count - autoCount}件",
                 $"{group.Key}: target {candidates.Count} " +
                 $"corpus {methodCounts.Corpus} meaning {methodCounts.Meaning} transliteration {methodCounts.Transliteration} " +
-                $"NameFallback {methodCounts.NameFallback} local LLM {methodCounts.Llm} cloud AI {methodCounts.CloudLlm} unresolved {candidates.Count - autoCount}");
+                $"NameFallback {methodCounts.NameFallback} local LLM {methodCounts.Llm} cloud LLM {methodCounts.CloudLlm} unresolved {candidates.Count - autoCount}");
 
             // v0.53.0a: このプラグインの書き込みまで完了した直後（区切りの良い
             // タイミング）でのみチェックする——バッチ呼び出しの途中で打ち切ると
@@ -300,9 +300,9 @@ public static class PromptGenerator
             Console.WriteLine($"Target: {group.Key} ({offered} candidates, {autoCount} resolved (①〜⑥))");
             log.Line(
                 $"{group.Key}: 行{rows.Count}件（翻訳対象{offered}件） コーパス{methodCounts.Corpus}件 意味合成{methodCounts.Meaning}件 音訳{methodCounts.Transliteration}件 " +
-                $"NameFallback{methodCounts.NameFallback}件 ローカルLLM{methodCounts.Llm}件 生成AI{methodCounts.CloudLlm}件 未解決{offered - autoCount}件",
+                $"NameFallback{methodCounts.NameFallback}件 ローカルLLM{methodCounts.Llm}件 クラウドLLM{methodCounts.CloudLlm}件 未解決{offered - autoCount}件",
                 $"{group.Key}: rows {rows.Count} (to translate {offered}) corpus {methodCounts.Corpus} meaning {methodCounts.Meaning} transliteration {methodCounts.Transliteration} " +
-                $"NameFallback {methodCounts.NameFallback} local LLM {methodCounts.Llm} cloud AI {methodCounts.CloudLlm} unresolved {offered - autoCount}");
+                $"NameFallback {methodCounts.NameFallback} local LLM {methodCounts.Llm} cloud LLM {methodCounts.CloudLlm} unresolved {offered - autoCount}");
             trace?.Debug($"{group.Key}: {rows.Count} rows, resolved {autoCount} -> {templatePath}");
 
             if (cancelFlagPath != null && File.Exists(cancelFlagPath))
@@ -360,10 +360,10 @@ public static class PromptGenerator
             log.Line(
                 $"{group.Key}: 対象{candidates.Count}件 " +
                 $"コーパス{methodCounts.Corpus}件 意味合成{methodCounts.Meaning}件 音訳{methodCounts.Transliteration}件 " +
-                $"NameFallback{methodCounts.NameFallback}件 ローカルLLM{methodCounts.Llm}件 生成AI{methodCounts.CloudLlm}件 未解決{candidates.Count - autoCount}件",
+                $"NameFallback{methodCounts.NameFallback}件 ローカルLLM{methodCounts.Llm}件 クラウドLLM{methodCounts.CloudLlm}件 未解決{candidates.Count - autoCount}件",
                 $"{group.Key}: target {candidates.Count} " +
                 $"corpus {methodCounts.Corpus} meaning {methodCounts.Meaning} transliteration {methodCounts.Transliteration} " +
-                $"NameFallback {methodCounts.NameFallback} local LLM {methodCounts.Llm} cloud AI {methodCounts.CloudLlm} unresolved {candidates.Count - autoCount}");
+                $"NameFallback {methodCounts.NameFallback} local LLM {methodCounts.Llm} cloud LLM {methodCounts.CloudLlm} unresolved {candidates.Count - autoCount}");
         }
 
         WriteIndex(outputDir, index);
@@ -375,7 +375,7 @@ public static class PromptGenerator
         PluginSummaryWriter.Write(pluginSummaryPath, Path.GetDirectoryName(candidatesTsvPath) ?? ".", autoResolveByPlugin);
         Console.WriteLine($"Wrote: {pluginSummaryPath}");
         var totalAuto = index.Sum(i => i.AutoResolved);
-        // v0.53.0a: 「AI不要」という表記は、⑤ローカルLLM・⑥生成AI翻訳による解決も
+        // v0.53.0a: 「AI不要」という表記は、⑤ローカルLLM・⑥クラウドLLM翻訳による解決も
         // 含んだ件数であるにもかかわらず「AIなしで解決した件数」であるかのように
         // 読めてしまっていたため、単純に「解決（①〜⑥）」に修正した（実データから
         // ユーザーが指摘・確認済み——DESIGN_NOTES.md「既知の課題」11.参照）。
@@ -667,7 +667,7 @@ public static class PromptGenerator
         // opt-ins that chain, exactly like ①〜④ already fall through to each
         // other. See ApplyLlmStep for the shared per-candidate logic.
         resolved = ApplyLlmStep(resolved, llmLocal, "5", "ローカルLLM", "local LLM", "SJPTS_TranslationLocalLlm", plugin, retriever, auto, npcNames, log, trace, pluginDir, llmLocalBatchCharLimit, skyPatcherHints);
-        resolved = ApplyLlmStep(resolved, llmCloud, "6", "生成AI翻訳", "cloud AI", "SJPTS_TranslationCloudLlm", plugin, retriever, auto, npcNames, log, trace, pluginDir, llmCloudBatchCharLimit, skyPatcherHints);
+        resolved = ApplyLlmStep(resolved, llmCloud, "6", "クラウドLLM翻訳", "cloud LLM", "SJPTS_TranslationCloudLlm", plugin, retriever, auto, npcNames, log, trace, pluginDir, llmCloudBatchCharLimit, skyPatcherHints);
 
         var unresolved = resolved.Where(r => r.Auto == null).Select(r => r.Candidate).ToList();
 
@@ -702,7 +702,7 @@ public static class PromptGenerator
             autoResolvedChars, remainingChars, sampleRemaining, methodCounts);
     }
 
-    /// <summary>⑥生成AI翻訳（クラウド）のプラグイン単位バッチの上限に、CLIから
+    /// <summary>⑥クラウドLLM翻訳（クラウド）のプラグイン単位バッチの上限に、CLIから
     /// <c>--llm-cloud-batch-char-limit=</c>で明示指定が無いときのデフォルト値。実測
     /// （Light Greatswords.esp: 候補32件・原文計4,438文字→出力12,346トークン）
     /// から逆算した安全マージン込みの値——生成AIサービスや契約プランによって
@@ -771,7 +771,7 @@ public static class PromptGenerator
     // BuildCandidateBlockのTarget行、LlmBatchInstruction参照。
 
     /// <summary>
-    /// v0.52.1a: shared body for step 5 (ローカルLLM) and step 6 (生成AI翻訳・クラウド) —
+    /// v0.52.1a: shared body for step 5 (ローカルLLM) and step 6 (クラウドLLM翻訳・クラウド) —
     /// both are "whatever's still unresolved, try this LLM backend" with identical
     /// mechanics. The only difference between the two calls is which
     /// <paramref name="llm"/> instance (or null — step disabled) and which step
