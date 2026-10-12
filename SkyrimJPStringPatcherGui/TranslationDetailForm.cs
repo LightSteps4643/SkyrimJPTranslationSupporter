@@ -25,6 +25,12 @@ public sealed class TranslationDetailForm : Form
     private readonly Button _btnCancel = new() { Text = "保存せず閉じる", AutoSize = true };
     private readonly Label _lblEditCount = new() { AutoSize = true };
 
+    /// <summary>SkyPatcher mode (a providing MOD's translations.tsv): other columns, and the rows that cannot
+    /// take effect / are not translatable are shown greyed out and read-only (they are in the file because the
+    /// output writes them back as their original name). The plugin mode is unchanged.</summary>
+    private readonly bool _skyPatcher;
+    private readonly CheckBox _chkShowNotOffered = new() { Text = "翻訳しない行（グレーの行）も表示する", Checked = true, AutoSize = true };
+
     private List<Dictionary<string, string>> _rows = new();
     private string _path = "";
 
@@ -43,11 +49,14 @@ public sealed class TranslationDetailForm : Form
     /// window closes) — lets the opener (MainForm's grid) refresh its own
     /// 未翻訳件数/文字数 columns from the file this window just rewrote, instead
     /// of showing stale numbers until the next scan.</param>
-    public TranslationDetailForm(string pluginName, string translationsTsvPath, Action? onSaved = null)
+    /// <param name="skyPatcher">true = the file is a SkyPatcher MOD's translations.tsv (see the field's remarks).</param>
+    public TranslationDetailForm(string pluginName, string translationsTsvPath, Action? onSaved = null, bool skyPatcher = false)
     {
         _onSaved = onSaved;
+        _skyPatcher = skyPatcher;
         Text = $"翻訳状況の詳細 — {pluginName}";
-        Width = 1400;
+        // SkyPatcherのモードは列が4つ多い（元の.ini・行・対象・翻訳しない理由）ので、画面に収まる範囲で広げる。
+        Width = skyPatcher ? Math.Min(1750, Screen.PrimaryScreen?.WorkingArea.Width - 40 ?? 1750) : 1400;
         Height = 760;
         StartPosition = FormStartPosition.CenterParent;
 
@@ -68,10 +77,16 @@ public sealed class TranslationDetailForm : Form
         bottom.Controls.Add(_btnCancel);
         bottom.Controls.Add(_lblEditCount);
         _lblEditCount.Margin = new Padding(3, 10, 14, 3);
+        if (_skyPatcher)
+        {
+            _chkShowNotOffered.Margin = new Padding(3, 10, 14, 3);
+            bottom.Controls.Add(_chkShowNotOffered);
+        }
         Controls.Add(bottom);
 
         LoadData(translationsTsvPath);
         _txtFilter.TextChanged += (_, _) => ApplyFilter();
+        _chkShowNotOffered.CheckedChanged += (_, _) => ApplyFilter();
         _grid.CellValueChanged += Grid_CellValueChanged;
         _grid.CurrentCellDirtyStateChanged += (_, _) =>
         {
@@ -192,7 +207,18 @@ public sealed class TranslationDetailForm : Form
 
     private void BuildColumns()
     {
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "FormId", HeaderText = "FormId", Width = 130, ReadOnly = true });
+        if (_skyPatcher)
+        {
+            // The row key (FormId) and EditorId are internal here; what identifies a row for a person is where it is
+            // in which .ini and what it targets.
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "SourcePath", HeaderText = "元の.ini", Width = 150, ReadOnly = true });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "SourceLine", HeaderText = "行", Width = 45, ReadOnly = true });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Target", HeaderText = "対象", Width = 230, ReadOnly = true });
+        }
+        else
+        {
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "FormId", HeaderText = "FormId", Width = 130, ReadOnly = true });
+        }
         _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "RecordType", HeaderText = "種別", Width = 90, ReadOnly = true });
         _grid.Columns.Add(new DataGridViewTextBoxColumn
         {
@@ -211,6 +237,9 @@ public sealed class TranslationDetailForm : Form
         {
             Name = "Japanese",
             HeaderText = "訳文（編集可）",
+            // 残りの幅を埋める列だが、他の列が多いとき（SkyPatcherのモード）に潰れて読めなくなるので、
+            // 原文と同じ幅までは縮めない（足りなければ横にスクロールする）。
+            MinimumWidth = 320,
             Width = 320,
             ReadOnly = false,
             AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
@@ -230,15 +259,32 @@ public sealed class TranslationDetailForm : Form
         // グラデーションと合わせて、具体的にどの分類かをテキストでも確認できる
         // ようにする（ユーザー要望）。
         _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "TranslationCheck", HeaderText = "日本語化チェック", Width = 150, ReadOnly = true });
-        _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "EditorId", HeaderText = "EditorId", Width = 130, ReadOnly = true });
+        if (_skyPatcher)
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Reason", HeaderText = "翻訳しない理由", Width = 220, ReadOnly = true });
+        else
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "EditorId", HeaderText = "EditorId", Width = 130, ReadOnly = true });
     }
+
+    /// <summary>SkyPatcher mode: a row that cannot take effect or is not translatable.</summary>
+    private bool IsNotOffered(Dictionary<string, string> row) => _skyPatcher && !SkyPatcherListScanner.IsOffered(row);
 
     private void LoadData(string path)
     {
         _path = path;
         _rows = TsvReader.Read(path);
-        Bind(_rows);
-        Text = $"翻訳状況の詳細 — {Path.GetFileName(Path.GetDirectoryName(path))} — {_rows.Count}件";
+        ApplyFilter();
+        var folder = Path.GetFileName(Path.GetDirectoryName(path));
+        if (_skyPatcher)
+        {
+            var notTranslated = _rows.Where(IsNotOffered)
+                .Select(r => (r.GetValueOrDefault("Inactive", ""), r.GetValueOrDefault("Excluded", "")))
+                .ToList();
+            Text = $"翻訳状況の詳細 — {folder} — {SkyPatcherDisplay.Title(_rows.Count - notTranslated.Count, notTranslated)}";
+        }
+        else
+        {
+            Text = $"翻訳状況の詳細 — {folder} — {_rows.Count}件";
+        }
     }
 
     private void Bind(List<Dictionary<string, string>> rows)
@@ -255,18 +301,39 @@ public sealed class TranslationDetailForm : Form
             var notes = edited ? "SJPTS_ModifiedByUser" : row.GetValueOrDefault("Notes", "");
             var translationCheck = edited ? "" : row.GetValueOrDefault("TranslationCheck", "");
 
-            var idx = _grid.Rows.Add(
-                row.GetValueOrDefault("FormId", ""),
-                row.GetValueOrDefault("RecordType", ""),
-                Unescape(row.GetValueOrDefault("EnglishText", "")),
-                japanese,
-                notes,
-                translationCheck,
-                row.GetValueOrDefault("EditorId", ""));
+            var notOffered = IsNotOffered(row);
+            var idx = _skyPatcher
+                ? _grid.Rows.Add(
+                    Path.GetFileName(row.GetValueOrDefault("SourcePath", "")),
+                    row.GetValueOrDefault("SourceLine", ""),
+                    SkyPatcherDisplay.TargetLabel(Unescape(row.GetValueOrDefault("SourceFilter", ""))),
+                    row.GetValueOrDefault("RecordType", ""),
+                    Unescape(row.GetValueOrDefault("EnglishText", "")),
+                    japanese,
+                    notes,
+                    translationCheck,
+                    SkyPatcherDisplay.ReasonLabel(row.GetValueOrDefault("Inactive", ""), row.GetValueOrDefault("Excluded", "")))
+                : _grid.Rows.Add(
+                    row.GetValueOrDefault("FormId", ""),
+                    row.GetValueOrDefault("RecordType", ""),
+                    Unescape(row.GetValueOrDefault("EnglishText", "")),
+                    japanese,
+                    notes,
+                    translationCheck,
+                    row.GetValueOrDefault("EditorId", ""));
 
             var gridRow = _grid.Rows[idx];
             gridRow.Tag = key;
-            if (string.IsNullOrEmpty(japanese))
+            if (_skyPatcher)
+                gridRow.Cells["SourcePath"].ToolTipText = row.GetValueOrDefault("SourcePath", "");
+            if (notOffered)
+            {
+                // Cannot take effect / not translatable: shown for the whole picture, but not part of the work.
+                gridRow.ReadOnly = true;
+                gridRow.DefaultCellStyle.BackColor = Color.FromArgb(235, 235, 235);
+                gridRow.DefaultCellStyle.ForeColor = Color.Gray;
+            }
+            else if (string.IsNullOrEmpty(japanese))
                 gridRow.DefaultCellStyle.BackColor = Color.FromArgb(255, 245, 235); // 未翻訳のまま残っている行を薄く強調
             else if (edited)
                 gridRow.DefaultCellStyle.BackColor = Color.FromArgb(235, 245, 255); // 編集済みの行を薄く強調
@@ -390,11 +457,17 @@ public sealed class TranslationDetailForm : Form
     private void ApplyFilter()
     {
         var text = _txtFilter.Text.Trim();
-        Bind(text.Length == 0
-            ? _rows
-            : _rows.Where(r =>
+        IEnumerable<Dictionary<string, string>> shown = _rows;
+        if (_skyPatcher && !_chkShowNotOffered.Checked)
+            shown = shown.Where(r => !IsNotOffered(r));
+        if (text.Length > 0)
+            shown = shown.Where(r =>
                 r.GetValueOrDefault("EnglishText", "").Contains(text, StringComparison.OrdinalIgnoreCase) ||
                 r.GetValueOrDefault("Japanese", "").Contains(text, StringComparison.OrdinalIgnoreCase) ||
-                (_edits.TryGetValue(RowKey(r), out var e) && e.Contains(text, StringComparison.OrdinalIgnoreCase))).ToList());
+                (_edits.TryGetValue(RowKey(r), out var e) && e.Contains(text, StringComparison.OrdinalIgnoreCase)) ||
+                // SkyPatcher: also by the .ini file and the target (the columns that say where a row is from).
+                (_skyPatcher && (r.GetValueOrDefault("SourcePath", "").Contains(text, StringComparison.OrdinalIgnoreCase) ||
+                                 Unescape(r.GetValueOrDefault("SourceFilter", "")).Contains(text, StringComparison.OrdinalIgnoreCase))));
+        Bind(shown.ToList());
     }
 }

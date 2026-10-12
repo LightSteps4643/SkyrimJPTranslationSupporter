@@ -22,6 +22,8 @@ public class ProgramCliSkyPatcherTranslationTests
             WorkingDirectory = workingDirectory,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
             UseShellExecute = false,
             CreateNoWindow = true,
         };
@@ -74,6 +76,59 @@ public class ProgramCliSkyPatcherTranslationTests
                 Assert.Contains("鋼鉄の鎧", File.ReadAllText(tsv));          // resolved from the plugin side's corpus
             }
             Assert.False(Directory.Exists(Path.Combine(root, "Translation")), output);   // the plugin side's Translation/ is not created or written
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    [Fact]
+    public void SkypatcherTranslation_TellsTheProgressBarWhichModsFinished()
+    {
+        // The GUI's progress bar advances on the "Target: <name> (…)" line each processed unit prints.
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_clitest_spt_progress_{Guid.NewGuid():N}");
+        try
+        {
+            Prepare(root);
+
+            var (exitCode, output) = RunCli(root, "skypatcher-translation");
+
+            Assert.Equal(0, exitCode);
+            var finished = output.Split('\n').Select(l => l.TrimEnd('\r'))
+                .Select(l => (Ok: SkyrimJPStringPatcherGui.Services.TranslationProgressParser.TryParsePluginCompleted(l, out var name), Name: name))
+                .Where(x => x.Ok).Select(x => x.Name).ToList();
+            Assert.Equal(["ModA", "ModB"], finished);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    /// <summary>The exact argument arrays the GUI builds (SkyPatcherCliArgs) are accepted by the real exe, and the
+    /// three steps chain: a baseline reset, an ordinary translation of the selected MOD, then the output.</summary>
+    [Fact]
+    public void TheGuisOwnArguments_ResetTranslateAndGenerate_AreAcceptedAndChain()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_clitest_spt_gui_{Guid.NewGuid():N}");
+        try
+        {
+            Prepare(root);
+            var modsFile = Path.Combine(root, "mods.txt");
+            File.WriteAllText(modsFile, "ModA\r\n");
+            var cancelFlag = Path.Combine(root, "cancel.flag");
+            var import = Path.Combine(root, "import");
+
+            var reset = RunCli(root, SkyrimJPStringPatcherGui.Services.SkyPatcherCliArgs.Reset(null, import));
+            var translate = RunCli(root, SkyrimJPStringPatcherGui.Services.SkyPatcherCliArgs.Translate(modsFile, cancelFlag, import, ["--no-namefallback"]));
+            var generate = RunCli(root, SkyrimJPStringPatcherGui.Services.SkyPatcherCliArgs.Generate(modsFile, Path.Combine(root, "out")));
+
+            Assert.True(reset.ExitCode == 0, reset.Output);
+            Assert.True(translate.ExitCode == 0, translate.Output);
+            Assert.True(generate.ExitCode == 0, generate.Output);
+            Assert.True(File.Exists(Path.Combine(root, "out", "SKSE", "Plugins", "SkyPatcher", "armor", "zzz_SJPTS", "A.ini")), generate.Output);
+            Assert.False(File.Exists(Path.Combine(root, "out", "SKSE", "Plugins", "SkyPatcher", "armor", "zzz_SJPTS", "B.ini")));   // only the selected MOD
         }
         finally
         {

@@ -295,7 +295,9 @@ public static class PromptGenerator
                 WritePluginFilesWithDir(outputDir, group.Key, rows, ctx.GlobalPhraseFrequency, ctx.Retriever, ctx.Auto, ctx.NameFallback, ctx.NpcNames,
                     llmLocal, llmCloud, stages.EnableNameFallback, log, trace, discardUserEdits, llmLocalBatchCharLimit, llmCloudBatchCharLimit, hints);
             var offered = rows.Count(c => c.Inactive.Length == 0 && c.Excluded.Length == 0);
-            Console.WriteLine($"Target: {group.Key} ({rows.Count} rows, {offered} to translate, {autoCount} resolved (①〜⑥))");
+            // Same shape as the plugin side's line ("candidates" = the rows offered for translation): the GUI's
+            // progress bar reads it as "this unit just finished".
+            Console.WriteLine($"Target: {group.Key} ({offered} candidates, {autoCount} resolved (①〜⑥))");
             log.Line(
                 $"{group.Key}: 行{rows.Count}件（翻訳対象{offered}件） コーパス{methodCounts.Corpus}件 意味合成{methodCounts.Meaning}件 音訳{methodCounts.Transliteration}件 " +
                 $"NameFallback{methodCounts.NameFallback}件 ローカルLLM{methodCounts.Llm}件 生成AI{methodCounts.CloudLlm}件 未解決{offered - autoCount}件",

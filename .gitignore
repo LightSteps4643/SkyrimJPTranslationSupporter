@@ -16,6 +16,11 @@ out/
 # マッチしない（パターンの途中にスラッシュがあるため）ので、別途追加が必要。
 InterfaceText/Translation/out_temp/
 InterfaceText/Translation/bak/
+
+# SkyPatcher翻訳（skypatcher-pickup/-translation/-generate、プラグイン側とは別ツリー）の派生物。
+# PickUpTarget/out_temp・Translation/out_temp・Translation/bak・各ログがここにまとまって作られる
+# （いずれも実行のたびに作り直される・利用者のデータ）ため、フォルダごと追跡対象外にする。
+SkyPatcherText/
 # SJPTS_InterfaceText.exeを直接その場で実行したとき（--work=省略時）の既定の
 # 作業フォルダ（AppContext.BaseDirectory相対）——CLIプロジェクト直下に作られる。
 SJPTS_InterfaceText/out_temp/

@@ -70,6 +70,9 @@ public sealed class MainForm : Form
     // _tabInterfaceText: 「Interface翻訳」タブ（このクラス自身のSetBusyから見た相手）。
     private TabPage? _tabGameText;
     private TabPage? _tabInterfaceText;
+    // 「SkyPatcher(β)」サブタブの一覧。共通のボタン（再スキャン・MO2再読込＆初期化・翻訳実行・出力ファイル生成）は
+    // プラグインの一覧と、この一覧の両方に作用する。
+    private SkyPatcherListPanel? _skyPatcherPanel;
 
     internal AppSettings Settings => _settings;
     internal string ProductRoot => _productRoot ?? throw new InvalidOperationException("Product root not resolved.");
@@ -228,12 +231,13 @@ public sealed class MainForm : Form
     private readonly Button _btnRescan = new() { Text = "再スキャン（読み取りのみ）", AutoSize = true };
     private readonly Button _btnReloadMo2 = new() { Text = "MO2再読込＆初期化", AutoSize = true };
     private readonly Button _btnTranslate = new() { Text = "翻訳実行", AutoSize = true };
-    private readonly Button _btnGenerateDsd = new() { Text = "DSDファイル生成", AutoSize = true };
+    // 「DSDファイル生成」から改名: DSDのJSONと、SkyPatcherの.iniの両方を同じoutに出す。
+    private readonly Button _btnGenerateDsd = new() { Text = "出力ファイル生成", AutoSize = true };
     // v0.54.2（既知の課題22.）: 設定画面には既にimport/outフォルダを開く導線が
     // あるが、ベース画面からも直接開けるようにする——2つとも主要アクション
     // ボタンではないため、UnifyWidthsの幅統一対象には含めない。
     private readonly Button _btnOpenImportFolder = new() { Text = "xTranslator翻訳XMLインポートフォルダを開く", AutoSize = true };
-    private readonly Button _btnOpenOutFolder = new() { Text = "DSD出力フォルダを開く", AutoSize = true };
+    private readonly Button _btnOpenOutFolder = new() { Text = "出力フォルダを開く", AutoSize = true };
 
     /// <summary>True once "翻訳実行" has completed successfully at least once in
     /// this window — drives the warning if "DSDファイル生成" is pressed first
@@ -365,9 +369,10 @@ public sealed class MainForm : Form
         _menuStrip.Items.Add(_menuLog);
         MainMenuStrip = _menuStrip;
 
-        // 3 rows: 説明文＋すべて選択/解除 → 表 → 下部パネル.
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        // 2 rows: 一覧（サブタブ: ESP/ESM と SkyPatcher(β)）→ 下部パネル（両方の一覧に共通の
+        // オプション・処理ボタン）. 一覧に紐づくもの（説明文・すべて選択/解除・各行のボタン）は
+        // それぞれのサブタブの中にある。
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
@@ -419,9 +424,24 @@ public sealed class MainForm : Form
         ButtonLayout.UnifyWidths(new[] { _btnSelectAll, _btnSelectNone });
         top.Controls.Add(selectRow);
 
-        root.Controls.Add(top, 0, 0);
+        // 一覧は2つのサブタブ: プラグイン（これまでの表）と SkyPatcher(β)。共通のボタン（下部パネル）は
+        // 両方の一覧のチェックされた行に作用し、一覧に紐づくボタンはサブタブの中に置く。
+        var pluginListLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+        pluginListLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        pluginListLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        pluginListLayout.Controls.Add(top, 0, 0);
+        pluginListLayout.Controls.Add(_grid, 0, 1);
+        var pluginListPage = new TabPage("ESP/ESM");
+        pluginListPage.Controls.Add(pluginListLayout);
 
-        root.Controls.Add(_grid, 0, 1);
+        _skyPatcherPanel = new SkyPatcherListPanel(this, () => ProductRoot, () => PluginImportDir, args => RunCliAsync(args), SetBusy);
+        var skyPatcherPage = new TabPage("SkyPatcher(β)");
+        skyPatcherPage.Controls.Add(_skyPatcherPanel);
+
+        var listTabs = new TabControl { Dock = DockStyle.Fill };
+        listTabs.TabPages.Add(pluginListPage);
+        listTabs.TabPages.Add(skyPatcherPage);
+        root.Controls.Add(listTabs, 0, 0);
         _grid.CellFormatting += Grid_CellFormatting;
         _grid.CurrentCellDirtyStateChanged += Grid_CurrentCellDirtyStateChanged;
         _grid.CellValueChanged += (_, _) => UpdateSummaryLabel();
@@ -550,7 +570,7 @@ public sealed class MainForm : Form
         // RecalculateBottomHeight内のno-opガードで再入は自然に止まる）。
         bottom.Layout += (_, _) => RecalculateBottomHeight();
 
-        root.Controls.Add(bottom, 0, 2);
+        root.Controls.Add(bottom, 0, 1);
     }
 
     private void OpenSettings()
@@ -776,6 +796,9 @@ public sealed class MainForm : Form
         _grid.DataSource = _table;
         _maxUntranslatedChars = _rows.Count > 0 ? _rows.Max(r => r.UntranslatedChars) : 0;
         UpdateSummaryLabel();
+
+        // 共通の読み込み（起動時・再スキャン）はSkyPatcherの一覧も読み直す。
+        _skyPatcherPanel?.Reload();
     }
 
     private long _maxUntranslatedChars;
@@ -790,7 +813,7 @@ public sealed class MainForm : Form
         if (_rows.Count == 0)
         {
             _lblSummary.Text = "まだ翻訳データがありません。「MO2再読込＆初期化」を押すと、MODの一覧を読み込んで翻訳作業を開始できます。\n" +
-                "すでに翻訳ファイルを用意している場合は、そのまま「DSDファイル生成」を行うこともできます。\n" +
+                "すでに翻訳ファイルを用意している場合は、そのまま「出力ファイル生成」を行うこともできます。\n" +
                 "「再スキャン（読み取りのみ）」は今ある翻訳結果を確認するだけです。";
             return;
         }
@@ -876,17 +899,9 @@ public sealed class MainForm : Form
         return rows.OrderByDescending(r => r.UntranslatedChars).ToList();
     }
 
+    // 件数の計算はSkyPatcherの一覧と共有（Services/SkyPatcherListScanner.cs）。
     private static (int Total, int Untranslated, double Ratio, long UntranslatedChars, double CharsRatio) ComputeStats(
-        List<Dictionary<string, string>> rows)
-    {
-        var untranslatedRows = rows.Where(r => string.IsNullOrEmpty(r.GetValueOrDefault("Japanese"))).ToList();
-        var untranslatedCount = untranslatedRows.Count;
-        var untranslatedChars = untranslatedRows.Sum(r => (long)TsvEscaping.Unescape(r.GetValueOrDefault("EnglishText", "")).Length);
-        var totalChars = rows.Sum(r => (long)TsvEscaping.Unescape(r.GetValueOrDefault("EnglishText", "")).Length);
-        var ratio = rows.Count == 0 ? 100.0 : 100.0 * (rows.Count - untranslatedCount) / rows.Count;
-        var charsRatio = totalChars == 0 ? 100.0 : 100.0 * (totalChars - untranslatedChars) / totalChars;
-        return (rows.Count, untranslatedCount, ratio, untranslatedChars, charsRatio);
-    }
+        List<Dictionary<string, string>> rows) => TranslationStats.Compute(rows);
 
 
     private void Grid_CellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
@@ -1048,9 +1063,9 @@ public sealed class MainForm : Form
 
         var confirm = MessageBox.Show(this,
             "MO2を再読込し、翻訳状況を初期化します。\n" +
-            "全プラグインの翻訳結果（手動での編集・生成AI/ローカルLLMでの翻訳結果を含む）を\n" +
+            "全プラグインと、SkyPatcherの全MODの翻訳結果（手動での編集・生成AI/ローカルLLMでの翻訳結果を含む）を\n" +
             "すべて消去し、初期状態に戻します。よろしいですか？\n" +
-            "（実行前の状態はTranslation\\bak\\に自動でバックアップされます）\n\n" +
+            "（実行前の状態はTranslation\\bak\\と、SkyPatcherText\\Translation\\bak\\に自動でバックアップされます）\n\n" +
             "（既存の翻訳結果を消さずに現在の状況を見るだけなら「再スキャン（読み取りのみ）」を使ってください）",
             "MO2再読込＆初期化", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
         if (confirm != DialogResult.OK) return;
@@ -1071,26 +1086,44 @@ public sealed class MainForm : Form
         // 合わない）未翻訳件数がいつまでも表示され続けてしまう問題への対応。
         TranslationOutTempCleaner.Clear(existingOutTempDir);
 
+        // SkyPatcher側も同じ手順（バックアップ → out_tempの削除）。出力先は別ツリー（SkyPatcherText/）なので、
+        // プラグイン側の結果には触れない。
+        var skyPatcherOutTempDir = Path.Combine(ProductRoot, "SkyPatcherText", "Translation", "out_temp");
+        var allModFolderNames = Directory.Exists(skyPatcherOutTempDir)
+            ? Directory.GetDirectories(skyPatcherOutTempDir).Select(Path.GetFileName).OfType<string>()
+            : Enumerable.Empty<string>();
+        TranslationBackup.Backup(skyPatcherOutTempDir, allModFolderNames, "translations.tsv");
+        TranslationOutTempCleaner.Clear(skyPatcherOutTempDir);
+
         // Remember the current selection before the table gets rebuilt.
         _deselectedPlugins.Clear();
         foreach (DataRow row in _table.Rows)
             if (row["選択"] is false)
                 _deselectedPlugins.Add((string)row["プラグイン"]);
+        _skyPatcherPanel?.RememberDeselected();
 
         SetBusy(true);
         try
         {
-            if (!await RunCliAsync(BuildPickupTargetArgs(Mo2Dir))) return;
-            // Always ①バニラコーパスのみ, regardless of this window's current checkbox
-            // state — this is a baseline refresh (e.g. after collecting more
-            // xTranslator files), not a preview of what "翻訳実行" would currently
-            // do with the checked options.
-            // v0.55.2: --discard-user-edits was missing here, so this button
-            // silently PRESERVED every already-resolved row instead of the full
-            // reset its own confirmation dialog/comment promises ("初期状態に
-            // 戻します。元に戻せません。") — see DESIGN_NOTES.md's Integration
-            // scenario ⑪ entry for how this was found and confirmed.
-            if (!await RunCliAsync(new[] { "translation", "PickUpTarget/out_temp", "Translation/out_temp", "--all", "--no-meaning", "--no-translit", "--no-namefallback", "--discard-user-edits", $"--import={PluginImportDir}" })) return;
+            // プラグイン → SkyPatcher の順（SkyPatcher側はプラグイン側のコーパスを使うため）。途中で失敗したら、
+            // 後続は実行しない。
+            var succeeded = await StepRunner.RunUntilFailureAsync(
+            [
+                () => RunCliAsync(BuildPickupTargetArgs(Mo2Dir)),
+                // Always ①バニラコーパスのみ, regardless of this window's current checkbox
+                // state — this is a baseline refresh (e.g. after collecting more
+                // xTranslator files), not a preview of what "翻訳実行" would currently
+                // do with the checked options.
+                // v0.55.2: --discard-user-edits was missing here, so this button
+                // silently PRESERVED every already-resolved row instead of the full
+                // reset its own confirmation dialog/comment promises ("初期状態に
+                // 戻します。元に戻せません。") — see DESIGN_NOTES.md's Integration
+                // scenario ⑪ entry for how this was found and confirmed.
+                () => RunCliAsync(new[] { "translation", "PickUpTarget/out_temp", "Translation/out_temp", "--all", "--no-meaning", "--no-translit", "--no-namefallback", "--discard-user-edits", $"--import={PluginImportDir}" }),
+                () => RunCliAsync(SkyPatcherCliArgs.PickUp(Mo2Dir, _settings.Mo2ModsDirOverride, _settings.Mo2ProfileDirOverride, _settings.Mo2OverwriteDirOverride)),
+                () => RunCliAsync(SkyPatcherCliArgs.Reset(modsFilePath: null, PluginImportDir)),
+            ]);
+            if (!succeeded) return;
             LoadData();
         }
         finally
@@ -1114,10 +1147,12 @@ public sealed class MainForm : Form
             return;
         }
 
+        // 両方の一覧のチェックされた行が対象（プラグイン → SkyPatcher の順）。
         var selectedPlugins = GetSelectedPlugins();
-        if (selectedPlugins.Count == 0)
+        var selectedMods = _skyPatcherPanel?.SelectedMods() ?? new List<string>();
+        if (selectedPlugins.Count == 0 && selectedMods.Count == 0)
         {
-            MessageBox.Show(this, "翻訳対象のプラグインを少なくとも1つ選択してください。", "入力エラー", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, "翻訳対象のプラグインまたはSkyPatcherのMODを、少なくとも1つ選択してください。", "入力エラー", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -1127,6 +1162,7 @@ public sealed class MainForm : Form
         // Looping single-plugin invocations was repeating BuildContext's ~10s
         // corpus/dictionary setup once per selected plugin (up to 175 times).
         var pluginsFilePath = Path.Combine(Path.GetTempPath(), $"sjpts_plugins_{Guid.NewGuid():N}.txt");
+        var modsFilePath = Path.Combine(Path.GetTempPath(), $"sjpts_sp_mods_{Guid.NewGuid():N}.txt");
         // v0.53.0a: 既知の課題15.——このパス自体は作らず、パスだけ生成してCLIに渡す。
         // ユーザーがキャンセルを要求したときだけ実際にファイルを作成し、CLI側は
         // プラグインの区切りごとにこのパスの存在を確認する。
@@ -1136,18 +1172,38 @@ public sealed class MainForm : Form
         try
         {
             await File.WriteAllLinesAsync(pluginsFilePath, selectedPlugins);
-            var args = new List<string> { "translation", "PickUpTarget/out_temp", "Translation/out_temp", $"--plugins-file={pluginsFilePath}", $"--cancel-flag-path={_activeCancelFlagPath}", $"--import={PluginImportDir}" };
-            args.AddRange(BuildOptionFlags());
-            // v0.60.0: 実行ログウィンドウの進捗バー用——選択プラグインそれぞれの
-            // 未翻訳文字数（ベース画面の一覧で既に計算済み、_rows参照）。
-            var pluginCharCounts = selectedPlugins.ToDictionary(
-                p => p,
-                p => _rows.FirstOrDefault(r => r.Plugin.Equals(p, StringComparison.OrdinalIgnoreCase))?.UntranslatedChars ?? 0L,
-                StringComparer.OrdinalIgnoreCase);
-            if (!await RunCliAsync(args, pluginCharCounts)) return;
+            await File.WriteAllLinesAsync(modsFilePath, selectedMods);
+            var optionFlags = BuildOptionFlags();
+
+            var succeeded = await StepRunner.RunUntilFailureAsync(
+            [
+                async () =>
+                {
+                    if (selectedPlugins.Count == 0) return true;
+                    var args = new List<string> { "translation", "PickUpTarget/out_temp", "Translation/out_temp", $"--plugins-file={pluginsFilePath}", $"--cancel-flag-path={_activeCancelFlagPath}", $"--import={PluginImportDir}" };
+                    args.AddRange(optionFlags);
+                    // v0.60.0: 実行ログウィンドウの進捗バー用——選択プラグインそれぞれの
+                    // 未翻訳文字数（ベース画面の一覧で既に計算済み、_rows参照）。
+                    var pluginCharCounts = selectedPlugins.ToDictionary(
+                        p => p,
+                        p => _rows.FirstOrDefault(r => r.Plugin.Equals(p, StringComparison.OrdinalIgnoreCase))?.UntranslatedChars ?? 0L,
+                        StringComparer.OrdinalIgnoreCase);
+                    return await RunCliAsync(args, pluginCharCounts);
+                },
+                async () =>
+                {
+                    // プラグイン側でキャンセルされたら、SkyPatcher側には進まない（フラグが残っていると、
+                    // 最初の1MODを処理した直後に止まってしまうため）。
+                    if (selectedMods.Count == 0 || _cancelRequestedForCurrentRun) return true;
+                    var args = SkyPatcherCliArgs.Translate(modsFilePath, _activeCancelFlagPath!, PluginImportDir, optionFlags);
+                    return await RunCliAsync(args, _skyPatcherPanel!.UntranslatedCharsByMod(selectedMods));
+                },
+            ]);
+            if (!succeeded) return;
 
             _translationExecuted = true;
             RefreshRowsFromTranslations(selectedPlugins);
+            _skyPatcherPanel?.Reload();
 
             if (_cancelRequestedForCurrentRun)
             {
@@ -1164,7 +1220,8 @@ public sealed class MainForm : Form
             // のみ」警告する厳しい条件だったが、これだと打ち切り等でバッチの
             // 一部だけが失敗したケース（1件以上は解決済み）を見逃していた。
             // 詳細はServices/TranslationCompletionMessages.cs参照。
-            var stillUntranslated = selectedPlugins.Sum(p => _rows.FirstOrDefault(r => r.Plugin.Equals(p, StringComparison.OrdinalIgnoreCase))?.Untranslated ?? 0);
+            var stillUntranslated = selectedPlugins.Sum(p => _rows.FirstOrDefault(r => r.Plugin.Equals(p, StringComparison.OrdinalIgnoreCase))?.Untranslated ?? 0)
+                + (_skyPatcherPanel?.UntranslatedCount(selectedMods) ?? 0);
             if ((_chkCloudAi.Checked || _chkLlm.Checked) && stillUntranslated > 0)
             {
                 _logWindow.ShowAndActivate();
@@ -1174,7 +1231,7 @@ public sealed class MainForm : Form
             else
             {
                 MessageBox.Show(this, "翻訳が完了しました。翻訳内容を確認してください（「詳細を確認」ボタン、またはtranslations.tsvを直接開く）。\n" +
-                    "内容に問題なければ「DSDファイル生成」でDSDファイルを作成してください。",
+                    "内容に問題なければ「出力ファイル生成」で、DSDファイル（SkyPatcherを選択している場合は.iniも）を作成してください。",
                     "翻訳完了", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
@@ -1183,6 +1240,7 @@ public sealed class MainForm : Form
             SetBusy(false);
             _logWindow.SetCancelEnabled(false);
             try { File.Delete(pluginsFilePath); } catch { /* best-effort cleanup */ }
+            try { File.Delete(modsFilePath); } catch { /* best-effort cleanup */ }
             try { if (_activeCancelFlagPath != null) File.Delete(_activeCancelFlagPath); } catch { /* best-effort cleanup */ }
             _activeCancelFlagPath = null;
         }
@@ -1190,10 +1248,12 @@ public sealed class MainForm : Form
 
     private async void BtnGenerateDsd_Click(object? sender, EventArgs e)
     {
+        // 両方の一覧のチェックされた行が対象: DSDのJSON（プラグイン）と、SkyPatcherの.iniを、同じoutに出す。
         var selectedPlugins = GetSelectedPlugins();
-        if (selectedPlugins.Count == 0)
+        var selectedMods = _skyPatcherPanel?.SelectedMods() ?? new List<string>();
+        if (selectedPlugins.Count == 0 && selectedMods.Count == 0)
         {
-            MessageBox.Show(this, "DSDファイル生成の対象プラグインを少なくとも1つ選択してください。", "入力エラー", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, "出力ファイル生成の対象のプラグインまたはSkyPatcherのMODを、少なくとも1つ選択してください。", "入力エラー", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -1201,8 +1261,8 @@ public sealed class MainForm : Form
         {
             var result = MessageBox.Show(this,
                 "このウィンドウではまだ「翻訳実行」を行っていません。\n" +
-                "翻訳されていない文字列は、原文（英語等）のままDSDファイルに出力されます。\n\n" +
-                "このままDSDファイルを生成しますか？（翻訳してから生成する場合は「キャンセル」を押してください）",
+                "翻訳されていない文字列は、原文（英語等）のまま出力ファイル（DSDファイル・SkyPatcherの.ini）に出力されます。\n\n" +
+                "このまま出力ファイルを生成しますか？（翻訳してから生成する場合は「キャンセル」を押してください）",
                 "翻訳が未実行です", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
             if (result != DialogResult.OK) return;
         }
@@ -1211,21 +1271,35 @@ public sealed class MainForm : Form
         // 2026-09-12, issue #6: --plugins-file, same convention as「翻訳実行」
         // (BtnTranslate_Click) and Interface翻訳の--mods-file — restricts DSD
         // output to the DataGridViewでチェックされたプラグインのみ（以前は常に
-        // Translation/out_temp全体を処理していた）。
+        // Translation/out_temp全体を処理していた）。SkyPatcherは--mods-file。
         var pluginsFilePath = Path.Combine(Path.GetTempPath(), $"sjpts_dsd_plugins_{Guid.NewGuid():N}.txt");
+        var modsFilePath = Path.Combine(Path.GetTempPath(), $"sjpts_sp_gen_mods_{Guid.NewGuid():N}.txt");
         try
         {
             await File.WriteAllLinesAsync(pluginsFilePath, selectedPlugins);
+            await File.WriteAllLinesAsync(modsFilePath, selectedMods);
             var outDir = PluginOutDir;
-            if (!await RunCliAsync(new[] { "generatedsdfile", "Translation/out_temp", outDir, $"--plugins-file={pluginsFilePath}" })) return;
 
-            MessageBox.Show(this, $"DSDファイルの生成が完了しました（選択中の{selectedPlugins.Count}プラグイン分）。出力先フォルダを確認してください:\n{outDir}",
+            var succeeded = await StepRunner.RunUntilFailureAsync(
+            [
+                () => selectedPlugins.Count == 0
+                    ? Task.FromResult(true)
+                    : RunCliAsync(new[] { "generatedsdfile", "Translation/out_temp", outDir, $"--plugins-file={pluginsFilePath}" }),
+                () => selectedMods.Count == 0
+                    ? Task.FromResult(true)
+                    : RunCliAsync(SkyPatcherCliArgs.Generate(modsFilePath, outDir)),
+            ]);
+            if (!succeeded) return;
+
+            MessageBox.Show(this,
+                $"出力ファイルの生成が完了しました（プラグイン{selectedPlugins.Count}件、SkyPatcherのMOD{selectedMods.Count}件分）。出力先フォルダを確認してください:\n{outDir}",
                 "完了", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         finally
         {
             SetBusy(false);
             try { File.Delete(pluginsFilePath); } catch { /* best-effort cleanup */ }
+            try { File.Delete(modsFilePath); } catch { /* best-effort cleanup */ }
         }
     }
 
@@ -1248,6 +1322,7 @@ public sealed class MainForm : Form
         _chkCloudAi.Enabled = !busy;
         _numLlmBatchCharLimit.Enabled = !busy;
         _numCloudAiBatchCharLimit.Enabled = !busy;
+        _skyPatcherPanel?.SetBusy(busy);
         if (_tabInterfaceText != null) _tabInterfaceText.Enabled = !busy;
         // v0.58.6: CLI実行（翻訳実行・再スキャン・初期化等）の完了直後にも
         // bottomパネルの高さを補正し直す（RecalculateBottomHeightの他の
