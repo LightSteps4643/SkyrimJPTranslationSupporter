@@ -52,7 +52,11 @@ public static class PromptGenerator
         PrecedentRetriever Retriever, AutoTranslator Auto, NameFallbackTranslator NameFallback,
         IReadOnlySet<string> NpcNames, ModPhraseGlossary.GlobalNgramFrequency GlobalPhraseFrequency);
 
-    private static TranslationContext BuildContext(string candidatesTsvPath, string corpusTsvPath, string importDir, string outputDir, RunLog log, TraceLog? trace, TranslationStageOptions stages)
+    /// <param name="extraFrequencyTexts">Texts that count toward "how common is this phrase across the load order"
+    /// (the MOD-specific phrase detection) but are NOT candidates of this run — the SkyPatcher run passes the
+    /// plugin side's candidates, so a phrase every plugin uses is not mistaken for one invented by a SkyPatcher mod.</param>
+    private static TranslationContext BuildContext(string candidatesTsvPath, string corpusTsvPath, string importDir, string outputDir, RunLog log, TraceLog? trace, TranslationStageOptions stages,
+        IEnumerable<string>? extraFrequencyTexts = null)
     {
         var allCandidates = CandidateIo.ReadTsv(candidatesTsvPath);
         var corpus = CorpusIo.ReadTsv(corpusTsvPath);
@@ -106,7 +110,8 @@ public static class PromptGenerator
         // （GlobalNgramFrequencyの remarks 参照。以前はプラグインごとに毎回
         // 再構築しており、--all実行が約6倍（10秒→62秒、183プラグインで実測）
         // 遅くなっていた）。
-        var globalPhraseFrequency = ModPhraseGlossary.GlobalNgramFrequency.Build(allCandidates.Select(c => c.CurrentText).ToList());
+        var globalPhraseFrequency = ModPhraseGlossary.GlobalNgramFrequency.Build(
+            allCandidates.Select(c => c.CurrentText).Concat(extraFrequencyTexts ?? []).ToList());
 
         return new TranslationContext(allCandidates, corpus, imported, reference, retriever, auto, nameFallback, npcNames, globalPhraseFrequency);
     }
@@ -236,6 +241,77 @@ public static class PromptGenerator
 
         Console.WriteLine($"Done. Resolved (①〜⑥): {totalAuto} / {totalCandidates}");
         trace?.Info($"Done (multi-plugin): resolved {totalAuto}/{totalCandidates} across {byPlugin.Count} plugin(s)");
+    }
+
+    /// <summary>SkyPatcher run (`skypatcher-translation`): the same resolution chain as the plugin side, over the
+    /// SkyPatcher rows of <paramref name="candidatesTsvPath"/> (written by `skypatcher-pickup`), one work folder per
+    /// providing MOD (named exactly after it). <paramref name="corpusTsvPath"/> is the plugin side's corpus.tsv.
+    /// <paramref name="pluginTranslationsDir"/> is the plugin side's Translation/out_temp: its finished
+    /// translations of a trusted method are offered to the LLM as style hints. Never touches the plugin
+    /// side's folders — only reads them.</summary>
+    /// <param name="targetMods">Only these MODs (case-insensitive), or null for every MOD in the candidates.</param>
+    public static void RunSkyPatcher(string candidatesTsvPath, string corpusTsvPath, string importDir, IReadOnlyCollection<string>? targetMods,
+        string pluginTranslationsDir, string outputDir, RunLog log, TraceLog? trace = null,
+        ITextTranslator? llmLocal = null, ITextTranslator? llmCloud = null, TranslationStageOptions? stageOptions = null,
+        bool discardUserEdits = false, int llmLocalBatchCharLimit = DefaultLocalLlmBatchCharLimit,
+        int llmCloudBatchCharLimit = DefaultLlmBatchCharLimit, string? cancelFlagPath = null)
+    {
+        var stages = stageOptions ?? TranslationStageOptions.Default;
+
+        // The rest of the load order, for the frequency table: the plugin side's candidates.tsv, which sits next
+        // to the corpus.tsv it built. Only counted — never translated by this run.
+        var pluginCandidatesPath = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(corpusTsvPath)) ?? ".", "candidates.tsv");
+        var pluginTexts = File.Exists(pluginCandidatesPath)
+                          && !string.Equals(Path.GetFullPath(pluginCandidatesPath), Path.GetFullPath(candidatesTsvPath), StringComparison.OrdinalIgnoreCase)
+            ? CandidateIo.ReadTsv(pluginCandidatesPath).Select(c => c.CurrentText).ToList()
+            : null;
+        if (pluginTexts == null)
+            log.Line("プラグイン側の候補（candidates.tsv）が見つからないため、MOD特有の語句の検出は、SkyPatcherの行だけで頻度を数えた",
+                "The plugin side's candidates.tsv was not found: MOD-specific phrase detection counted frequencies over the SkyPatcher rows only");
+
+        var ctx = BuildContext(candidatesTsvPath, corpusTsvPath, importDir, outputDir, log, trace, stages, pluginTexts);
+        var hints = PluginTranslationHints.Load(pluginTranslationsDir, trace);
+
+        var wanted = targetMods == null ? null : new HashSet<string>(targetMods, StringComparer.OrdinalIgnoreCase);
+        var byMod = ctx.AllCandidates
+            .Where(c => c.SourcePath.Length > 0 && (wanted == null || wanted.Contains(c.WinningPlugin)))
+            .GroupBy(c => c.WinningPlugin)
+            .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        log.Section("入力", "Input");
+        log.Line($"対象MOD: {byMod.Count}件、行 {byMod.Sum(g => g.Count())}", $"Target mods: {byMod.Count}, rows {byMod.Sum(g => g.Count())}");
+        log.Line($"コーパス: {ctx.Corpus.Count - ctx.Imported.Count - ctx.Reference.Count}件、xTranslatorインポート: {ctx.Imported.Count}件",
+            $"Corpus: {ctx.Corpus.Count - ctx.Imported.Count - ctx.Reference.Count}, xTranslator import: {ctx.Imported.Count}");
+        log.Line($"プラグイン側の訳（LLMへのヒント）: {hints.Count}件（{pluginTranslationsDir}）", $"Plugin-side translations offered as hints: {hints.Count} ({pluginTranslationsDir})");
+        Console.WriteLine($"Translating SkyPatcher rows for {byMod.Count} mod(s)...");
+
+        var processed = 0;
+        foreach (var group in byMod)
+        {
+            processed++;
+            var rows = group.ToList();
+            var (_, templatePath, _, autoCount, _, _, _, _, methodCounts) =
+                WritePluginFilesWithDir(outputDir, group.Key, rows, ctx.GlobalPhraseFrequency, ctx.Retriever, ctx.Auto, ctx.NameFallback, ctx.NpcNames,
+                    llmLocal, llmCloud, stages.EnableNameFallback, log, trace, discardUserEdits, llmLocalBatchCharLimit, llmCloudBatchCharLimit, hints);
+            var offered = rows.Count(c => c.Inactive.Length == 0 && c.Excluded.Length == 0);
+            Console.WriteLine($"Target: {group.Key} ({rows.Count} rows, {offered} to translate, {autoCount} resolved (①〜⑥))");
+            log.Line(
+                $"{group.Key}: 行{rows.Count}件（翻訳対象{offered}件） コーパス{methodCounts.Corpus}件 意味合成{methodCounts.Meaning}件 音訳{methodCounts.Transliteration}件 " +
+                $"NameFallback{methodCounts.NameFallback}件 ローカルLLM{methodCounts.Llm}件 生成AI{methodCounts.CloudLlm}件 未解決{offered - autoCount}件",
+                $"{group.Key}: rows {rows.Count} (to translate {offered}) corpus {methodCounts.Corpus} meaning {methodCounts.Meaning} transliteration {methodCounts.Transliteration} " +
+                $"NameFallback {methodCounts.NameFallback} local LLM {methodCounts.Llm} cloud AI {methodCounts.CloudLlm} unresolved {offered - autoCount}");
+            trace?.Debug($"{group.Key}: {rows.Count} rows, resolved {autoCount} -> {templatePath}");
+
+            if (cancelFlagPath != null && File.Exists(cancelFlagPath))
+            {
+                var remaining = byMod.Count - processed;
+                Console.WriteLine($"Cancelled by user after [{group.Key}] — {remaining} mod(s) left unprocessed (re-run to continue; already-resolved entries are preserved).");
+                trace?.Info($"Cancelled by user after [{group.Key}] ({remaining} mod(s) left unprocessed)");
+                return;
+            }
+        }
+        Console.WriteLine($"Done. {byMod.Count} mod(s).");
     }
 
     /// <summary>ロードオーダー全体の候補を、勝者プラグインごとに一括生成する。</summary>
@@ -425,18 +501,35 @@ public static class PromptGenerator
         return File.Exists(path) ? CorpusIo.ReadTsv(path) : new List<CorpusEntry>();
     }
 
+    /// <param name="skyPatcherHints">Non-null = this is the SkyPatcher run, <paramref name="plugin"/> is a providing MOD
+    /// (its folder keeps the MOD name exactly — <see cref="MakeSafeFolderName"/> would cut "v1.2" at the dot), and the
+    /// list is the plugin side's finished translations to offer the LLM as style hints. Rows that cannot take effect
+    /// or are not translatable are kept in translations.tsv but never translated nor sent to an LLM. Null = the
+    /// unchanged plugin behaviour.</param>
     private static (string PromptPath, string TemplatePath, string PluginDir, int AutoResolvedCount, int UniqueForAi,
         long AutoResolvedChars, long RemainingChars, List<string> SampleRemaining,
         (int Corpus, int Meaning, int Transliteration, int NameFallback, int Llm, int CloudLlm) MethodCounts) WritePluginFilesWithDir(
         string outputDir, string plugin, List<Candidate> candidates, ModPhraseGlossary.GlobalNgramFrequency globalPhraseFrequency, PrecedentRetriever retriever, AutoTranslator auto,
         NameFallbackTranslator nameFallback, IReadOnlySet<string> npcNames, ITextTranslator? llmLocal, ITextTranslator? llmCloud, bool enableNameFallback,
         RunLog log, TraceLog? trace = null, bool discardUserEdits = false,
-        int llmLocalBatchCharLimit = DefaultLocalLlmBatchCharLimit, int llmCloudBatchCharLimit = DefaultLlmBatchCharLimit)
+        int llmLocalBatchCharLimit = DefaultLocalLlmBatchCharLimit, int llmCloudBatchCharLimit = DefaultLlmBatchCharLimit,
+        IReadOnlyList<CorpusEntry>? skyPatcherHints = null)
     {
         trace?.Trace($"Plugin processing start: {plugin} ({candidates.Count} candidates)");
-        var safeName = MakeSafeFolderName(plugin);
+        var skyPatcher = skyPatcherHints != null;
+        var safeName = skyPatcher ? plugin : MakeSafeFolderName(plugin);
         var pluginDir = Path.Combine(outputDir, safeName);
         Directory.CreateDirectory(pluginDir);
+        if (skyPatcher)
+            File.WriteAllText(Path.Combine(pluginDir, "mod_folder_name.txt"), plugin, new System.Text.UTF8Encoding(false));
+
+        // SkyPatcher: a row that cannot take effect (Inactive) or is not offered for translation (Excluded) is
+        // listed in translations.tsv — the output needs it — but goes through none of the steps below.
+        var notOffered = skyPatcher
+            ? candidates.Where(c => c.Inactive.Length > 0 || c.Excluded.Length > 0).ToList()
+            : new List<Candidate>();
+        if (skyPatcher)
+            candidates = candidates.Where(c => c.Inactive.Length == 0 && c.Excluded.Length == 0).ToList();
 
         // 2026-09-17: MOD特有語彙ヒント（mod_glossary.tsv、⑤/⑥のissue #4「c」に
         // 合流させる。④専用のData/mod_glossary/*.tsvとは別物）——このMOD自身の
@@ -461,13 +554,15 @@ public static class PromptGenerator
         // "初期化"/"MO2再読込＆初期化") skips this entirely for a clean ①のみ
         // reset.
         var existing = discardUserEdits
-            ? new Dictionary<(string, string, int), (string Japanese, string Method, string TranslationCheck)>()
+            ? new Dictionary<(string, string, int), (string Japanese, string Method, string TranslationCheck, string English)>()
             : ReadExistingTranslations(templatePath);
         if (existing.Count > 0)
             trace?.Debug($"{plugin}: carrying forward {existing.Count} already-translated row(s) from existing {templatePath}");
 
         var resolved = ordered
-            .Select(c => existing.TryGetValue((c.FormId, c.RecordType, c.Index), out var preserved)
+            // SkyPatcher: the key is the line (path/filter/occurrence), not the record, so the same key can
+            // come to hold a different name after a mod update — then the old translation no longer fits.
+            .Select(c => existing.TryGetValue((c.FormId, c.RecordType, c.Index), out var preserved) && (!skyPatcher || preserved.English == c.CurrentText)
                 ? (Candidate: c, Auto: (AutoTranslationResult?)new AutoTranslationResult(preserved.Japanese, preserved.Method, "", preserved.TranslationCheck))
                 : !string.IsNullOrEmpty(c.DsdCoveredJapanese)
                     // 2026-09-18: already covered by an existing DSD json
@@ -522,7 +617,9 @@ public static class PromptGenerator
         // needs to stay reviewable.
         // v0.31.0: this plugin's own scoped glossary, and the blocking words the
         // chain reports on the way through — see ModGlossary's remarks.
-        var modGlossary = ModGlossary.LoadFor(plugin);
+        // SkyPatcher: the ④ word glossary lives under Data/mod_glossary/<plugin name>.tsv, a plugin-name
+        // namespace that does not fit MOD names; the per-MOD "MOD固有文字列の注釈" in the work folder still applies.
+        var modGlossary = skyPatcher ? ModGlossary.Empty : ModGlossary.LoadFor(plugin);
         var blockedBy = new Dictionary<string, (int Count, string Example)>(StringComparer.OrdinalIgnoreCase);
 
         // v0.49.1: --no-namefallback skips 4. entirely — candidates it would have
@@ -552,9 +649,10 @@ public static class PromptGenerator
                 .ToList();
         }
 
-        ModGlossary.WriteTemplate(plugin, blockedBy
-            .Select(kv => new ModGlossary.Blocker(kv.Key, kv.Value.Count, kv.Value.Example))
-            .ToList());
+        if (!skyPatcher)
+            ModGlossary.WriteTemplate(plugin, blockedBy
+                .Select(kv => new ModGlossary.Blocker(kv.Key, kv.Value.Count, kv.Value.Example))
+                .ToList());
         if (modGlossary.FilledCount > 0)
             log.Line($"MOD用語集: {plugin} → {modGlossary.FilledCount}語を適用", $"MOD glossary: {plugin} -> applied {modGlossary.FilledCount} word(s)");
 
@@ -566,19 +664,25 @@ public static class PromptGenerator
         // entirely) and tries a cloud AI backend — the two are independent
         // opt-ins that chain, exactly like ①〜④ already fall through to each
         // other. See ApplyLlmStep for the shared per-candidate logic.
-        resolved = ApplyLlmStep(resolved, llmLocal, "5", "ローカルLLM", "local LLM", "SJPTS_TranslationLocalLlm", plugin, retriever, auto, npcNames, log, trace, pluginDir, llmLocalBatchCharLimit);
-        resolved = ApplyLlmStep(resolved, llmCloud, "6", "生成AI翻訳", "cloud AI", "SJPTS_TranslationCloudLlm", plugin, retriever, auto, npcNames, log, trace, pluginDir, llmCloudBatchCharLimit);
+        resolved = ApplyLlmStep(resolved, llmLocal, "5", "ローカルLLM", "local LLM", "SJPTS_TranslationLocalLlm", plugin, retriever, auto, npcNames, log, trace, pluginDir, llmLocalBatchCharLimit, skyPatcherHints);
+        resolved = ApplyLlmStep(resolved, llmCloud, "6", "生成AI翻訳", "cloud AI", "SJPTS_TranslationCloudLlm", plugin, retriever, auto, npcNames, log, trace, pluginDir, llmCloudBatchCharLimit, skyPatcherHints);
 
         var unresolved = resolved.Where(r => r.Auto == null).Select(r => r.Candidate).ToList();
 
         trace?.Trace($"Write start: {promptPath} (unresolved {unresolved.Count})");
+        // (SkyPatcher: no "decide these words" ask — it would point at Data/mod_glossary/<plugin name>.tsv.)
         var uniqueForAi = WritePrompt(promptPath, plugin, unresolved, retriever, auto, npcNames,
-            blockedBy.Select(kv => new ModGlossary.Blocker(kv.Key, kv.Value.Count, kv.Value.Example))
-                .OrderByDescending(b => b.BlockedCount).ThenBy(b => b.Word, StringComparer.OrdinalIgnoreCase).ToList());
+            skyPatcher
+                ? new List<ModGlossary.Blocker>()
+                : blockedBy.Select(kv => new ModGlossary.Blocker(kv.Key, kv.Value.Count, kv.Value.Example))
+                    .OrderByDescending(b => b.BlockedCount).ThenBy(b => b.Word, StringComparer.OrdinalIgnoreCase).ToList());
         trace?.Trace($"Write done: {promptPath} (deduplicated for AI chat: {uniqueForAi})");
 
         trace?.Trace($"Write start: {templatePath} ({resolved.Count} entries)");
-        WriteTranslationTemplate(templatePath, resolved);
+        if (skyPatcher)
+            WriteSkyPatcherTranslationTemplate(templatePath, resolved, notOffered);
+        else
+            WriteTranslationTemplate(templatePath, resolved);
         trace?.Trace($"Write done: {templatePath}");
 
         // v0.19.0: per-plugin AutoTranslator-solvability stats, for
@@ -700,7 +804,8 @@ public static class PromptGenerator
         List<(Candidate Candidate, AutoTranslationResult? Auto)> resolved, ITextTranslator? llm,
         string stepNumber, string stepLabelJa, string stepLabelEn, string methodTag,
         string plugin, PrecedentRetriever retriever, AutoTranslator auto, IReadOnlySet<string> npcNames,
-        RunLog log, TraceLog? trace, string pluginDir, int batchCharLimit = DefaultLlmBatchCharLimit)
+        RunLog log, TraceLog? trace, string pluginDir, int batchCharLimit = DefaultLlmBatchCharLimit,
+        IReadOnlyList<CorpusEntry>? extraHintPool = null)
     {
         if (llm == null) return resolved;
 
@@ -722,10 +827,12 @@ public static class PromptGenerator
             UnflattenAnswer = s => s.Replace(MultilineBreakMarker, "\n"),
             StripSpuriousBoundaryMarker = StripSpuriousBoundaryMarker,
             InstructionText = LlmBatchInstruction,
-            ExternalSameModBaseline = BuildSameModHintPool(resolved, plugin)
-                .Concat(ModPhraseGlossary.LoadFilled(pluginDir)
-                    .Select(kv => new CorpusEntry(kv.Key, kv.Value, plugin, "SJPTS_ModifiedByUser", "")))
-                .ToList(),
+            ExternalSameModBaseline = WithExtraHints(
+                BuildSameModHintPool(resolved, plugin)
+                    .Concat(ModPhraseGlossary.LoadFilled(pluginDir)
+                        .Select(kv => new CorpusEntry(kv.Key, kv.Value, plugin, "SJPTS_ModifiedByUser", "")))
+                    .ToList(),
+                extraHintPool),
             SameModSourceLabel = plugin,
             Translator = llm,
             BatchCharLimit = batchCharLimit,
@@ -744,6 +851,15 @@ public static class PromptGenerator
         return resolved.Select(r => r.Auto == null && answers.TryGetValue(r.Candidate.CurrentText, out var a)
             ? (r.Candidate, Auto: (AutoTranslationResult?)a)
             : r).ToList();
+    }
+
+    /// <summary>SkyPatcher run: adds the plugin side's finished translations to the hint pool. This run's own
+    /// translations of the same English text come first — an external entry for text the pool already holds is dropped.</summary>
+    private static List<CorpusEntry> WithExtraHints(List<CorpusEntry> own, IReadOnlyList<CorpusEntry>? extra)
+    {
+        if (extra == null || extra.Count == 0) return own;
+        var ownEnglish = own.Select(e => e.English).ToHashSet(StringComparer.Ordinal);
+        return own.Concat(extra.Where(e => !ownEnglish.Contains(e.English))).ToList();
     }
 
     /// <summary>issue #4 (c): builds the pool <see cref="SameModHintBlockBuilder.BuildBlock"/>
@@ -1249,6 +1365,25 @@ public static class PromptGenerator
         }
     }
 
+    /// <summary>SkyPatcher's translations.tsv: the nine columns every translations.tsv has, then the five that tie a
+    /// row to its place in the source .ini (the generate step needs them). Rows that were not offered for
+    /// translation (cannot take effect / not translatable) are listed after the translated ones with an empty
+    /// Japanese column — the output writes them back as their original name.</summary>
+    private static void WriteSkyPatcherTranslationTemplate(string path,
+        List<(Candidate Candidate, AutoTranslationResult? Auto)> rows, List<Candidate> notOffered)
+    {
+        using var w = new StreamWriter(path, false, System.Text.Encoding.UTF8);
+        w.WriteLine(string.Join('\t', "FormId", "WinningPlugin", "RecordType", "EnglishText", "Japanese", "Notes", "Index", "EditorId", "TranslationCheck",
+            "SourcePath", "SourceFilter", "SourceLine", "Inactive", "Excluded"));
+        foreach (var (c, auto) in rows.Concat(notOffered.Select(c => (Candidate: c, Auto: (AutoTranslationResult?)null))))
+        {
+            var notes = auto?.Method ?? c.Warning;
+            w.WriteLine(string.Join('\t', c.FormId, c.WinningPlugin, c.RecordType, Escape(c.CurrentText),
+                Escape(auto?.Japanese ?? ""), Escape(notes), c.Index, Escape(c.EditorId), auto?.TranslationCheck ?? "",
+                Escape(c.SourcePath), Escape(c.SourceFilter), c.SourceLine > 0 ? c.SourceLine.ToString() : "", Escape(c.Inactive), Escape(c.Excluded)));
+        }
+    }
+
     /// <summary>v0.52.1a: reads an existing translations.tsv (if any) and returns
     /// every row that already has SOME Japanese translation, whatever method
     /// produced it (①〜⑥ auto-resolution, SJPTS_ModifiedByUser, or a translation
@@ -1275,9 +1410,9 @@ public static class PromptGenerator
     ///
     /// Missing file or no such rows both just return empty — this is a
     /// best-effort carry-forward, not a required input.</summary>
-    private static Dictionary<(string FormId, string RecordType, int Index), (string Japanese, string Method, string TranslationCheck)> ReadExistingTranslations(string path)
+    private static Dictionary<(string FormId, string RecordType, int Index), (string Japanese, string Method, string TranslationCheck, string English)> ReadExistingTranslations(string path)
     {
-        var result = new Dictionary<(string, string, int), (string, string, string)>();
+        var result = new Dictionary<(string, string, int), (string, string, string, string)>();
         if (!File.Exists(path)) return result;
 
         using var reader = new StreamReader(path, System.Text.Encoding.UTF8);
@@ -1294,6 +1429,7 @@ public static class PromptGenerator
         // との後方互換のため、無ければ""として扱う（他の必須列と違い読み込み
         // 自体を諦めない）。
         var translationCheckCol = Col("TranslationCheck");
+        var englishCol = Col("EnglishText");
         if (formIdCol < 0 || recordTypeCol < 0 || japaneseCol < 0 || notesCol < 0 || indexCol < 0) return result;
 
         string? line;
@@ -1306,7 +1442,8 @@ public static class PromptGenerator
             if (japanese.Length == 0) continue;
             if (!int.TryParse(cells[indexCol], out var index)) continue;
             var translationCheck = translationCheckCol >= 0 && cells.Length > translationCheckCol ? Unescape(cells[translationCheckCol]) : "";
-            result[(cells[formIdCol], cells[recordTypeCol], index)] = (japanese, Unescape(cells[notesCol]), translationCheck);
+            var english = englishCol >= 0 && cells.Length > englishCol ? Unescape(cells[englishCol]) : "";
+            result[(cells[formIdCol], cells[recordTypeCol], index)] = (japanese, Unescape(cells[notesCol]), translationCheck, english);
         }
         return result;
     }

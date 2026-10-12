@@ -388,6 +388,73 @@ switch (args[0])
         }
     }
 
+    case "skypatcher-translation":
+    {
+        // The same resolution chain and options as "translation", over the SkyPatcher rows scanned by
+        // "skypatcher-pickup"; one work folder per providing MOD under SkyPatcherText/Translation/out_temp.
+        // The plugin side is only READ: its corpus.tsv (--corpus=) and its finished translations
+        // (--plugin-translations=, offered to the LLM as style hints).
+        string? Flag(string prefix) =>
+            args.FirstOrDefault(a => a.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))?[prefix.Length..];
+        var modsFileArg = Flag("--mods-file=");
+        var corpusArg = Flag("--corpus=");
+        var pluginTranslationsArg = Flag("--plugin-translations=");
+        args = args.Where(a => !a.StartsWith("--mods-file=", StringComparison.OrdinalIgnoreCase)
+                               && !a.StartsWith("--corpus=", StringComparison.OrdinalIgnoreCase)
+                               && !a.StartsWith("--plugin-translations=", StringComparison.OrdinalIgnoreCase)).ToArray();
+
+        var inputDir = args.Length > 1 ? args[1] : DefaultSkyPatcherPickUpTargetOutDir;
+        var outputDir = args.Length > 2 ? args[2] : DefaultSkyPatcherTranslationOutDir;
+        var targetMod = args.Length > 3 ? args[3] : null;
+        var candidatesTsv = Path.Combine(inputDir, "candidates.tsv");
+        var corpusTsv = corpusArg ?? Path.Combine(DefaultPickUpTargetOutDir, "corpus.tsv");
+        var pluginTranslationsDir = pluginTranslationsArg ?? DefaultTranslationOutDir;
+
+        if (!File.Exists(candidatesTsv))
+        {
+            Console.Error.WriteLine($"SkyPatcher PickUpTarget output not found under '{inputDir}' — run skypatcher-pickup first.");
+            return 1;
+        }
+        if (!File.Exists(corpusTsv))
+        {
+            Console.Error.WriteLine($"Corpus not found: '{corpusTsv}' — run pickuptarget first (the plugin side builds the corpus).");
+            return 1;
+        }
+
+        List<string>? targetMods = null;
+        if (modsFileArg != null)
+        {
+            if (!File.Exists(modsFileArg))
+            {
+                Console.Error.WriteLine($"--mods-file target not found: {modsFileArg}");
+                return 1;
+            }
+            targetMods = File.ReadAllLines(modsFileArg).Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
+        }
+        else if (targetMod != null && !targetMod.Equals("--all", StringComparison.OrdinalIgnoreCase))
+        {
+            targetMods = [targetMod];
+        }
+
+        Directory.CreateDirectory(outputDir);
+        using var log = RunLog.Open("SkyPatcherText/Translation", "SkyPatcherTranslation");
+        using var trace = TraceLog.Open("SkyPatcherText/Translation", "SkyPatcherTranslation");
+        try
+        {
+            trace.Info($"Input: {candidatesTsv}, corpus {corpusTsv} / mods: {(targetMods == null ? "--all" : targetMods.Count + " mod(s)")} / step5 local LLM: {(llmLocal != null ? "enabled" : "disabled")} / step6 cloud AI: {(llmCloud != null ? "enabled" : "disabled")}");
+            PromptGenerator.RunSkyPatcher(candidatesTsv, corpusTsv, importDir, targetMods, pluginTranslationsDir, outputDir, log, trace,
+                llmLocal: llmLocal, llmCloud: llmCloud, stageOptions: stageOptions, discardUserEdits: discardUserEdits,
+                llmLocalBatchCharLimit: llmLocalBatchCharLimit, llmCloudBatchCharLimit: llmCloudBatchCharLimit, cancelFlagPath: cancelFlagPath);
+            LogCloudAiUsage(log, llmCloud);
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            trace.Error("Exception during skypatcher-translation execution", ex);
+            throw;
+        }
+    }
+
     case "skypatcher-generate":
     {
         // Writes the SkyPatcher .ini files into <output dir>/SKSE/Plugins/SkyPatcher/…; the DSD json
@@ -618,6 +685,11 @@ static void PrintUsage()
     Console.WriteLine("                       --profile-dir は選択中プロファイル自体のフォルダを指定（profilesの親ではない）。");
     Console.WriteLine("  SkyrimJPStringPatcher skypatcher-pickup <MO2 instance dir> [output dir = SkyPatcherText/PickUpTarget/out_temp]");
     Console.WriteLine("      -> candidates.tsv / excluded_candidates.txt（SkyPatcherの.iniのfullName/shortName。--mods-dir 等は pickuptarget と同じ）");
+    Console.WriteLine("  SkyrimJPStringPatcher skypatcher-translation [input dir = SkyPatcherText/PickUpTarget/out_temp] [output dir = SkyPatcherText/Translation/out_temp] [MOD name | --all]");
+    Console.WriteLine("      -> <output dir>/<提供MOD名そのまま>/{translations.tsv,prompt.txt,mod_folder_name.txt,…}（translationと同じ解決手段・オプション）");
+    Console.WriteLine("      --mods-file=<path> : 対象のMOD名を1行1件で書いたファイル（指定時は位置引数のMOD名より優先）");
+    Console.WriteLine("      --corpus=<path> : プラグイン側が作ったcorpus.tsv（既定 PickUpTarget/out_temp/corpus.tsv）");
+    Console.WriteLine("      --plugin-translations=<dir> : プラグイン側のTranslation/out_temp。その翻訳済みの行を、LLMへの文体のヒントとして読む（既定 Translation/out_temp。読み取りのみ）");
     Console.WriteLine("  SkyrimJPStringPatcher skypatcher-generate [input = SkyPatcherText/Translation/out_temp] [output dir = out] [--mods-file=<path>]");
     Console.WriteLine("      -> <output dir>/SKSE/Plugins/SkyPatcher/<type>/zzz_SJPTS/…（元の.iniと同じ相対パス・同じファイル名。全行を元の順序で写し、訳が無い行は原文のまま）");
     Console.WriteLine("      --mods-file=<path> : 対象のMOD名を1行1件で書いたファイル（省略時は入力中の全MOD）");
