@@ -96,6 +96,33 @@ public class ProgramCliSkyPatcherGenerateTests
     }
 
     [Fact]
+    public void SkypatcherGenerate_WithNoModTranslations_SucceedsAndWritesNoIni()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_clitest_spg_none_{Guid.NewGuid():N}");
+        try
+        {
+            // What a setup without SkyPatcher leaves behind: the translations folder exists, with no MOD in it.
+            Directory.CreateDirectory(Path.Combine(root, "SkyPatcherText", "Translation", "out_temp"));
+            var modsFile = Path.Combine(root, "mods.txt");
+            File.WriteAllText(modsFile, "");
+
+            foreach (var arguments in new[] { new[] { "skypatcher-generate" }, ["skypatcher-generate", $"--mods-file={modsFile}"] })
+            {
+                var (exitCode, output) = RunCli(root, arguments);
+
+                Assert.Equal(0, exitCode);
+                Assert.Contains("Wrote 0 SkyPatcher .ini file(s)", output);
+                var outDir = Path.Combine(root, "out");
+                Assert.Empty(Directory.Exists(outDir) ? Directory.GetFiles(outDir, "*.ini", SearchOption.AllDirectories) : []);
+            }
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    [Fact]
     public void SkypatcherGenerate_MissingInput_ExitsWithOneAndAReadableMessage()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_clitest_spg_missing_{Guid.NewGuid():N}");

@@ -119,6 +119,36 @@ public class ProgramCliSkyPatcherPickupTests
     }
 
     [Fact]
+    public void SkypatcherPickup_WithoutAnySkyPatcherFiles_SucceedsWithZeroRows()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_clitest_spp_none_{Guid.NewGuid():N}");
+        try
+        {
+            var mo2Dir = BuildInstance(root);
+            var modDir = Path.Combine(mo2Dir, "mods", "Sentinel");
+            var outDir = Path.Combine(root, "SkyPatcherText", "PickUpTarget", "out_temp");
+
+            // The SkyPatcher folder is there but holds no .ini.
+            File.Delete(Path.Combine(modDir, "SKSE", "Plugins", "SkyPatcher", "armor", "Sentinel.ini"));
+            var (emptyFolderExit, emptyFolderOutput) = RunCli(root, "skypatcher-pickup", mo2Dir);
+            Assert.Equal(0, emptyFolderExit);
+            Assert.Empty(CandidateIo.ReadTsv(Path.Combine(outDir, "candidates.tsv")));
+            Assert.Contains("SkyPatcher rows: 0", emptyFolderOutput);
+
+            // SkyPatcher is not in the setup at all.
+            Directory.Delete(Path.Combine(modDir, "SKSE"), recursive: true);
+            var (noneExit, noneOutput) = RunCli(root, "skypatcher-pickup", mo2Dir);
+            Assert.Equal(0, noneExit);
+            Assert.Empty(CandidateIo.ReadTsv(Path.Combine(outDir, "candidates.tsv")));
+            Assert.Contains("SkyPatcher rows: 0", noneOutput);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    [Fact]
     public void SkypatcherPickup_ABadInstanceFolder_ExitsWithOneAndAReadableMessage()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_clitest_spp_bad_{Guid.NewGuid():N}");

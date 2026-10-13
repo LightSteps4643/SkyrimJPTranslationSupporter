@@ -181,6 +181,35 @@ public class ProgramCliSkyPatcherTranslationTests
     }
 
     [Fact]
+    public void SkypatcherTranslation_PickupFoundNoRows_ResetsAndSucceedsWithZeroMods()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"sjpts_clitest_spt_zero_{Guid.NewGuid():N}");
+        try
+        {
+            // A setup without SkyPatcher: pickup ran and wrote a candidates.tsv with a header and no rows
+            // (the GUI's "MO2再読込＆初期化" then runs this reset anyway).
+            var spDir = Path.Combine(root, "SkyPatcherText", "PickUpTarget", "out_temp");
+            Directory.CreateDirectory(spDir);
+            CandidateIo.WriteTsv(Path.Combine(spDir, "candidates.tsv"), []);
+            var pluginDir = Path.Combine(root, "PickUpTarget", "out_temp");
+            Directory.CreateDirectory(pluginDir);
+            CorpusIo.WriteTsv(Path.Combine(pluginDir, "corpus.tsv"), [new CorpusEntry("Steel Cuirass", "鋼鉄の鎧", "Skyrim.esm", "vanilla", "ARMO FULL")]);
+
+            // The arguments are the ones the GUI sends for this reset: the two folders first, then the flags.
+            var (exitCode, output) = RunCli(root, "skypatcher-translation", "SkyPatcherText/PickUpTarget/out_temp", "SkyPatcherText/Translation/out_temp",
+                "--all", "--no-meaning", "--no-translit", "--no-namefallback", "--discard-user-edits");
+
+            Assert.True(exitCode == 0, output);
+            Assert.Contains("0 mod(s)", output);
+            Assert.Empty(Directory.GetFiles(Path.Combine(root, "SkyPatcherText", "Translation", "out_temp"), "translations.tsv", SearchOption.AllDirectories));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* best-effort cleanup */ }
+        }
+    }
+
+    [Fact]
     public void SkypatcherTranslation_WithoutCandidates_ExitsWithOneAndSaysWhatToRunFirst()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_clitest_spt_nocand_{Guid.NewGuid():N}");

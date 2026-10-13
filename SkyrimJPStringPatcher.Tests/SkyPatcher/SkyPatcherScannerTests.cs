@@ -136,6 +136,28 @@ public class SkyPatcherScannerTests : IDisposable
         Assert.Equal("Real", Assert.Single(result.Candidates).CurrentText);
     }
 
+    // ---- an instance without anything to read: no rows, and no error ----------------
+
+    [Fact]
+    public void NoSkyPatcherFilesAtAll_GiveAnEmptyResult_NotAnError()
+    {
+        AddRaw("Plain", "Meshes/readme.txt", "no SkyPatcher in this mod");
+        Directory.CreateDirectory(Path.Combine(ModsDir, "FolderOnly", "SKSE", "Plugins", "SkyPatcher"));   // the folder, with nothing in it
+
+        Assert.Empty(SkyPatcherScanner.Scan(Instance(["FolderOnly", "Plain"])).Candidates);
+        Assert.Empty(SkyPatcherScanner.Scan(Instance([])).Candidates);                                       // no enabled mod at all
+    }
+
+    [Fact]
+    public void IniFilesWithoutAnyNameLine_GiveNoRows()
+    {
+        Add("Mod", "armor/Empty.ini");                                                                       // zero bytes
+        Add("Mod", "armor/Comment.ini", "; only a comment", "");
+        Add("Mod", "armor/Stats.ini", "filterByArmors=Skyrim.esm|13940:armorRating=10", "a line without an equals sign");
+
+        Assert.Empty(SkyPatcherScanner.Scan(Instance(["Mod"])).Candidates);
+    }
+
     // ---- gates and settings ---------------------------------------------------
 
     [Fact]
