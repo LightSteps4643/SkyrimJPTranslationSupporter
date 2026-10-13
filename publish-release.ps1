@@ -233,8 +233,40 @@ Write-Host ("構成: トップのファイル {0}個 / 全ファイル {1}個（
 $zipPath = "$OutputDir.zip"
 Write-Host "--- zip圧縮 ---"
 if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
-Compress-Archive -Path $OutputDir -DestinationPath $zipPath -CompressionLevel Optimal
+# 2026-10-14: Compress-Archive（Windows PowerShell 5.1）は、zip内のパスの区切りを「\」で書く
+# （ZIPの仕様は「/」）。Windowsのツールは許容するが、NexusのようにLinux側でzipを解析・プレビュー
+# するところでは、フォルダ階層を認識できず、「プレビュー生成に失敗」として検疫される恐れがある。
+# そのため、区切りを「/」にして自分で書く。空のフォルダ（import・out）もエントリとして残す。
+Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$zipBase = [IO.Path]::GetFullPath($OutputDir).TrimEnd('\')
+$zipParent = Split-Path -Parent $zipBase
+$zipStream = [IO.File]::Create($zipPath)
+try {
+    $archive = New-Object IO.Compression.ZipArchive($zipStream, [IO.Compression.ZipArchiveMode]::Create)
+    try {
+        $rootName = (Split-Path -Leaf $zipBase)
+        [void]$archive.CreateEntry("$rootName/")
+        foreach ($item in (Get-ChildItem -LiteralPath $zipBase -Recurse | Sort-Object FullName)) {
+            $entryName = $item.FullName.Substring($zipParent.Length + 1).Replace('\', '/')
+            if ($item.PSIsContainer) {
+                [void]$archive.CreateEntry("$entryName/")
+            } else {
+                [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $item.FullName, $entryName, [IO.Compression.CompressionLevel]::Optimal)
+            }
+        }
+    } finally { $archive.Dispose() }
+} finally { $zipStream.Dispose() }
 if (-not (Test-Path $zipPath)) { throw "zipの作成に失敗しました: $zipPath" }
+
+# zipの確認: パスの区切りが「/」で、フォルダ名のエントリから始まり、フォルダの中身（ファイル数）が揃っていること。
+$check = [IO.Compression.ZipFile]::OpenRead($zipPath)
+try {
+    $badNames = @($check.Entries | Where-Object { $_.FullName.Contains('\') })
+    if ($badNames.Count -gt 0) { throw "zip内のパスに「\」が含まれています（例: $($badNames[0].FullName)）" }
+    $zipFileCount = @($check.Entries | Where-Object { -not $_.FullName.EndsWith('/') }).Count
+    if ($zipFileCount -ne $allFiles.Count) { throw "zipのファイル数が配布フォルダと一致しません（zip $zipFileCount / フォルダ $($allFiles.Count)）" }
+} finally { $check.Dispose() }
 
 Write-Host ""
 Write-Host "完了: $OutputDir"
