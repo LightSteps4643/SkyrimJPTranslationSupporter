@@ -161,6 +161,25 @@ public class SkyPatcherScannerTests : IDisposable
     // ---- gates and settings ---------------------------------------------------
 
     [Fact]
+    public void AnIniWrittenInWindows1252_KeepsItsNames_AndAUtf8ByteOrderMarkIsNotPartOfTheFirstLine()
+    {
+        // Each .ini line is read as UTF-8, else as Windows-1252 — the rule used for a plugin's text — so a legacy
+        // file's "é" (0xE9) survives instead of becoming U+FFFD; a BOM-prefixed file reads like any other.
+        var dir = Path.Combine(ModsDir, "Mod", "SKSE", "Plugins", "SkyPatcher", "armor");
+        Directory.CreateDirectory(dir);
+        System.Text.Encoding Ascii = System.Text.Encoding.ASCII;
+        File.WriteAllBytes(Path.Combine(dir, "Legacy.ini"),
+            [.. Ascii.GetBytes("filterByArmors=Skyrim.esm|1:fullName=~Caf"), 0xE9, .. Ascii.GetBytes("~\r\n")]);
+        File.WriteAllBytes(Path.Combine(dir, "WithBom.ini"),
+            [0xEF, 0xBB, 0xBF, .. Ascii.GetBytes("filterByArmors=Skyrim.esm|2:fullName=~First~\r\n")]);
+
+        var texts = SkyPatcherScanner.Scan(Instance(["Mod"])).Candidates.Select(c => c.CurrentText).ToList();
+
+        Assert.Contains("Café", texts);
+        Assert.Contains("First", texts);
+    }
+
+    [Fact]
     public void AFileNamedAfterAnAbsentPlugin_IsInactiveByTheFileGate_AndStillListed()
     {
         Add("Sentinel", "armor/Sentinel.esp.ini", "filterByArmors=Skyrim.esm|1:fullName=~Fur Coat~");

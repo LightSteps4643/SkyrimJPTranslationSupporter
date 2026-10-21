@@ -46,7 +46,7 @@ public static class SkyPatcherScanner
 
         var previous = new Dictionary<(string Key, SkyPatcherNameKind Kind), Previous>();
         foreach (var (sourcePath, physical) in previousFiles)
-            ReadPreviousOutput(sourcePath, File.ReadAllLines(physical), previous);
+            ReadPreviousOutput(sourcePath, ExternalTextFile.ReadAllLines(physical), previous);
 
         var candidates = new List<Candidate>();
         var excluded = new Dictionary<string, int>();
@@ -55,7 +55,7 @@ public static class SkyPatcherScanner
         foreach (var (path, physical) in sources)
         {
             var provider = ProviderOf(instance, physical);
-            foreach (var entry in SkyPatcherEvaluator.Evaluate(path, File.ReadAllLines(physical), context))
+            foreach (var entry in SkyPatcherEvaluator.Evaluate(path, ExternalTextFile.ReadAllLines(physical), context))
             {
                 var reason = SkyPatcherExclusion.Reason(entry.Text) ?? "";
                 var (coveredJapanese, coveredNotes, staleOriginal, staleTranslation) =
@@ -124,7 +124,7 @@ public static class SkyPatcherScanner
         var candidates = new[] { Path.Combine(instance.OverwriteDir, relative) }
             .Concat(instance.EnabledModPriorityHighFirst.Select(mod => Path.Combine(instance.ModsDir, mod, relative)));
         var winner = candidates.FirstOrDefault(File.Exists);
-        return winner == null ? SkyPatcherSettings.Default : SkyPatcherSettings.Parse(File.ReadAllLines(winner));
+        return winner == null ? SkyPatcherSettings.Default : SkyPatcherSettings.Parse(ExternalTextFile.ReadAllLines(winner));
     }
 
     /// <summary>The MOD folder the file sits in; "Overwrite" for MO2's overwrite folder.</summary>

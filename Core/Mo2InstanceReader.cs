@@ -297,7 +297,7 @@ public static class Mo2InstanceReader
     private static List<string> ReadModListPriority(string modlistPath, bool enabledOnly)
     {
         var result = new List<string>();
-        foreach (var rawLine in File.ReadAllLines(modlistPath, Encoding.UTF8))
+        foreach (var rawLine in ExternalTextFile.ReadAllLines(modlistPath))
         {
             var line = rawLine.Trim();
             if (line.Length == 0 || line.StartsWith('#')) continue;
@@ -321,7 +321,7 @@ public static class Mo2InstanceReader
     private static List<string> ReadActivePluginOrder(string pluginsPath)
     {
         var result = new List<string>();
-        foreach (var rawLine in File.ReadAllLines(pluginsPath, Encoding.UTF8))
+        foreach (var rawLine in ExternalTextFile.ReadAllLines(pluginsPath))
         {
             var line = rawLine.Trim();
             if (line.Length == 0 || line.StartsWith('#')) continue;
@@ -346,7 +346,7 @@ public static class Mo2InstanceReader
         var current = "General";
         sections[current] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var rawLine in File.ReadAllLines(path, Encoding.UTF8))
+        foreach (var rawLine in ExternalTextFile.ReadAllLines(path))
         {
             var line = rawLine.Trim();
             if (line.Length == 0 || line.StartsWith(';')) continue;
