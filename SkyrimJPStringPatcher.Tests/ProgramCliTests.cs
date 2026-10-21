@@ -103,7 +103,7 @@ public class ProgramCliTests
 
             Assert.Equal(0, exitCode);
             Assert.Contains("Stage overrides: meaning=OFF, transliteration=OFF, NameFallbackTranslator=OFF", output);
-            Assert.True(File.Exists(Path.Combine(root, "Translation", "out_temp", "SjptsTestMod", "translations.tsv")), output);
+            Assert.True(File.Exists(Path.Combine(root, "Translation", "out_temp", "SjptsTestMod.esp", "translations.tsv")), output);
             Assert.True(File.Exists(Path.Combine(root, "Translation", "out_temp", "translation_index.txt")), output);
         }
         finally
@@ -130,7 +130,7 @@ public class ProgramCliTests
                 "--no-meaning", "--no-translit", "--no-namefallback", "--discard-user-edits");
 
             Assert.Equal(0, exitCode);
-            Assert.True(File.Exists(Path.Combine(root, "Translation", "out_temp", "SjptsTestMod", "translations.tsv")), output);
+            Assert.True(File.Exists(Path.Combine(root, "Translation", "out_temp", "SjptsTestMod.esp", "translations.tsv")), output);
             // Positional single-plugin mode is NOT the --all path -- the
             // load-order-wide summary files are a --all-only contract.
             Assert.False(File.Exists(Path.Combine(root, "Translation", "out_temp", "translation_index.txt")), output);
@@ -170,7 +170,7 @@ public class ProgramCliTests
                 "--no-meaning", "--no-translit", "--no-namefallback", $"--import={customImportDir}");
 
             Assert.Equal(0, exitCode);
-            var tsvPath = Path.Combine(root, "Translation", "out_temp", "SjptsTestMod", "translations.tsv");
+            var tsvPath = Path.Combine(root, "Translation", "out_temp", "SjptsTestMod.esp", "translations.tsv");
             Assert.True(File.Exists(tsvPath), output);
             var lines = File.ReadAllLines(tsvPath);
             Assert.Contains(lines, l => l.Contains("Sjpts Unresolved Candidate") && l.Contains("インポートされた訳"));
@@ -202,10 +202,10 @@ public class ProgramCliTests
                 "--no-meaning", "--no-translit", "--no-namefallback", "--discard-user-edits");
 
             Assert.Equal(0, exitCode);
-            Assert.True(File.Exists(Path.Combine(root, "Translation", "out_temp", "SjptsMultiPluginA", "translations.tsv")), output);
-            Assert.True(File.Exists(Path.Combine(root, "Translation", "out_temp", "SjptsMultiPluginB", "translations.tsv")), output);
+            Assert.True(File.Exists(Path.Combine(root, "Translation", "out_temp", "SjptsMultiPluginA.esp", "translations.tsv")), output);
+            Assert.True(File.Exists(Path.Combine(root, "Translation", "out_temp", "SjptsMultiPluginB.esp", "translations.tsv")), output);
             // Plugins NOT listed in the file must never be touched.
-            Assert.False(Directory.Exists(Path.Combine(root, "Translation", "out_temp", "SjptsTestMod")), output);
+            Assert.False(Directory.Exists(Path.Combine(root, "Translation", "out_temp", "SjptsTestMod.esp")), output);
         }
         finally
         {
@@ -240,14 +240,14 @@ public class ProgramCliTests
 
             Assert.Equal(0, exitCode);
             Assert.Contains("Step 5 (local LLM): ENABLED", output);
-            Assert.True(File.Exists(Path.Combine(root, "Translation", "out_temp", "SjptsMultiPluginB", "translations.tsv")), output);
+            Assert.True(File.Exists(Path.Combine(root, "Translation", "out_temp", "SjptsMultiPluginB.esp", "translations.tsv")), output);
             // Only the ONE plugin named in --plugins-file must be touched -- if
             // --plugins-file were silently ignored, this would fall through to
             // RunAll and process every plugin in candidates.tsv instead, which
             // would ALSO leave SjptsMultiPluginB's own folder populated (so
             // checking only for its existence, as above, isn't enough on its own
             // to catch that regression).
-            Assert.False(Directory.Exists(Path.Combine(root, "Translation", "out_temp", "SjptsTestMod")), output);
+            Assert.False(Directory.Exists(Path.Combine(root, "Translation", "out_temp", "SjptsTestMod.esp")), output);
             Assert.False(File.Exists(Path.Combine(root, "Translation", "out_temp", "translation_index.txt")), output);
         }
         finally

@@ -112,7 +112,7 @@ public class PickUpTargetTranslationCharacterizationTests
         File.WriteAllText(path, $"{english}\t{japanese}\n");
     }
 
-    private static string PluginFolderName(string plugin) => Path.GetFileNameWithoutExtension(plugin);
+    private static string PluginFolderName(string plugin) => PluginWorkFolder.NameOf(plugin);
 
     /// <summary>Reads every plugin's translations.tsv under outputDir and
     /// flattens them into one deterministic, human-reviewable text block:

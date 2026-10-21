@@ -333,7 +333,9 @@ public class DsdJsonGeneratorTests
 
     /// <summary>ResolveInputFiles accepts a DIRECTORY too, recursively finding
     /// every "translations.tsv" — the shape Translation/out_temp/&lt;plugin&gt;/
-    /// actually has, as opposed to a single merged file.</summary>
+    /// actually has (a folder named after the plugin file name, extension
+    /// included; see DsdFolderNameRuleTests for the folders that are ignored),
+    /// as opposed to a single merged file.</summary>
     [Fact]
     public void Run_DirectoryInput_MergesEveryNestedTranslationsTsv()
     {
@@ -357,17 +359,17 @@ public class DsdJsonGeneratorTests
     }
 
     /// <summary>DsdJsonGenerator has no dedup logic — if the SAME (FormId,
-    /// RecordType) shows up in two different translations.tsv files under a
-    /// directory input (Fixtures/duplicate_input/FolderA and FolderB both
-    /// translate 00000005:DupPlugin.esp's WEAP FULL, differently), both rows
-    /// are written to the plugin's output JSON as separate entries. This
-    /// documents that current (permissive) behavior rather than asserting it's
-    /// the "correct" one — there is no real-world path that produces two
-    /// translations.tsv files for the same plugin under Translation/out_temp,
-    /// so this is a characterization test for an edge case, not a guard
-    /// against a known bug.</summary>
+    /// RecordType) shows up twice in one translations.tsv
+    /// (Fixtures/duplicate_input/translations.tsv holds 00000005:DupPlugin.esp's
+    /// WEAP FULL twice, translated differently), both rows are written to the
+    /// plugin's output JSON as separate entries. This documents that current
+    /// (permissive) behavior rather than asserting it's the "correct" one.
+    /// Since v0.63.1 the only way the same entry reaches a file twice is a
+    /// hand-edited translations.tsv: a second folder holding the same plugin's
+    /// rows (an earlier version's folder, a copy) is no longer read at all, as
+    /// its name is not the plugin's (DsdFolderNameRuleTests).</summary>
     [Fact]
-    public void Run_DuplicateFormIdAcrossFiles_WritesBothEntries()
+    public void Run_DuplicateFormIdInOneFile_WritesBothEntries()
     {
         var root = Path.Combine(Path.GetTempPath(), $"sjpts_tests_dsd_{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -376,7 +378,7 @@ public class DsdJsonGeneratorTests
             var outDir = Path.Combine(root, "out");
             using var log = OpenTestLog(root);
 
-            DsdJsonGenerator.Run(FixturePath("duplicate_input"), outDir, log, outputTimestamp: TestTimestamp);
+            DsdJsonGenerator.Run(FixturePath("duplicate_input", "translations.tsv"), outDir, log, outputTimestamp: TestTimestamp);
 
             var jsonPath = Path.Combine(outDir, "SKSE", "Plugins", "DynamicStringDistributor", "DupPlugin.esp", TestOutputFileName);
             var json = File.ReadAllText(jsonPath);

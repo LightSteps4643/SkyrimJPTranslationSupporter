@@ -104,10 +104,8 @@ public class PickUpTargetToTranslationScenarioTests
         return (pickUpTargetResult, translations, promptText);
     }
 
-    // Mirrors PromptGenerator.MakeSafeFolderName (internal, not visible to this
-    // test project) -- for a plain ".esp" filename with no invalid filename
-    // characters, this is just the extension stripped.
-    private static string PluginFolderName(string plugin) => Path.GetFileNameWithoutExtension(plugin);
+    // The plugin working folder is named after the plugin file name (PluginWorkFolder), extension included.
+    private static string PluginFolderName(string plugin) => PluginWorkFolder.NameOf(plugin);
 
     private static Dictionary<string, (string Japanese, string Notes)> ReadTranslationsTemplate(string path)
     {
@@ -795,7 +793,7 @@ public class PickUpTargetToTranslationScenarioTests
                     Path.Combine(root, "Translation", "import_now_empty"), "StaleTest.esp", translationOutDir, log,
                     discardUserEdits: true, stageOptions: stageOptions);
             }
-            var round2Translations = ReadTranslationsTemplate(Path.Combine(translationOutDir, "StaleTest", "translations.tsv"));
+            var round2Translations = ReadTranslationsTemplate(Path.Combine(translationOutDir, PluginFolderName("StaleTest.esp"), "translations.tsv"));
 
             Assert.Equal("", round2Translations["Bronze Blade"].Japanese);
         }

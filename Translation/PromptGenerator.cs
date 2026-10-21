@@ -519,7 +519,7 @@ public static class PromptGenerator
     {
         trace?.Trace($"Plugin processing start: {plugin} ({candidates.Count} candidates)");
         var skyPatcher = skyPatcherHints != null;
-        var safeName = skyPatcher ? plugin : MakeSafeFolderName(plugin);
+        var safeName = skyPatcher ? plugin : PluginWorkFolder.NameOf(plugin);
         var pluginDir = Path.Combine(outputDir, safeName);
         Directory.CreateDirectory(pluginDir);
         if (skyPatcher)

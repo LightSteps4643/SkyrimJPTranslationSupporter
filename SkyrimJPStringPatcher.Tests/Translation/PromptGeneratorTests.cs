@@ -95,7 +95,7 @@ public class PromptGeneratorTests
 
             PromptGenerator.RunOne(candidatesPath, corpusPath, NonexistentImportDir(root), TargetPlugin, outputDir, log);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsTestMod");
+            var pluginDir = Path.Combine(outputDir, "SjptsTestMod.esp");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
             Assert.Equal(("既にDSDで日本語化済みの武器", "SJPTS_AutoCorpusDsd"), translations["Sjpts Dsd Covered Weapon"]);
@@ -123,7 +123,7 @@ public class PromptGeneratorTests
 
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), TargetPlugin, outputDir, log);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsTestMod");
+            var pluginDir = Path.Combine(outputDir, "SjptsTestMod.esp");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
             Assert.Equal(("テスト用の剣", "SJPTS_AutoCorpus"), translations["Sjpts Test Sword"]);
@@ -165,7 +165,7 @@ public class PromptGeneratorTests
 
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), TargetPlugin, outputDir, log);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsTestMod");
+            var pluginDir = Path.Combine(outputDir, "SjptsTestMod.esp");
             var lines = File.ReadAllLines(Path.Combine(pluginDir, "translations.tsv"));
             var headers = lines[0].Split('\t');
             var translationCheckCol = Array.IndexOf(headers, "TranslationCheck");
@@ -193,7 +193,7 @@ public class PromptGeneratorTests
 
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), TargetPlugin, outputDir, log, llmLocal: fakeLlm);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsTestMod");
+            var pluginDir = Path.Combine(outputDir, "SjptsTestMod.esp");
             var lines = File.ReadAllLines(Path.Combine(pluginDir, "translations.tsv"));
             var headers = lines[0].Split('\t');
             var translationCheckCol = Array.IndexOf(headers, "TranslationCheck");
@@ -225,7 +225,7 @@ public class PromptGeneratorTests
                 PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), TargetPlugin, outputDir, log1, llmLocal: fakeLlm);
             }
 
-            var pluginDir = Path.Combine(outputDir, "SjptsTestMod");
+            var pluginDir = Path.Combine(outputDir, "SjptsTestMod.esp");
             var firstRunHeaders = File.ReadAllLines(Path.Combine(pluginDir, "translations.tsv"))[0].Split('\t');
             var col = Array.IndexOf(firstRunHeaders, "TranslationCheck");
             var firstRunRow = File.ReadAllLines(Path.Combine(pluginDir, "translations.tsv")).Skip(1)
@@ -260,7 +260,7 @@ public class PromptGeneratorTests
 
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), TargetPlugin, outputDir, log);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsTestMod");
+            var pluginDir = Path.Combine(outputDir, "SjptsTestMod.esp");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
             Assert.Equal(("", ""), translations["Sjpts Unresolved Candidate"]);
@@ -293,7 +293,7 @@ public class PromptGeneratorTests
             // 自己終了条件——finish_reason=lengthの有無は問わない）、残り3件を
             // 対象に2回目の呼び出しが行われる（そこでは解決0件のため終了）。
             Assert.Equal(2, fakeLlm.CallCount);
-            var pluginDir = Path.Combine(outputDir, "SjptsTestMod");
+            var pluginDir = Path.Combine(outputDir, "SjptsTestMod.esp");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
             Assert.Equal(("LLMによる訳", "SJPTS_TranslationLocalLlm"), translations["Sjpts Llm Candidate"]);
 
@@ -325,7 +325,7 @@ public class PromptGeneratorTests
 
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), TargetPlugin, outputDir, log, llmLocal: fakeLlm);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsTestMod");
+            var pluginDir = Path.Combine(outputDir, "SjptsTestMod.esp");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
             Assert.Equal(("", ""), translations["Sjpts Llm Candidate"]);
         }
@@ -357,7 +357,7 @@ public class PromptGeneratorTests
 
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), TargetPlugin, outputDir, log, llmLocal: fakeLlm);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsTestMod");
+            var pluginDir = Path.Combine(outputDir, "SjptsTestMod.esp");
             // 2026-09-16: このフィクスチャは未解決4件のうちfakeが1件しか解決
             // できないため、進捗ベースの自己終了条件により2回目の呼び出しが
             // 発生する（RunOne_LocalLlmSucceeds_ResolvesWithTranslationLocalLlmTag
@@ -438,7 +438,7 @@ public class PromptGeneratorTests
             // (SameModHintBudgetRatio) even when c ends up empty, they split
             // into 2 sub-batches, so the local LLM is called twice.
             Assert.Equal(2, fakeLlm.CallCount);
-            var pluginDir = Path.Combine(outputDir, "SjptsMatchingEdgeCases");
+            var pluginDir = Path.Combine(outputDir, "SjptsMatchingEdgeCases.esp");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
             // Resolved (not left unresolved -- no point retrying, it'll just
@@ -480,7 +480,7 @@ public class PromptGeneratorTests
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), TargetPlugin, outputDir, log, llmLocal: fakeLlm);
 
             Assert.Equal(1, fakeLlm.CallCount);
-            var pluginDir = Path.Combine(outputDir, "SjptsTestMod");
+            var pluginDir = Path.Combine(outputDir, "SjptsTestMod.esp");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
             Assert.Equal(("", ""), translations["Sjpts Llm Candidate"]);
 
@@ -507,7 +507,7 @@ public class PromptGeneratorTests
         try
         {
             var outputDir = Path.Combine(root, "out_temp");
-            var pluginDir = Path.Combine(outputDir, "SjptsTestMod");
+            var pluginDir = Path.Combine(outputDir, "SjptsTestMod.esp");
             Directory.CreateDirectory(pluginDir);
             // Simulate a PRIOR run's already-resolved translations.tsv, as if a
             // costly ⑥ cloud AI call had already answered this one.
@@ -540,7 +540,7 @@ public class PromptGeneratorTests
         try
         {
             var outputDir = Path.Combine(root, "out_temp");
-            var pluginDir = Path.Combine(outputDir, "SjptsTestMod");
+            var pluginDir = Path.Combine(outputDir, "SjptsTestMod.esp");
             Directory.CreateDirectory(pluginDir);
             File.WriteAllText(Path.Combine(pluginDir, "translations.tsv"),
                 "FormId\tWinningPlugin\tRecordType\tEnglishText\tJapanese\tNotes\tIndex\tEditorId\n" +
@@ -578,7 +578,7 @@ public class PromptGeneratorTests
             });
 
             Assert.Contains("No candidates found for 'SjptsNoSuchPlugin.esp'", stdout);
-            Assert.False(Directory.Exists(Path.Combine(outputDir, "SjptsNoSuchPlugin")));
+            Assert.False(Directory.Exists(Path.Combine(outputDir, "SjptsNoSuchPlugin.esp")));
         }
         finally
         {
@@ -622,7 +622,7 @@ public class PromptGeneratorTests
             using (var log = OpenTestLog(root))
                 PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsResolutionMethods");
+            var pluginDir = Path.Combine(outputDir, "SjptsResolutionMethods.esp");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
             Assert.Equal(("きらめきの指輪", "SJPTS_AutoCorpusMeaning"), translations["Glimmeroot Ring"]);
@@ -707,7 +707,7 @@ public class PromptGeneratorTests
                 Console.SetOut(originalOut);
             }
 
-            var pluginDir = Path.Combine(outputDir, "SjptsLlmSkipReasons");
+            var pluginDir = Path.Combine(outputDir, "SjptsLlmSkipReasons.esp");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
             // Left unresolved (no tag, blank Japanese) -- unlike the
@@ -752,7 +752,7 @@ public class PromptGeneratorTests
 
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsResolutionMethods");
+            var pluginDir = Path.Combine(outputDir, "SjptsResolutionMethods.esp");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
             var (japanese, method) = translations["Sjpts Multiline Candidate\nSecond Line"];
@@ -795,7 +795,7 @@ public class PromptGeneratorTests
 
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsMarkerFallback");
+            var pluginDir = Path.Combine(outputDir, "SjptsMarkerFallback.esp");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
             var (japanese, method) = translations["Sjpts Spurious Marker Candidate\nSecond Line"];
@@ -831,7 +831,7 @@ public class PromptGeneratorTests
 
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsMarkerFallback");
+            var pluginDir = Path.Combine(outputDir, "SjptsMarkerFallback.esp");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
             var (japanese, method) = translations["Sjpts Legit Trailing Newline\n"];
@@ -869,7 +869,7 @@ public class PromptGeneratorTests
 
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsMarkerFallback");
+            var pluginDir = Path.Combine(outputDir, "SjptsMarkerFallback.esp");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
             var (japanese, method) = translations["Sjpts Target Tag Wrapped Answer"];
@@ -931,7 +931,7 @@ public class PromptGeneratorTests
                     "5. local LLM circuit breaker open (remaining candidates skipped)"));
             }
 
-            var pluginDir = Path.Combine(outputDir, "SjptsResolutionMethods");
+            var pluginDir = Path.Combine(outputDir, "SjptsResolutionMethods.esp");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
             Assert.Equal(("バッチ候補一", "SJPTS_TranslationLocalLlm"), translations["Sjpts Batch Candidate One"]);
             // The 3rd candidate (last in file order) is the one skipped —
@@ -975,7 +975,7 @@ public class PromptGeneratorTests
             // batch, so the fake must have been called 3 times.
             Assert.Equal(3, fakeLlm.CallCount);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsResolutionMethods");
+            var pluginDir = Path.Combine(outputDir, "SjptsResolutionMethods.esp");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
             Assert.Equal(("バッチ候補一", "SJPTS_TranslationLocalLlm"), translations["Sjpts Batch Candidate One"]);
             Assert.Equal(("バッチ候補二", "SJPTS_TranslationLocalLlm"), translations["Sjpts Batch Candidate Two"]);
@@ -1015,9 +1015,9 @@ public class PromptGeneratorTests
                 return 0;
             });
 
-            Assert.True(Directory.Exists(Path.Combine(outputDir, "SjptsMultiPluginB")));
+            Assert.True(Directory.Exists(Path.Combine(outputDir, "SjptsMultiPluginB.esp")));
             // Not requested -- RunMany must never process a plugin outside the subset.
-            Assert.False(Directory.Exists(Path.Combine(outputDir, "SjptsMultiPluginA")));
+            Assert.False(Directory.Exists(Path.Combine(outputDir, "SjptsMultiPluginA.esp")));
             Assert.Contains("No candidates found for 'SjptsNoSuchPlugin.esp'", stdout);
         }
         finally
@@ -1049,8 +1049,8 @@ public class PromptGeneratorTests
                 return 0;
             });
 
-            Assert.True(Directory.Exists(Path.Combine(outputDir, "SjptsMultiPluginA")));
-            Assert.False(Directory.Exists(Path.Combine(outputDir, "SjptsMultiPluginB")));
+            Assert.True(Directory.Exists(Path.Combine(outputDir, "SjptsMultiPluginA.esp")));
+            Assert.False(Directory.Exists(Path.Combine(outputDir, "SjptsMultiPluginB.esp")));
             Assert.Contains("Cancelled by user after [SjptsMultiPluginA.esp]", stdout);
         }
         finally
@@ -1082,7 +1082,7 @@ public class PromptGeneratorTests
             PromptGenerator.RunAll(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), outputDir, log);
 
             // Every plugin in the fixture got its own folder.
-            foreach (var dir in new[] { "SjptsTestMod", "SjptsResolutionMethods", "SjptsMultiPluginA", "SjptsMultiPluginB" })
+            foreach (var dir in new[] { "SjptsTestMod.esp", "SjptsResolutionMethods.esp", "SjptsMultiPluginA.esp", "SjptsMultiPluginB.esp" })
                 Assert.True(Directory.Exists(Path.Combine(outputDir, dir)), $"expected {dir} to have been processed");
 
             var indexPath = Path.Combine(outputDir, "translation_index.txt");
@@ -1150,7 +1150,7 @@ public class PromptGeneratorTests
 
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsMatchingEdgeCases");
+            var pluginDir = Path.Combine(outputDir, "SjptsMatchingEdgeCases.esp");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
             // The candidate's own key (with its trailing space, as it appears in
@@ -1189,7 +1189,7 @@ public class PromptGeneratorTests
 
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsReferenceBudget");
+            var pluginDir = Path.Combine(outputDir, "SjptsReferenceBudget.esp");
             var promptPath = Path.Combine(pluginDir, "prompt_localLLM_call1.txt");
             Assert.True(File.Exists(promptPath), $"expected {promptPath} to exist");
             var promptText = File.ReadAllText(promptPath);
@@ -1226,7 +1226,7 @@ public class PromptGeneratorTests
 
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsReferenceBudget");
+            var pluginDir = Path.Combine(outputDir, "SjptsReferenceBudget.esp");
             var promptPath = Path.Combine(pluginDir, "prompt_localLLM_call1.txt");
             var promptText = File.ReadAllText(promptPath);
 
@@ -1273,7 +1273,7 @@ public class PromptGeneratorTests
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log,
                 llmLocal: fakeLlm, llmLocalBatchCharLimit: 20_000);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsReferenceBudget");
+            var pluginDir = Path.Combine(outputDir, "SjptsReferenceBudget.esp");
             var promptPath = Path.Combine(pluginDir, "prompt_localLLM_call1.txt");
             Assert.True(File.Exists(promptPath), $"expected {promptPath} to exist");
             var promptText = File.ReadAllText(promptPath);
@@ -1307,7 +1307,7 @@ public class PromptGeneratorTests
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log,
                 llmCloud: fakeLlm, llmCloudBatchCharLimit: 20_000);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsReferenceBudget");
+            var pluginDir = Path.Combine(outputDir, "SjptsReferenceBudget.esp");
             var promptPath = Path.Combine(pluginDir, "prompt_cloudLLM_call1.txt");
             Assert.True(File.Exists(promptPath), $"expected {promptPath} to exist");
             var promptText = File.ReadAllText(promptPath);
@@ -1342,7 +1342,7 @@ public class PromptGeneratorTests
 
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsModPhraseGlossary");
+            var pluginDir = Path.Combine(outputDir, "SjptsModPhraseGlossary.esp");
             var glossaryPath = ModPhraseGlossary.PathFor(pluginDir);
             Assert.True(File.Exists(glossaryPath), $"expected {glossaryPath} to exist");
             var lines = File.ReadAllLines(glossaryPath).Where(l => l.Length > 0 && l[0] != '#').ToList();
@@ -1368,7 +1368,7 @@ public class PromptGeneratorTests
         try
         {
             var outputDir = Path.Combine(root, "out_temp");
-            var pluginDir = Path.Combine(outputDir, "SjptsModPhraseGlossary");
+            var pluginDir = Path.Combine(outputDir, "SjptsModPhraseGlossary.esp");
             Directory.CreateDirectory(pluginDir);
             // A person has already filled this in by hand before this run.
             File.WriteAllLines(ModPhraseGlossary.PathFor(pluginDir), ["# comment", "Windrune Blade\t風紋の刃"]);
@@ -1421,7 +1421,7 @@ public class PromptGeneratorTests
 
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsMatchingEdgeCases");
+            var pluginDir = Path.Combine(outputDir, "SjptsMatchingEdgeCases.esp");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
             Assert.Equal(("「両側引用の訳」", "SJPTS_TranslationLocalLlm"), translations["\"Sjpts Quoted Both Sides\""]);
@@ -1458,7 +1458,7 @@ public class PromptGeneratorTests
 
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsMatchingEdgeCases");
+            var pluginDir = Path.Combine(outputDir, "SjptsMatchingEdgeCases.esp");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
             Assert.Equal(("引用符無し候補の訳", "SJPTS_TranslationLocalLlm"), translations["Sjpts Plain No Quote Candidate"]);
@@ -1516,7 +1516,7 @@ public class PromptGeneratorTests
 
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm, stageOptions: stages);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases");
+            var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases.esp");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
             Assert.Equal(("対象", "SJPTS_TranslationLocalLlm"), translations["Target:"]);
@@ -1547,7 +1547,7 @@ public class PromptGeneratorTests
 
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm, stageOptions: stages);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases");
+            var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases.esp");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
             Assert.Equal(("", ""), translations["Sjpts Format Edge Case Candidate"]);
@@ -1576,7 +1576,7 @@ public class PromptGeneratorTests
 
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm, stageOptions: stages);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases");
+            var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases.esp");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
             Assert.Equal(("", ""), translations["Sjpts Format Edge Case Candidate"]);
@@ -1604,7 +1604,7 @@ public class PromptGeneratorTests
 
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm, stageOptions: stages);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases");
+            var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases.esp");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
             Assert.Equal(("", ""), translations["Sjpts Format Edge Case Candidate"]);
@@ -1631,7 +1631,7 @@ public class PromptGeneratorTests
 
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm, stageOptions: stages);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases");
+            var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases.esp");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
             Assert.Equal(("", ""), translations["Sjpts Format Edge Case Candidate"]);
@@ -1660,7 +1660,7 @@ public class PromptGeneratorTests
 
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm, stageOptions: stages);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases");
+            var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases.esp");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
             Assert.Equal(("訳文", "SJPTS_TranslationLocalLlm"), translations["Sjpts Format Edge Case Candidate"]);
@@ -1716,7 +1716,7 @@ public class PromptGeneratorTests
 
             Assert.Equal(2, fakeLlm.CallCount);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases");
+            var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases.esp");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
             Assert.Equal(("ターゲット", "SJPTS_TranslationLocalLlm"), translations["Target:"]);
@@ -1795,7 +1795,7 @@ public class PromptGeneratorTests
 
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm, stageOptions: stages);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases");
+            var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases.esp");
             // 2026-09-16: ラウンド/バッチの2階層をやめたため、ファイル名は
             // 呼び出し番号のみ（"call1.txt"/"call2.txt"、"_of_総数"や
             // "_round番号"は付かない）。
@@ -1912,7 +1912,7 @@ public class PromptGeneratorTests
 
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm, stageOptions: stages);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases");
+            var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases.esp");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
             Assert.Equal(("訳文", "SJPTS_TranslationLocalLlm"), translations["Sjpts Trailing Whitespace Candidate "]);
@@ -1938,7 +1938,7 @@ public class PromptGeneratorTests
 
             PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log, llmLocal: fakeLlm, stageOptions: stages);
 
-            var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases");
+            var pluginDir = Path.Combine(outputDir, "SjptsTargetTagCases.esp");
             var translations = ReadTranslationsTemplate(Path.Combine(pluginDir, "translations.tsv"));
 
             Assert.Equal(("訳文", "SJPTS_TranslationLocalLlm"), translations["Sjpts Trailing Whitespace Candidate "]);
@@ -1958,7 +1958,7 @@ public class PromptGeneratorTests
             using (var log = OpenTestLog(root))
                 PromptGenerator.RunOne(CandidatesTsvPath, CorpusTsvPath, NonexistentImportDir(root), plugin, outputDir, log);
 
-            var pluginDir = Path.Combine(outputDir, "Sjpts Corvid Outfit");
+            var pluginDir = Path.Combine(outputDir, "Sjpts Corvid Outfit.esp");
             var prompt = File.ReadAllText(Path.Combine(pluginDir, "prompt.txt"));
 
             Assert.Contains("Context: light armor, slot: body", prompt);

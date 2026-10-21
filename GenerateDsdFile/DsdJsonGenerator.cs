@@ -26,17 +26,42 @@ public static class DsdJsonGenerator
     public static void Run(string translationsInputPath, string outputDir, RunLog log, TraceLog? trace = null, DateTime? outputTimestamp = null, IReadOnlyCollection<string>? pluginFilter = null)
     {
         trace?.Info($"Input file resolution start: {translationsInputPath}");
-        var files = ResolveInputFiles(translationsInputPath);
+        var inputs = ResolveInputFiles(translationsInputPath);
+        var files = inputs.Select(i => i.Path).ToList();
         Console.WriteLine($"Found {files.Count} translation file(s) to process.");
         trace?.Info($"Input file resolution done: {files.Count} file(s)");
 
+        // When the folders of a plugin-by-plugin working directory are searched, a translations.tsv counts only
+        // if its folder is named after the plugin its rows belong to (the folder name equals the row's
+        // WinningPlugin). A folder an earlier version left behind (named without the extension) or a copy of one
+        // is not a plugin's working folder: reading it next to the real one would put the same entry in twice.
+        // What was named explicitly (one file, or the folder itself) is read as given.
         var allRows = new List<TranslationRow>();
-        foreach (var file in files)
+        var ignoredByFolder = new List<(string Folder, int Rows)>();
+        foreach (var (file, checkFolderName) in inputs)
         {
             trace?.Trace($"Read start: {file}");
             var rows = ReadTranslations(file);
+            if (checkFolderName)
+            {
+                var folder = Path.GetFileName(Path.GetDirectoryName(file)) ?? "";
+                var own = rows.Where(r => string.Equals(r.WinningPlugin, folder, StringComparison.OrdinalIgnoreCase)).ToList();
+                if (own.Count != rows.Count)
+                {
+                    ignoredByFolder.Add((folder, rows.Count - own.Count));
+                    trace?.Warning($"Ignored {rows.Count - own.Count} row(s) of '{file}': the folder is not named after the plugin of those rows");
+                }
+                rows = own;
+            }
             allRows.AddRange(rows);
             trace?.Trace($"Read done: {file} ({rows.Count} rows)");
+        }
+        if (ignoredByFolder.Count > 0)
+        {
+            const int shown = 5;
+            var names = string.Join(", ", ignoredByFolder.Take(shown).Select(i => i.Folder));
+            var more = ignoredByFolder.Count > shown ? $", … and {ignoredByFolder.Count - shown} more (all of them are in generatedsdfile.log)" : "";
+            Console.Error.WriteLine($"[warn] Ignored {ignoredByFolder.Count} working folder(s) not named after their plugin (left by an earlier version, or copies): {names}{more}");
         }
 
         if (pluginFilter != null)
@@ -58,6 +83,9 @@ public static class DsdJsonGenerator
         log.Section("入力", "Input");
         log.Line($"入力パス: {translationsInputPath}", $"Input path: {translationsInputPath}");
         log.Line($"読み込んだ翻訳ファイル: {files.Count}件", $"Translation files read: {files.Count}");
+        foreach (var (folder, rowCount) in ignoredByFolder)
+            log.Line($"無視したフォルダ: {folder}（プラグイン名と一致しない行 {rowCount}件。旧バージョンが残したフォルダ・コピーなら、不要なら削除してよい）",
+                $"Ignored folder: {folder} ({rowCount} row(s) not belonging to a plugin of that name — left by an earlier version, or a copy; safe to delete)");
         log.Line($"読み込んだ行: {allRows.Count}（訳あり {translated.Count} / 未翻訳のため対象外 {skipped}）",
             $"Rows read: {allRows.Count} (translated {translated.Count} / excluded as untranslated {skipped})");
 
@@ -221,13 +249,19 @@ public static class DsdJsonGenerator
     /// for "translations.tsv" files — the only name <see cref="PromptGenerator"/>
     /// ever writes, whether from RunOne (single-plugin) or RunAll (whole load
     /// order).</summary>
-    private static List<string> ResolveInputFiles(string path)
+    private static List<(string Path, bool CheckFolderName)> ResolveInputFiles(string path)
     {
-        if (File.Exists(path)) return new List<string> { path };
+        if (File.Exists(path)) return new List<(string, bool)> { (path, false) };
 
         if (Directory.Exists(path))
+        {
+            var root = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar);
             return Directory.EnumerateFiles(path, "translations.tsv", SearchOption.AllDirectories)
-                .OrderBy(f => f).ToList();
+                .OrderBy(f => f)
+                // The folder itself, named explicitly, is read as given; folders found below it are checked.
+                .Select(f => (f, !string.Equals(Path.GetFullPath(Path.GetDirectoryName(f)!).TrimEnd(Path.DirectorySeparatorChar), root, StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+        }
 
         throw new FileNotFoundException($"Input path not found (not a file or directory): {path}");
     }

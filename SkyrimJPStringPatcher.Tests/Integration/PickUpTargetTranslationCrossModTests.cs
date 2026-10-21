@@ -182,7 +182,7 @@ public class PickUpTargetTranslationCrossModTests
                 PromptGenerator.RunOne(candidatesTsvPath, corpusTsvPath, importDir, "BigQuestMod.esp", translationOutDir, translationLog);
             }
 
-            var translationsTsvPath = Path.Combine(translationOutDir, "BigQuestMod", "translations.tsv");
+            var translationsTsvPath = Path.Combine(translationOutDir, PluginWorkFolder.NameOf("BigQuestMod.esp"), "translations.tsv");
             var lines = File.ReadAllLines(translationsTsvPath).Skip(1)
                 .Select(l => l.Split('\t'))
                 .Where(parts => parts.Length >= 6)
@@ -268,7 +268,7 @@ public class PickUpTargetTranslationCrossModTests
             PromptGenerator.RunOne(candidatesTsvPath, corpusTsvPath, importDir, targetPlugin, translationOutDir, translationLog);
         }
 
-        var translationsTsvPath = Path.Combine(translationOutDir, Path.GetFileNameWithoutExtension(targetPlugin), "translations.tsv");
+        var translationsTsvPath = Path.Combine(translationOutDir, PluginWorkFolder.NameOf(targetPlugin), "translations.tsv");
         return File.ReadAllLines(translationsTsvPath).Skip(1)
             .Select(l => l.Split('\t'))
             .Where(parts => parts.Length >= 6)
