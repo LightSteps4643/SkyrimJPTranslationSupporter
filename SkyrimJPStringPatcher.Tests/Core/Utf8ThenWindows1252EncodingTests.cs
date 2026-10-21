@@ -1,4 +1,5 @@
 using System.Text;
+using Mutagen.Bethesda;
 using Mutagen.Bethesda.Plugins.Binary.Parameters;
 using Mutagen.Bethesda.Strings;
 using SkyrimJPStringPatcher.Core;
@@ -118,8 +119,22 @@ public class Utf8ThenWindows1252EncodingTests
         Assert.Throws<NotSupportedException>(() => Encoder.GetBytes("x".AsSpan(), new byte[4]));
     }
 
+    [Theory]
+    [InlineData(Language.English)]
+    [InlineData(Language.Japanese)]
+    [InlineData(Language.French)]
+    [InlineData(Language.Russian)]
+    public void TheStringsTablesProvider_AppliesTheSameRuleForEveryLanguage(Language language)
+    {
+        var encoding = new Utf8ThenWindows1252EncodingProvider().GetEncoding(GameRelease.SkyrimSE, language);
+
+        Assert.Equal("\u00E9", encoding.GetString([0xC3, 0xA9]));   // UTF-8
+        Assert.Equal("\u00E9", encoding.GetString([0xE9]));         // Windows-1252
+        Assert.Equal("\u00A0", encoding.GetString([0xC2, 0xA0]));   // a no-break space, as vanilla titles carry it
+    }
+
     [Fact]
-    public void ThePluginReadParameters_UseItForBothKindsOfPluginText_AndKeepTheJapaneseStringsTables()
+    public void ThePluginReadParameters_UseTheRuleForEveryKindOfPluginText_AndKeepTheJapaneseStringsTables()
     {
         var parameters = PluginReadParameters.Create(stringsFolder: "C:\\strings");
 
@@ -128,5 +143,6 @@ public class Utf8ThenWindows1252EncodingTests
         Assert.Equal("C:\\strings", strings.StringsFolderOverride);
         Assert.IsType<Utf8ThenWindows1252Encoding>(strings.NonLocalizedEncodingOverride);
         Assert.IsType<Utf8ThenWindows1252Encoding>(strings.NonTranslatedEncodingOverride);
+        Assert.IsType<Utf8ThenWindows1252EncodingProvider>(strings.EncodingProvider);
     }
 }
