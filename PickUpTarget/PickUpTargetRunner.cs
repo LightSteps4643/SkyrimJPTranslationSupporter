@@ -101,14 +101,7 @@ public static class PickUpTargetRunner
         trace?.Info("StringsStaging.Build start (staging VFS-winning Strings/*)");
         var stringsStagingDir = StringsStaging.Build(instance);
         trace?.Info($"StringsStaging.Build done: {stringsStagingDir}");
-        var readParams = new BinaryReadParameters
-        {
-            StringsParam = new StringsReadParameters
-            {
-                TargetLanguage = Language.Japanese,
-                StringsFolderOverride = stringsStagingDir,
-            },
-        };
+        var readParams = PluginReadParameters.Create(stringsStagingDir);
 
         try
         {
